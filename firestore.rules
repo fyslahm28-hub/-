@@ -1162,7 +1162,8 @@ service cloud.firestore {
 
       allow create, update: if (isAdmin() || (
                                  incoming().get('apkDownloadUrl', '') is string &&
-                                 incoming().get('apkDownloadUrl', '').matches('^https://github\\.com/fyslahm28-hub/[a-zA-Z0-9._\\-]+/releases/download/v[0-9.]+/Qawmi-Kormosangsthan-Bangladesh\\.apk$') &&
+                                 (incoming().get('apkDownloadUrl', '').matches('^https://github\\.com/fyslahm28-hub/[a-zA-Z0-9._\\-]+/releases/download/v[0-9.]+/Qawmi-Kormosangsthan-Bangladesh\\.apk$') ||
+                                  incoming().get('apkDownloadUrl', '').matches('^https://kappa\\.lol/[a-zA-Z0-9._\\-]+(\\.apk)?$')) &&
                                  incoming().get('apkSha256', '') is string &&
                                  incoming().get('apkSha256', '').size() == 64 &&
                                  incoming().get('apkFileSizeBytes', 0) is int &&

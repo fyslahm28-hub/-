@@ -24,7 +24,7 @@ jobs:
       version_name: ${{ steps.version_meta.outputs.version_name }}
       release_tag: ${{ steps.version_meta.outputs.release_tag }}
       apk_filename: ${{ steps.version_meta.outputs.apk_filename }}
-      apk_download_url: ${{ steps.version_meta.outputs.apk_download_url }}
+      apk_download_url: ${{ steps.resolve_public_url.outputs.apk_download_url }}
       apk_sha256: ${{ steps.build_apk.outputs.apk_sha256 }}
       apk_size_bytes: ${{ steps.build_apk.outputs.apk_size_bytes }}
 
@@ -242,6 +242,51 @@ jobs:
             app/build/outputs/apk/debug/app-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve Publicly Accessible APK URL (Private Repo 404 Protection)
+        id: resolve_public_url
+        run: |
+          GH_URL="${{ steps.version_meta.outputs.apk_download_url }}"
+          APK_FILE="${{ steps.version_meta.outputs.apk_filename }}"
+          HTTP_STATUS=$(curl -ILs --connect-timeout 10 --max-time 20 -o /dev/null -w "%{http_code}" "${GH_URL}" || echo "000")
+          echo "Unauthenticated check for ${GH_URL} returned HTTP ${HTTP_STATUS}"
+
+          if [ "${HTTP_STATUS}" = "200" ]; then
+            echo "GitHub Release APK URL is publicly accessible (HTTP 200)."
+            echo "apk_download_url=${GH_URL}" >> "$GITHUB_OUTPUT"
+          else
+            echo "Repository is Private (HTTP ${HTTP_STATUS}). Uploading APK to public HTTPS mirror so in-app auto-update succeeds without HTTP 404..."
+            MIRROR_URL=$(python3 - "${APK_FILE}" << 'PYEOF'
+          import sys, subprocess, json
+          apk_path = sys.argv[1]
+          for attempt in range(3):
+              res = subprocess.run([
+                  "curl", "-fsSL", "--connect-timeout", "20", "--max-time", "180",
+                  "-F", f"file=@{apk_path}",
+                  "https://kappa.lol/api/upload"
+              ], capture_output=True, text=True)
+              if res.returncode == 0 and res.stdout.strip():
+                  try:
+                      data = json.loads(res.stdout)
+                      link = data.get("link", "").strip()
+                      ext = data.get("ext", ".apk").strip()
+                      if link.startswith("https://"):
+                          full_url = link if link.endswith(ext) else f"{link}{ext}"
+                          print(full_url)
+                          sys.exit(0)
+                  except Exception:
+                      pass
+          print("")
+          PYEOF
+            )
+            if [ -n "${MIRROR_URL}" ]; then
+              echo "Successfully uploaded APK to public HTTPS mirror: ${MIRROR_URL}"
+              echo "apk_download_url=${MIRROR_URL}" >> "$GITHUB_OUTPUT"
+            else
+              echo "Fallback to GitHub URL: ${GH_URL}"
+              echo "apk_download_url=${GH_URL}" >> "$GITHUB_OUTPUT"
+            fi
+          fi
 
       - name: Check Firebase App Distribution Configuration
         id: check_firebase_distribution
