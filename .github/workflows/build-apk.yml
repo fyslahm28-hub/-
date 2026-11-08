@@ -103,11 +103,20 @@ jobs:
       - name: Compute Release Version Metadata
         id: version_meta
         run: |
-          VERSION_CODE=$((100 + ${{ github.run_number }}))
-          VERSION_NAME="1.0.${{ github.run_number }}"
+          BASE_CODE=$((200 + ${{ github.run_number }}))
+          FIRESTORE_LATEST_URL="https://firestore.googleapis.com/v1/projects/gen-lang-client-0048059944/databases/ai-studio-android-811ea734-e9e8-4ff4-8e56-ca97ec8a429c/documents/app_releases/latest"
+          REMOTE_CODE=$(curl -fsSL --connect-timeout 8 --max-time 12 "${FIRESTORE_LATEST_URL}" 2>/dev/null | python3 -c "import sys, json; d=json.load(sys.stdin); print(int(d.get('fields',{}).get('versionCode',{}).get('integerValue',0)))" 2>/dev/null || echo "0")
+          if [ -n "${REMOTE_CODE}" ] && [ "${REMOTE_CODE}" -ge "${BASE_CODE}" ] 2>/dev/null; then
+            VERSION_CODE=$((REMOTE_CODE + 1))
+          else
+            VERSION_CODE=${BASE_CODE}
+          fi
+          PATCH_NUMBER=$((VERSION_CODE - 100))
+          VERSION_NAME="1.0.${PATCH_NUMBER}"
           RELEASE_TAG="v${VERSION_NAME}"
           APK_FILENAME="Qawmi-Kormosangsthan-Bangladesh.apk"
           APK_DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${RELEASE_TAG}/${APK_FILENAME}"
+          echo "Computed VERSION_CODE=${VERSION_CODE}, VERSION_NAME=${VERSION_NAME} (Remote was ${REMOTE_CODE})"
           echo "version_code=${VERSION_CODE}" >> $GITHUB_OUTPUT
           echo "version_name=${VERSION_NAME}" >> $GITHUB_OUTPUT
           echo "release_tag=${RELEASE_TAG}" >> $GITHUB_OUTPUT
@@ -298,7 +307,7 @@ jobs:
           RELEASE_APK_SHA256: ${{ needs.build-and-distribute.outputs.apk_sha256 }}
           RELEASE_APK_SIZE_BYTES: ${{ needs.build-and-distribute.outputs.apk_size_bytes }}
           RELEASE_TAG: ${{ needs.build-and-distribute.outputs.release_tag }}
-          RELEASE_NOTES: ${{ github.event.inputs.release_notes || format('কওমি কর্মসংস্থান বাংলাদেশ নতুন সংস্করণ {0} প্রকাশিত হয়েছে। উন্নত ফিড, দ্রুততর পারফরম্যান্স ও বাগ ফিক্স যুক্ত করা হয়েছে।', needs.build-and-distribute.outputs.version_name) }}
+          RELEASE_NOTES: ${{ github.event.inputs.release_notes || format('কওমি কর্মসংস্থান বাংলাদেশ নতুন সংস্করণ {0} প্রকাশিত হয়েছে। হাফেজি কুরআন শরীফ অপশনে ফজিলতপূর্ণ সূরা শর্টকাট, ৭ মঞ্জিল নেভিগেশন, হিফজ সবক ট্র্যাকার এবং মুসহাফ রিডারে অটো-স্ক্রল ও কুইক পেজ কন্ট্রোল বার যুক্ত করা হয়েছে।', needs.build-and-distribute.outputs.version_name) }}
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_ACTOR: ${{ github.actor }}
         run: |

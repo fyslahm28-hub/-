@@ -20,12 +20,17 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.SwapVert
@@ -70,6 +75,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -126,7 +132,21 @@ fun HafeziQuranReaderView(
     var currentZoomScale by remember(currentPageNumber) { mutableFloatStateOf(1f) }
     var showGoToPageDialog by rememberSaveable { mutableStateOf(false) }
     var showBookmarkNoteDialog by rememberSaveable { mutableStateOf(false) }
+    var isAutoScrollActive by rememberSaveable { mutableStateOf(false) }
     var feedbackToast by remember { mutableStateOf<String?>(null) }
+
+    // Hands-free Auto-Scroll Tilawat Mode
+    LaunchedEffect(isAutoScrollActive, isVerticalScrollMode) {
+        if (isAutoScrollActive) {
+            if (!isVerticalScrollMode) {
+                isVerticalScrollMode = true
+            }
+            while (isAutoScrollActive) {
+                delay(45L)
+                lazyListState.scrollBy(1.8f)
+            }
+        }
+    }
 
     // Automatically record visited page for Last Read & Reading History/Progress
     LaunchedEffect(currentPageNumber) {
@@ -476,6 +496,155 @@ fun HafeziQuranReaderView(
                         isVerticalContinuousMode = false,
                         isPrimaryActivePage = (pageNum == currentPageNumber)
                     )
+                }
+            }
+        }
+
+        // 3. Bottom Mushaf Quick Control Bar (পূর্ববর্তী/পরবর্তী পৃষ্ঠা, অটো-স্ক্রল তিলাওয়াত ও মঞ্জিল ইনফো)
+        Surface(
+            color = Color(0xFF164A35),
+            shadowElevation = 6.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("quran_reader_bottom_control_bar")
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Previous Page Button
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = Color.White.copy(alpha = 0.14f),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .clickable(enabled = currentPageNumber > 1) {
+                            val prevIdx = (currentPageNumber - 2).coerceIn(0, HafeziQuranIndexData.TOTAL_MUSHAF_PAGES - 1)
+                            scope.launch {
+                                if (isVerticalScrollMode) {
+                                    lazyListState.scrollToItem(prevIdx)
+                                } else {
+                                    pagerState.scrollToPage(prevIdx)
+                                }
+                            }
+                        }
+                        .testTag("quran_reader_prev_page_button")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                            contentDescription = "পূর্ববর্তী পৃষ্ঠা",
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "পূর্ববর্তী",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                // Center Page & Manzil Status Chip + Auto-Scroll Toggle
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = Color(0xFF0E3525),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .clickable { showGoToPageDialog = true }
+                            .testTag("quran_reader_bottom_page_badge")
+                    ) {
+                        Text(
+                            text = "পৃষ্ঠা ${HafeziQuranIndexData.toBanglaDigits(currentPageNumber)}/৬১০ • মঞ্জিল ${HafeziQuranIndexData.toBanglaDigits(currentPageMeta.manzilNumber)}",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            color = Color(0xFFFFE082),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = if (isAutoScrollActive) Color(0xFFD9A82E) else Color.White.copy(alpha = 0.14f),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .clickable {
+                                isAutoScrollActive = !isAutoScrollActive
+                                feedbackToast = if (isAutoScrollActive) {
+                                    "হ্যান্ডস-ফ্রি অটো-স্ক্রল তিলাওয়াত চালু হয়েছে"
+                                } else {
+                                    "অটো-স্ক্রল তিলাওয়াত বন্ধ করা হয়েছে"
+                                }
+                            }
+                            .testTag("quran_reader_autoscroll_toggle_button")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (isAutoScrollActive) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = "অটো-স্ক্রল",
+                                tint = if (isAutoScrollActive) Color(0xFF0B1914) else Color(0xFFFFE082),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = if (isAutoScrollActive) "থামান" else "অটো-স্ক্রল",
+                                color = if (isAutoScrollActive) Color(0xFF0B1914) else Color.White,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                // Next Page Button
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = Color.White.copy(alpha = 0.14f),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .clickable(enabled = currentPageNumber < HafeziQuranIndexData.TOTAL_MUSHAF_PAGES) {
+                            val nextIdx = currentPageNumber.coerceIn(0, HafeziQuranIndexData.TOTAL_MUSHAF_PAGES - 1)
+                            scope.launch {
+                                if (isVerticalScrollMode) {
+                                    lazyListState.scrollToItem(nextIdx)
+                                } else {
+                                    pagerState.scrollToPage(nextIdx)
+                                }
+                            }
+                        }
+                        .testTag("quran_reader_next_page_button")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "পরবর্তী",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = "পরবর্তী পৃষ্ঠা",
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
         }

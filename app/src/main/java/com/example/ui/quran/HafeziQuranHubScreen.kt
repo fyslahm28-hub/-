@@ -16,8 +16,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -38,6 +40,7 @@ import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -49,6 +52,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -142,6 +146,7 @@ fun HafeziQuranHubScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var directPageQuery by rememberSaveable { mutableStateOf("") }
     var showDirectPageModal by rememberSaveable { mutableStateOf(false) }
+    var showTilawatDuaModal by rememberSaveable { mutableStateOf(false) }
 
     val searchResults = remember(searchQuery) {
         HafeziQuranIndexData.searchAll(searchQuery)
@@ -387,6 +392,46 @@ fun HafeziQuranHubScreen(
                                 trackColor = Color.White.copy(alpha = 0.2f)
                             )
                         }
+
+                        // Quick Action Strip inside Hero Card: তিলাওয়াতের দোয়া & হিফজ সবক শর্টকাট
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = Color.White.copy(alpha = 0.14f),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .clickable { showTilawatDuaModal = true }
+                                    .testTag("quran_hub_tilawat_dua_button")
+                            ) {
+                                Text(
+                                    text = "🤲 তিলাওয়াত ও খতমের দোয়া",
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                    color = Color(0xFFFFE082),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = Color.White.copy(alpha = 0.14f),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .clickable { selectedTabOrdinal = QuranHubTab.BOOKMARKS.ordinal }
+                            ) {
+                                Text(
+                                    text = "🔖 সংরক্ষিত বুকমার্ক (${HafeziQuranIndexData.toBanglaDigits(bookmarks.size)})",
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -409,6 +454,16 @@ fun HafeziQuranHubScreen(
                             HafeziQuranStorageManager.verifyOfflineFilesIntegrity(context)
                         }
                     }
+                )
+            }
+
+            // B2. ফজিলতপূর্ণ সূরা ও ৭ মঞ্জিল দ্রুত তিলাওয়াত শর্টকাট কার্ড (New Feature)
+            item {
+                FazilatSurahsAndManzilQuickCard(
+                    cardBg = cardBg,
+                    primaryText = primaryText,
+                    secondaryText = secondaryText,
+                    onOpenPage = { targetPage -> activeReaderPage = targetPage }
                 )
             }
 
@@ -688,6 +743,267 @@ fun HafeziQuranHubScreen(
             }
         )
     }
+
+    if (showTilawatDuaModal) {
+        TilawatAndKhatamDuaDialog(
+            onDismiss = { showTilawatDuaModal = false }
+        )
+    }
+}
+
+private data class FazilatQuickShortcut(
+    val titleBangla: String,
+    val subtitleBangla: String,
+    val pageNumber: Int,
+    val tag: String
+)
+
+private data class ManzilQuickShortcut(
+    val manzilNumber: Int,
+    val titleBangla: String,
+    val rangeBangla: String,
+    val startPage: Int
+)
+
+@Composable
+private fun FazilatSurahsAndManzilQuickCard(
+    cardBg: Color,
+    primaryText: Color,
+    secondaryText: Color,
+    onOpenPage: (Int) -> Unit
+) {
+    val fazilatShortcuts = remember {
+        listOf(
+            FazilatQuickShortcut("সূরা ইয়াসিন", "কুরআনের হৃদয় • পৃষ্ঠা ৪৪১", 441, "quran_quick_yasin"),
+            FazilatQuickShortcut("সূরা আল-মুলক", "রাতের আমল • পৃষ্ঠা ৫৬৩", 563, "quran_quick_mulk"),
+            FazilatQuickShortcut("সূরা আর-রহমান", "কুরআনের সৌন্দর্য • পৃষ্ঠা ৫৩২", 532, "quran_quick_rahman"),
+            FazilatQuickShortcut("সূরা ওয়াকিয়াহ", "রিযিকের প্রাচুর্য • পৃষ্ঠা ৫৩৫", 535, "quran_quick_waqiah"),
+            FazilatQuickShortcut("সূরা আল-কাহফ", "জুমুআর আমল • পৃষ্ঠা ২৯৪", 294, "quran_quick_kahf"),
+            FazilatQuickShortcut("আয়াতুল কুরসি", "সার্বক্ষণিক হিফাজত • পৃষ্ঠা ৪৩", 43, "quran_quick_ayatul_kursi"),
+            FazilatQuickShortcut("সূরা হাশর (শেষ ৩ আয়াত)", "সকাল-সন্ধ্যার আমল • পৃষ্ঠা ৫৪৯", 549, "quran_quick_hashr")
+        )
+    }
+
+    val manzilShortcuts = remember {
+        listOf(
+            ManzilQuickShortcut(1, "১ম মঞ্জিল", "সূরা ফাতিহা – নিসা", 2),
+            ManzilQuickShortcut(2, "২য় মঞ্জিল", "সূরা মায়িদাহ – তাওবাহ", 107),
+            ManzilQuickShortcut(3, "৩য় মঞ্জিল", "সূরা ইউনুস – নাহল", 209),
+            ManzilQuickShortcut(4, "৪র্থ মঞ্জিল", "সূরা বনী ইসরাঈল – ফুরকান", 283),
+            ManzilQuickShortcut(5, "৫ম মঞ্জিল", "সূরা শুআরা – ইয়াসিন", 368),
+            ManzilQuickShortcut(6, "৬ষ্ঠ মঞ্জিল", "সূরা সাফফাত – হুজুরাত", 447),
+            ManzilQuickShortcut(7, "৭ম মঞ্জিল", "সূরা ক্বাফ – নাস", 519)
+        )
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, QuranGold.copy(alpha = 0.7f), RoundedCornerShape(16.dp))
+            .testTag("quran_hub_fazilat_and_manzil_card"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBg)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "ফজিলতপূর্ণ সূরা ও প্রতিদিনের আমল",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = primaryText,
+                    fontWeight = FontWeight.Bold
+                )
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = QuranGold.copy(alpha = 0.2f)
+                ) {
+                    Text(
+                        text = "এক ট্যাপে ওপেন",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        color = QuranPrimaryGreen,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                fazilatShortcuts.forEach { item ->
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = QuranPrimaryGreen.copy(alpha = 0.09f),
+                        modifier = Modifier
+                            .border(1.dp, QuranMintBorder, RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onOpenPage(item.pageNumber) }
+                            .testTag(item.tag)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = item.titleBangla,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = QuranPrimaryGreen,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = item.subtitleBangla,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = secondaryText,
+                                fontSize = 10.5.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            Text(
+                text = "৭ মঞ্জিল (সাপ্তাহিক কুরআন খতম ক্রম)",
+                style = MaterialTheme.typography.labelMedium,
+                color = primaryText,
+                fontWeight = FontWeight.Bold
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                manzilShortcuts.forEach { manzil ->
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = QuranGold.copy(alpha = 0.14f),
+                        modifier = Modifier
+                            .border(1.dp, QuranGold.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { onOpenPage(manzil.startPage) }
+                            .testTag("quran_manzil_chip_${manzil.manzilNumber}")
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "${manzil.titleBangla} • পৃষ্ঠা ${HafeziQuranIndexData.toBanglaDigits(manzil.startPage)}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = primaryText,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp
+                            )
+                            Text(
+                                text = manzil.rangeBangla,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = secondaryText,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TilawatAndKhatamDuaDialog(
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        title = {
+            Text(
+                text = "তিলাওয়াত ও খতমে কুরআনের মাসনুন দোয়া",
+                style = MaterialTheme.typography.titleMedium,
+                color = QuranPrimaryGreen,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFF6FAF8),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, QuranMintBorder, RoundedCornerShape(12.dp))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "১. তিলাওয়াত শুরুর পূর্বে:",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = QuranPrimaryGreen,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "أَعُوذُ بِاللَّهِ مِنَ الشَّيْطَانِ الرَّجِيمِ ۝ بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color(0xFF12241D),
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "অর্থ: বিতাড়িত শয়তান থেকে আল্লাহর কাছে আশ্রয় চাচ্ছি। পরম করুণাময় অসীম দয়ালু আল্লাহর নামে শুরু করছি।",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF4A6359)
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFFFF8E1),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, QuranGold, RoundedCornerShape(12.dp))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "২. কুরআন তিলাওয়াত ও খতমের দোয়া:",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = QuranPrimaryGreen,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "اللَّهُمَّ ارْحَمْنِي بِالْقُرْآنِ وَاجْعَلْهُ لِي إِمَامًا وَنُورًا وَهُدًى وَرَحْمَةً",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color(0xFF12241D),
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "অর্থ: হে আল্লাহ! কুরআনের বরকতে আমার ওপর রহম করুন এবং কুরআনকে আমার জন্য পথপ্রদর্শক, নূর, হিদায়াত ও রহমত বানিয়ে দিন।",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF4A6359)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("আলহামদুলিল্লাহ, বন্ধ করুন", color = QuranPrimaryGreen, fontWeight = FontWeight.Bold)
+            }
+        }
+    )
 }
 
 @Composable

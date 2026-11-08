@@ -266,11 +266,99 @@ fun IslamicAndEssentialServicesSection(
                 }
             }
 
+            // Featured Hafezi Quran Sharif Quick Access Banner (নতুন সংস্করণ হাইলাইট)
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .border(1.2.dp, QawmiGold, RoundedCornerShape(14.dp))
+                    .clickable { showHafeziQuranHub = true }
+                    .testTag("home_featured_hafezi_quran_banner"),
+                shape = RoundedCornerShape(14.dp),
+                color = QawmiDeepGreen
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(Color(0xFF0A4D36), Color(0xFF146B4C))
+                            )
+                        )
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(40.dp),
+                            shape = CircleShape,
+                            color = QawmiGold.copy(alpha = 0.22f)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                                    contentDescription = null,
+                                    tint = QawmiGold,
+                                    modifier = Modifier.size(21.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "হাফেজি কুরআন শরীফ",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(50),
+                                    color = QawmiGold
+                                ) {
+                                    Text(
+                                        text = "নতুন আপডেট",
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.5.dp),
+                                        color = Color(0xFF0B1914),
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "১৫ লাইন এমদাদিয়া মুসহাফ • ফজিলতপূর্ণ সূরা, ৭ মঞ্জিল ও অটো-স্ক্রল তিলাওয়াত",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFFFE082),
+                                fontSize = 10.5.sp
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = QawmiGold
+                    ) {
+                        Text(
+                            text = "পাঠ করুন",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            color = Color(0xFF0B1914),
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
             // Category 1: ইলম ও আমল
             ServiceSubCategoryBlock(
                 badgeTitle = "ইলম ও আমল",
                 items = ilmAndAmolItems,
-                highlightedItemId = "prayer_times",
+                highlightedItemId = "quran",
                 onItemClick = ::handleServiceClick
             )
 
