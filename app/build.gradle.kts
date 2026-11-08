@@ -270,6 +270,9 @@ android {
     resValues = true
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
+  androidResources {
+    noCompress += "pdf"
+  }
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true

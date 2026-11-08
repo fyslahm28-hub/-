@@ -1,14 +1,35 @@
 package com.example.ui.quran
 
 /**
- * Authentic Index & 15-Line Layout Resolver for the Indo-Pak / Emdadia 15-Line Hafezi Quran Sharif.
- * Total Mushaf Pages: 610 (Standard Emdadia / Qudratullah 15-Line Hafezi Mushaf, 20 pages per Para).
+ * Verified Page Mapping & Index Resolver for the Uploaded 15-Line Indo-Pak Quran PDF
+ * (`public/assets/aistudio/quran-hd-small_1305a0bc.pdf` / `assets/quran_hafezi_15line.pdf`).
+ *
+ * - Original PDF SHA-256: `1305a0bcde5b9ec30b70ef7a9150c0bfcfc9af5735912b20cd204fc41a719828`
+ * - Total PDF Pages: 616
+ *   - Page 1: Cover Page (Qudrat Ullah Co., Lahore)
+ *   - Pages 2..611: Complete 15-Line Quran Text (Surah Al-Fatiha on Page 2 through Surah An-Nas + Dua Khatmul Quran Khurd on Page 611)
+ *   - Page 612: Dua Khatmul Quran Kalan (دعاء ختم القرآن كلان)
+ *   - Page 613: Rumuz-e-Awqaf (رموز اوقاف قرآن مجيد)
+ *   - Pages 614..615: Official Fehrist of 30 Paras & 114 Surahs (فهرست پارہ و سورتہائے قرآن مجيد)
+ *   - Page 616: Certificate of Verification (سرٹیفکیٹ تصحيح)
  */
 object HafeziQuranIndexData {
 
-    const val TOTAL_MUSHAF_PAGES = 610
+    const val ORIGINAL_PDF_SHA256 =
+        "1305a0bcde5b9ec30b70ef7a9150c0bfcfc9af5735912b20cd204fc41a719828"
+    const val BUNDLED_REPAIRED_PDF_SHA256 =
+        "e4716200510ff689229eec15d85c01648f93ecf0b5de7819ce247f0e8ea4598c"
+    const val ORIGINAL_PDF_SIZE_BYTES = 37871837L
+
+    const val TOTAL_PDF_PAGES = 616
+    const val TOTAL_MUSHAF_PAGES = 616
+    const val TOTAL_QURAN_TEXT_PAGES = 611
     const val LINES_PER_PAGE = 15
 
+    /**
+     * Complete 114 Surahs verified against the official Fehrist table printed on Pages 614–615
+     * of `quran-hd-small_1305a0bc.pdf`.
+     */
     val all114Surahs: List<HafeziSurahInfo> = listOf(
         HafeziSurahInfo(1, "الفاتحة", "আল-ফাতিহা", "Al-Fatihah", "সূচনা", true, 7, 2, 2, 1, 1),
         HafeziSurahInfo(2, "البقرة", "আল-বাকারা", "Al-Baqarah", "বকনা-বাছুর", false, 286, 3, 50, 1, 40),
@@ -23,140 +44,144 @@ object HafeziQuranIndexData {
         HafeziSurahInfo(11, "هود", "হুদ", "Hud", "নবী হুদ (আ.)", true, 123, 222, 235, 11, 10),
         HafeziSurahInfo(12, "يوسف", "ইউসুফ", "Yusuf", "নবী ইউসুফ (আ.)", true, 111, 236, 249, 12, 12),
         HafeziSurahInfo(13, "الرعد", "আর-রাদ", "Ar-Ra'd", "বজ্রপাত", false, 43, 250, 255, 13, 6),
-        HafeziSurahInfo(14, "إبراهيم", "ইবরাহিম", "Ibrahim", "নবী ইবরাহিম (আ.)", true, 52, 256, 262, 13, 7),
+        HafeziSurahInfo(14, "إبراهيم", "ইবরাহিম", "Ibrahim", "নবী ইবরাহিম (আ.)", true, 52, 256, 261, 13, 7),
         HafeziSurahInfo(15, "الحجر", "আল-হিজর", "Al-Hijr", "পাথুরে পাহাড়", true, 99, 262, 267, 14, 6),
         HafeziSurahInfo(16, "النحل", "আন-নাহল", "An-Nahl", "মৌমাছি", true, 128, 268, 282, 14, 16),
-        HafeziSurahInfo(17, "الإسراء", "বনী ইসরাঈল", "Al-Isra", "রাতের সফর", true, 111, 283, 294, 15, 12),
-        HafeziSurahInfo(18, "الكهف", "আল-কাহফ", "Al-Kahf", "গুহা", true, 110, 294, 306, 15, 12),
-        HafeziSurahInfo(19, "مريم", "মারইয়াম", "Maryam", "মারইয়াম (আ.)", true, 98, 306, 313, 16, 6),
+        HafeziSurahInfo(17, "الإسراء", "বনী ইসরাঈল", "Al-Isra", "রাতের সফর", true, 111, 283, 293, 15, 12),
+        HafeziSurahInfo(18, "الكهف", "আল-কাহফ", "Al-Kahf", "গুহা", true, 110, 294, 305, 15, 12),
+        HafeziSurahInfo(19, "مريم", "মারইয়াম", "Maryam", "মারইয়াম (আ.)", true, 98, 306, 312, 16, 6),
         HafeziSurahInfo(20, "طه", "ত্বা-হা", "Taha", "ত্বা-হা", true, 135, 313, 322, 16, 8),
-        HafeziSurahInfo(21, "الأنبياء", "আল-আম্বিয়া", "Al-Anbiya", "নবীগণ", true, 112, 323, 332, 17, 7),
-        HafeziSurahInfo(22, "الحج", "আল-হাজ্জ", "Al-Hajj", "হজ্জ", false, 78, 333, 342, 17, 10),
+        HafeziSurahInfo(21, "الأنبياء", "আল-আম্বিয়া", "Al-Anbiya", "নবীগণ", true, 112, 323, 331, 17, 7),
+        HafeziSurahInfo(22, "الحج", "আল-হাজ্জ", "Al-Hajj", "হজ্জ", false, 78, 332, 342, 17, 10),
         HafeziSurahInfo(23, "المؤمنون", "আল-মুমিনুন", "Al-Mu'minun", "মুমিনগণ", true, 118, 343, 350, 18, 6),
-        HafeziSurahInfo(24, "النور", "আন-নূর", "An-Nur", "আলো", false, 64, 351, 360, 18, 9),
-        HafeziSurahInfo(25, "الفرقان", "আল-ফুরকান", "Al-Furqan", "সত্য-মিথ্যার পার্থক্যকারী", true, 77, 360, 367, 18, 6),
-        HafeziSurahInfo(26, "الشعراء", "আশ-শুআরা", "Ash-Shu'ara", "কবিগণ", true, 227, 368, 377, 19, 11),
-        HafeziSurahInfo(27, "النمل", "আন-নামল", "An-Naml", "পিপীলিকা", true, 93, 378, 386, 19, 7),
-        HafeziSurahInfo(28, "القصص", "আল-কাসাস", "Al-Qasas", "কাহিনী", true, 88, 386, 397, 20, 9),
-        HafeziSurahInfo(29, "العنكبوت", "আল-আনকাবুত", "Al-'Ankabut", "মাকড়সা", true, 69, 397, 405, 20, 7),
+        HafeziSurahInfo(24, "النور", "আন-নূর", "An-Nur", "আলো", false, 64, 351, 359, 18, 9),
+        HafeziSurahInfo(25, "الفرقان", "আল-ফুরকান", "Al-Furqan", "সত্য-মিথ্যার পার্থক্যকারী", true, 77, 360, 366, 18, 6),
+        HafeziSurahInfo(26, "الشعراء", "আশ-শুআরা", "Ash-Shu'ara", "কবিগণ", true, 227, 367, 376, 19, 11),
+        HafeziSurahInfo(27, "النمل", "আন-নামল", "An-Naml", "পিপীলিকা", true, 93, 377, 385, 19, 7),
+        HafeziSurahInfo(28, "القصص", "আল-কাসাস", "Al-Qasas", "কাহিনী", true, 88, 386, 396, 20, 9),
+        HafeziSurahInfo(29, "العنكبوت", "আল-আনকাবুত", "Al-'Ankabut", "মাকড়সা", true, 69, 397, 404, 20, 7),
         HafeziSurahInfo(30, "الروم", "আর-রূম", "Ar-Rum", "রোমান জাতি", true, 60, 405, 411, 21, 6),
         HafeziSurahInfo(31, "لقمان", "লুকমান", "Luqman", "হাকীম লুকমান", true, 34, 412, 415, 21, 4),
         HafeziSurahInfo(32, "السجدة", "আস-সাজদাহ", "As-Sajdah", "সিজদা", true, 30, 416, 418, 21, 3),
         HafeziSurahInfo(33, "الأحزاب", "আল-আহযাব", "Al-Ahzab", "সম্মিলিত বাহিনী", false, 73, 419, 428, 21, 9),
-        HafeziSurahInfo(34, "سبأ", "সাবা", "Saba", "সাবা জাতি", true, 54, 429, 435, 22, 6),
-        HafeziSurahInfo(35, "فاطر", "ফাতির", "Fatir", "আদি স্রষ্টা", true, 45, 435, 441, 22, 5),
-        HafeziSurahInfo(36, "يس", "ইয়াসিন", "Ya-Sin", "ইয়াসিন", true, 83, 441, 446, 22, 5),
-        HafeziSurahInfo(37, "الصافات", "আস-সাফফাত", "As-Saffat", "সারিবদ্ধ ফেরেশতাগণ", true, 182, 447, 453, 23, 5),
-        HafeziSurahInfo(38, "ص", "সোয়াদ", "Sad", "আরবি বর্ণ সোয়াদ", true, 88, 453, 459, 23, 5),
-        HafeziSurahInfo(39, "الزمر", "আয-যুমার", "Az-Zumar", "দলসমূহ", true, 75, 459, 468, 23, 8),
+        HafeziSurahInfo(34, "سبأ", "সাবা", "Saba", "সাবা জাতি", true, 54, 429, 434, 22, 6),
+        HafeziSurahInfo(35, "فاطر", "ফাতির", "Fatir", "আদি স্রষ্টা", true, 45, 435, 440, 22, 5),
+        HafeziSurahInfo(36, "يس", "ইয়াসিন", "Ya-Sin", "ইয়াসিন", true, 83, 441, 445, 22, 5),
+        HafeziSurahInfo(37, "الصافات", "আস-সাফফাত", "As-Saffat", "সারিবদ্ধ ফেরেশতাগণ", true, 182, 446, 452, 23, 5),
+        HafeziSurahInfo(38, "ص", "সোয়াদ", "Sad", "আরবি বর্ণ সোয়াদ", true, 88, 453, 458, 23, 5),
+        HafeziSurahInfo(39, "الزمر", "আয-যুমার", "Az-Zumar", "দলসমূহ", true, 75, 459, 467, 23, 8),
         HafeziSurahInfo(40, "غافر", "আল-মুমিন (গাফির)", "Ghafir", "ক্ষমাকারী", true, 85, 468, 477, 24, 9),
         HafeziSurahInfo(41, "فصلت", "হা-মীম সাজদাহ (ফুসসিলাত)", "Fussilat", "সুস্পষ্ট ব্যাখ্যা", true, 54, 478, 483, 24, 6),
-        HafeziSurahInfo(42, "الشورى", "আশ-শূরা", "Ash-Shuraa", "পরামর্শ", true, 53, 484, 490, 25, 5),
-        HafeziSurahInfo(43, "الزخرف", "আয-যুখরুফ", "Az-Zukhruf", "স্বর্ণালঙ্কার", true, 89, 490, 496, 25, 7),
-        HafeziSurahInfo(44, "الدخان", "আদ-দুখান", "Ad-Dukhan", "ধোঁয়া", true, 59, 497, 499, 25, 3),
-        HafeziSurahInfo(45, "الجاثية", "আল-জাসিয়াহ", "Al-Jathiyah", "নতজানু", true, 37, 500, 503, 25, 4),
-        HafeziSurahInfo(46, "الأحقاف", "আল-আহকাফ", "Al-Ahqaf", "বালুর পাহাড়", true, 35, 503, 508, 26, 4),
-        HafeziSurahInfo(47, "محمد", "মুহাম্মাদ", "Muhammad", "নবী মুহাম্মাদ ﷺ", false, 38, 508, 512, 26, 4),
-        HafeziSurahInfo(48, "الفتح", "আল-ফাতহ", "Al-Fath", "বিজয়", false, 29, 512, 516, 26, 4),
-        HafeziSurahInfo(49, "الحجرات", "আল-হুজুরাত", "Al-Hujurat", "বাসগৃহসমূহ", false, 18, 517, 519, 26, 2),
-        HafeziSurahInfo(50, "ق", "ক্বাফ", "Qaf", "আরবি বর্ণ ক্বাফ", true, 45, 519, 522, 26, 3),
-        HafeziSurahInfo(51, "الذاريات", "আয-যারিয়াত", "Adh-Dhariyat", "বিক্ষেপকারী বাতাস", true, 60, 522, 525, 26, 3),
-        HafeziSurahInfo(52, "الطور", "আত-তূর", "At-Tur", "তূর পাহাড়", true, 49, 525, 527, 27, 2),
-        HafeziSurahInfo(53, "النجم", "আন-নাজম", "An-Najm", "তারা", true, 62, 528, 530, 27, 3),
-        HafeziSurahInfo(54, "القمر", "আল-কামার", "Al-Qamar", "চন্দ্র", true, 55, 530, 533, 27, 3),
-        HafeziSurahInfo(55, "الرحمن", "আর-রহমান", "Ar-Rahman", "পরম করুণাময়", false, 78, 533, 536, 27, 3),
-        HafeziSurahInfo(56, "الواقعة", "আল-ওয়াকিয়াহ", "Al-Waqi'ah", "নিশ্চিত ঘটনা", true, 96, 536, 540, 27, 3),
-        HafeziSurahInfo(57, "الحديد", "আল-হাদীদ", "Al-Hadid", "লোহা", false, 29, 540, 544, 27, 4),
-        HafeziSurahInfo(58, "المجادلة", "আল-মুজাদালাহ", "Al-Mujadila", "অনুযোগকারিণী", false, 22, 545, 548, 28, 3),
-        HafeziSurahInfo(59, "الحشر", "আল-হাশর", "Al-Hashr", "সমাবেশ", false, 24, 548, 551, 28, 3),
-        HafeziSurahInfo(60, "الممتحنة", "আল-মুমতাহিনাহ", "Al-Mumtahanah", "পরীক্ষাসাপেক্ষ নারী", false, 13, 551, 554, 28, 2),
-        HafeziSurahInfo(61, "الصف", "আস-সাফ", "As-Saff", "সারিবদ্ধ সৈন্যদল", false, 14, 554, 556, 28, 2),
-        HafeziSurahInfo(62, "الجمعة", "আল-জুমুআহ", "Al-Jumu'ah", "জুমার দিন", false, 11, 556, 557, 28, 2),
-        HafeziSurahInfo(63, "المنافقون", "আল-মুনাফিকুন", "Al-Munafiqun", "মুনাফিকদল", false, 11, 557, 559, 28, 2),
-        HafeziSurahInfo(64, "التغابن", "আত-তাগাবুন", "At-Taghabun", "মোহমুক্তি", false, 18, 559, 561, 28, 2),
-        HafeziSurahInfo(65, "الطلاق", "আত-তালাক", "At-Talaq", "তালাক", false, 12, 561, 563, 28, 2),
-        HafeziSurahInfo(66, "التحريم", "আত-তাহরীম", "At-Tahrim", "নিষিদ্ধকরণ", false, 12, 563, 565, 28, 2),
-        HafeziSurahInfo(67, "الملك", "আল-মুলক", "Al-Mulk", "সার্বভৌম কর্তৃত্ব", true, 30, 566, 568, 29, 2),
-        HafeziSurahInfo(68, "القلم", "আল-কলম", "Al-Qalam", "কলম", true, 52, 568, 571, 29, 2),
-        HafeziSurahInfo(69, "الحاقة", "আল-হাক্কাহ", "Al-Haqqah", "নিশ্চিত সত্য", true, 52, 571, 573, 29, 2),
-        HafeziSurahInfo(70, "المعارج", "আল-মাআরিজ", "Al-Ma'arij", "উন্নয়নের সোপান", true, 44, 573, 575, 29, 2),
-        HafeziSurahInfo(71, "نوح", "নূহ", "Nuh", "নবী নূহ (আ.)", true, 28, 575, 577, 29, 2),
-        HafeziSurahInfo(72, "الجن", "আল-জিন", "Al-Jinn", "জিন জাতি", true, 28, 577, 579, 29, 2),
-        HafeziSurahInfo(73, "المزمل", "আল-মুযযাম্মিল", "Al-Muzzammil", "বস্ত্রাবৃতকারী", true, 20, 579, 580, 29, 2),
-        HafeziSurahInfo(74, "المدثر", "আল-মুদ্দাসসির", "Al-Muddaththir", "চাদরাবৃতকারী", true, 56, 580, 582, 29, 2),
-        HafeziSurahInfo(75, "القيامة", "আল-কিয়ামাহ", "Al-Qiyamah", "কিয়ামত", true, 40, 582, 583, 29, 2),
-        HafeziSurahInfo(76, "الإنسان", "আল-ইনসান (দাহর)", "Al-Insan", "মানুষ", false, 31, 583, 585, 29, 2),
+        HafeziSurahInfo(42, "الشورى", "আশ-শূরা", "Ash-Shuraa", "পরামর্শ", true, 53, 484, 489, 25, 5),
+        HafeziSurahInfo(43, "الزخرف", "আয-যুখরুফ", "Az-Zukhruf", "স্বর্ণালঙ্কার", true, 89, 490, 495, 25, 7),
+        HafeziSurahInfo(44, "الدخان", "আদ-দুখান", "Ad-Dukhan", "ধোঁয়া", true, 59, 496, 498, 25, 3),
+        HafeziSurahInfo(45, "الجاثية", "আল-জাসিয়াহ", "Al-Jathiyah", "নতজানু", true, 37, 499, 502, 25, 4),
+        HafeziSurahInfo(46, "الأحقاف", "আল-আহকাফ", "Al-Ahqaf", "বালুর পাহাড়", true, 35, 503, 506, 26, 4),
+        HafeziSurahInfo(47, "محمد", "মুহাম্মাদ", "Muhammad", "নবী মুহাম্মাদ ﷺ", false, 38, 507, 511, 26, 4),
+        HafeziSurahInfo(48, "الفتح", "আল-ফাতহ", "Al-Fath", "বিজয়", false, 29, 512, 515, 26, 4),
+        HafeziSurahInfo(49, "الحجرات", "আল-হুজুরাত", "Al-Hujurat", "বাসগৃহসমূহ", false, 18, 516, 518, 26, 2),
+        HafeziSurahInfo(50, "ق", "ক্বাফ", "Qaf", "আরবি বর্ণ ক্বাফ", true, 45, 519, 520, 26, 3),
+        HafeziSurahInfo(51, "الذاريات", "আয-যারিয়াত", "Adh-Dhariyat", "বিক্ষেপকারী বাতাস", true, 60, 521, 523, 26, 3),
+        HafeziSurahInfo(52, "الطور", "আত-তূর", "At-Tur", "তূর পাহাড়", true, 49, 524, 526, 27, 2),
+        HafeziSurahInfo(53, "النجم", "আন-নাজম", "An-Najm", "তারা", true, 62, 527, 528, 27, 3),
+        HafeziSurahInfo(54, "القمر", "আল-কামার", "Al-Qamar", "চন্দ্র", true, 55, 529, 531, 27, 3),
+        HafeziSurahInfo(55, "الرحمن", "আর-রহমান", "Ar-Rahman", "পরম করুণাময়", false, 78, 532, 534, 27, 3),
+        HafeziSurahInfo(56, "الواقعة", "আল-ওয়াকিয়াহ", "Al-Waqi'ah", "নিশ্চিত ঘটনা", true, 96, 535, 537, 27, 3),
+        HafeziSurahInfo(57, "الحديد", "আল-হাদীদ", "Al-Hadid", "লোহা", false, 29, 538, 542, 27, 4),
+        HafeziSurahInfo(58, "المجادلة", "আল-মুজাদালাহ", "Al-Mujadila", "অনুযোগকারিণী", false, 22, 543, 545, 28, 3),
+        HafeziSurahInfo(59, "الحشر", "আল-হাশর", "Al-Hashr", "সমাবেশ", false, 24, 546, 549, 28, 3),
+        HafeziSurahInfo(60, "الممتحنة", "আল-মুমতাহিনাহ", "Al-Mumtahanah", "পরীক্ষাসাপেক্ষ নারী", false, 13, 550, 551, 28, 2),
+        HafeziSurahInfo(61, "الصف", "আস-সাফ", "As-Saff", "সারিবদ্ধ সৈন্যদল", false, 14, 552, 553, 28, 2),
+        HafeziSurahInfo(62, "الجمعة", "আল-জুমুআহ", "Al-Jumu'ah", "জুমার দিন", false, 11, 554, 554, 28, 2),
+        HafeziSurahInfo(63, "المنافقون", "আল-মুনাফিকুন", "Al-Munafiqun", "মুনাফিকদল", false, 11, 555, 556, 28, 2),
+        HafeziSurahInfo(64, "التغابن", "আত-তাগাবুন", "At-Taghabun", "মোহমুক্তি", false, 18, 557, 558, 28, 2),
+        HafeziSurahInfo(65, "الطلاق", "আত-তালাক", "At-Talaq", "তালাক", false, 12, 559, 560, 28, 2),
+        HafeziSurahInfo(66, "التحريم", "আত-তাহরীম", "At-Tahrim", "নিষিদ্ধকরণ", false, 12, 561, 562, 28, 2),
+        HafeziSurahInfo(67, "الملك", "আল-মুলক", "Al-Mulk", "সার্বভৌম কর্তৃত্ব", true, 30, 563, 564, 29, 2),
+        HafeziSurahInfo(68, "القلم", "আল-কলম", "Al-Qalam", "কলম", true, 52, 565, 567, 29, 2),
+        HafeziSurahInfo(69, "الحاقة", "আল-হাক্কাহ", "Al-Haqqah", "নিশ্চিত সত্য", true, 52, 568, 569, 29, 2),
+        HafeziSurahInfo(70, "المعارج", "আল-মাআরিজ", "Al-Ma'arij", "উন্নয়নের সোপান", true, 44, 570, 571, 29, 2),
+        HafeziSurahInfo(71, "نوح", "নূহ", "Nuh", "নবী নূহ (আ.)", true, 28, 572, 573, 29, 2),
+        HafeziSurahInfo(72, "الجن", "আল-জিন", "Al-Jinn", "জিন জাতি", true, 28, 574, 576, 29, 2),
+        HafeziSurahInfo(73, "المزمل", "আল-মুযযাম্মিল", "Al-Muzzammil", "বস্ত্রাবৃতকারী", true, 20, 577, 578, 29, 2),
+        HafeziSurahInfo(74, "المدثر", "আল-মুদ্দাসসির", "Al-Muddaththir", "চাদরাবৃতকারী", true, 56, 579, 580, 29, 2),
+        HafeziSurahInfo(75, "القيامة", "আল-কিয়ামাহ", "Al-Qiyamah", "কিয়ামত", true, 40, 581, 582, 29, 2),
+        HafeziSurahInfo(76, "الإنسان", "আল-ইনসান (দাহর)", "Al-Insan", "মানুষ", false, 31, 583, 584, 29, 2),
         HafeziSurahInfo(77, "المرسلات", "আল-মুরসালাত", "Al-Mursalat", "প্রেরিত বাতাস", true, 50, 585, 586, 29, 2),
-        HafeziSurahInfo(78, "النبأ", "আন-নাবা", "An-Naba", "মহাসংবাদ", true, 40, 587, 588, 30, 2),
-        HafeziSurahInfo(79, "النازعات", "আন-নাযিয়াত", "An-Nazi'at", "প্রচেষ্টাকারী ফেরেশতা", true, 46, 588, 590, 30, 2),
-        HafeziSurahInfo(80, "عبس", "আবাসা", "'Abasa", "ভ্রুকুটি করলেন", true, 42, 590, 591, 30, 1),
-        HafeziSurahInfo(81, "التكوير", "আত-তাকভীর", "At-Takwir", "অন্ধকারাচ্ছন্ন", true, 29, 591, 592, 30, 1),
-        HafeziSurahInfo(82, "الانفطار", "আল-ইনফিতার", "Al-Infitar", "বিদীর্ণ হওয়া", true, 19, 592, 593, 30, 1),
+        HafeziSurahInfo(78, "النبأ", "আন-নাবা", "An-Naba", "মহাসংবাদ", true, 40, 587, 587, 30, 2),
+        HafeziSurahInfo(79, "النازعات", "আন-নাযিয়াত", "An-Nazi'at", "প্রচেষ্টাকারী ফেরেশতা", true, 46, 588, 589, 30, 2),
+        HafeziSurahInfo(80, "عبس", "আবাসা", "'Abasa", "ভ্রুকুটি করলেন", true, 42, 590, 590, 30, 1),
+        HafeziSurahInfo(81, "التكوير", "আত-তাকভীর", "At-Takwir", "অন্ধকারাচ্ছন্ন", true, 29, 591, 591, 30, 1),
+        HafeziSurahInfo(82, "الانفطار", "আল-ইনফিতার", "Al-Infitar", "বিদীর্ণ হওয়া", true, 19, 592, 592, 30, 1),
         HafeziSurahInfo(83, "المطففين", "আল-মুতাফফিফীন", "Al-Mutaffifin", "ওজনে কমদানকারী", true, 36, 593, 594, 30, 1),
-        HafeziSurahInfo(84, "الانشقاق", "আল-ইনশিকাক", "Al-Inshiqaq", "খণ্ড-বিখণ্ড করণ", true, 25, 594, 595, 30, 1),
-        HafeziSurahInfo(85, "البروج", "আল-বুরূজ", "Al-Buruj", "নক্ষত্রপুঞ্জ", true, 22, 595, 596, 30, 1),
-        HafeziSurahInfo(86, "الطارق", "আত-তারিক", "At-Tariq", "রাতের আগন্তুক", true, 17, 596, 597, 30, 1),
-        HafeziSurahInfo(87, "الأعلى", "আল-আলা", "Al-A'la", "সর্বোন্নত", true, 19, 597, 598, 30, 1),
-        HafeziSurahInfo(88, "الغاشية", "আল-গাশিয়াহ", "Al-Ghashiyah", "আচ্ছন্নকারী ঘটনা", true, 26, 598, 599, 30, 1),
+        HafeziSurahInfo(84, "الانشقاق", "আল-ইনশিকাক", "Al-Inshiqaq", "খণ্ড-বিখণ্ড করণ", true, 25, 595, 595, 30, 1),
+        HafeziSurahInfo(85, "البروج", "আল-বুরূজ", "Al-Buruj", "নক্ষত্রপুঞ্জ", true, 22, 596, 596, 30, 1),
+        HafeziSurahInfo(86, "الطارق", "আত-তারিক", "At-Tariq", "রাতের আগন্তুক", true, 17, 597, 597, 30, 1),
+        HafeziSurahInfo(87, "الأعلى", "আল-আলা", "Al-A'la", "সর্বোন্নত", true, 19, 598, 598, 30, 1),
+        HafeziSurahInfo(88, "الغاشية", "আল-গাশিয়াহ", "Al-Ghashiyah", "আচ্ছন্নকারী ঘটনা", true, 26, 598, 598, 30, 1),
         HafeziSurahInfo(89, "الفجر", "আল-ফজর", "Al-Fajr", "ভোরবেলা", true, 30, 599, 600, 30, 1),
-        HafeziSurahInfo(90, "البلد", "আল-বালাদ", "Al-Balad", "নগরী", true, 20, 600, 601, 30, 1),
+        HafeziSurahInfo(90, "البلد", "আল-বালাদ", "Al-Balad", "নগরী", true, 20, 601, 601, 30, 1),
         HafeziSurahInfo(91, "الشمس", "আশ-শামস", "Ash-Shams", "সূর্য", true, 15, 601, 601, 30, 1),
-        HafeziSurahInfo(92, "الليل", "আল-লাইল", "Al-Layl", "রাত্রি", true, 21, 601, 602, 30, 1),
-        HafeziSurahInfo(93, "الضحى", "আদ-দুহা", "Ad-Duhaa", "পূর্বাহ্ণের সূর্যকিরণ", true, 11, 602, 603, 30, 1),
+        HafeziSurahInfo(92, "الليل", "আল-লাইল", "Al-Layl", "রাত্রি", true, 21, 602, 602, 30, 1),
+        HafeziSurahInfo(93, "الضحى", "আদ-দুহা", "Ad-Duhaa", "পূর্বাহ্ণের সূর্যকিরণ", true, 11, 603, 603, 30, 1),
         HafeziSurahInfo(94, "الشرح", "আল-ইনশিরাহ", "Ash-Sharh", "বক্ষ প্রশস্তকরণ", true, 8, 603, 603, 30, 1),
-        HafeziSurahInfo(95, "التين", "আত-তীন", "At-Tin", "ডুমুর", true, 8, 603, 604, 30, 1),
+        HafeziSurahInfo(95, "التين", "আত-তীন", "At-Tin", "ডুমুর", true, 8, 604, 604, 30, 1),
         HafeziSurahInfo(96, "العلق", "আল-আলাক", "Al-'Alaq", "রক্তপিণ্ড", true, 19, 604, 604, 30, 1),
-        HafeziSurahInfo(97, "القدر", "আল-কদর", "Al-Qadr", "মহিমান্বিত রজনী", true, 5, 604, 605, 30, 1),
+        HafeziSurahInfo(97, "القدر", "আল-কদর", "Al-Qadr", "মহিমান্বিত রজনী", true, 5, 605, 605, 30, 1),
         HafeziSurahInfo(98, "البينة", "আল-বাইয়্যিনাহ", "Al-Bayyinah", "সুস্পষ্ট প্রমাণ", false, 8, 605, 605, 30, 1),
-        HafeziSurahInfo(99, "الزلزلة", "আয-যিলযাল", "Az-Zalzalah", "ভূমিকম্প", false, 8, 605, 606, 30, 1),
+        HafeziSurahInfo(99, "الزلزلة", "আয-যিলযাল", "Az-Zalzalah", "ভূমিকম্প", false, 8, 606, 606, 30, 1),
         HafeziSurahInfo(100, "العاديات", "আল-আদিয়াত", "Al-'Adiyat", "অভিযানকারী অশ্ববৃন্দ", true, 11, 606, 606, 30, 1),
-        HafeziSurahInfo(101, "القارعة", "আল-কারিয়াহ", "Al-Qari'ah", "মহাসংকট", true, 11, 606, 607, 30, 1),
+        HafeziSurahInfo(101, "القارعة", "আল-কারিয়াহ", "Al-Qari'ah", "মহাসংকট", true, 11, 607, 607, 30, 1),
         HafeziSurahInfo(102, "التكاثر", "আত-তাকাসুর", "At-Takathur", "প্রাচুর্যের প্রতিযোগিতা", true, 8, 607, 607, 30, 1),
-        HafeziSurahInfo(103, "العصر", "আল-আসর", "Al-'Asr", "সময়", true, 3, 607, 608, 30, 1),
+        HafeziSurahInfo(103, "العصر", "আল-আসর", "Al-'Asr", "সময়", true, 3, 608, 608, 30, 1),
         HafeziSurahInfo(104, "الهمزة", "আল-হুমাযাহ", "Al-Humazah", "পরনিন্দাকারী", true, 9, 608, 608, 30, 1),
         HafeziSurahInfo(105, "الفيل", "আল-ফীল", "Al-Fil", "হাতি", true, 5, 608, 608, 30, 1),
-        HafeziSurahInfo(106, "قريش", "কুরাইশ", "Quraysh", "কুরাইশ গোত্র", true, 4, 608, 609, 30, 1),
+        HafeziSurahInfo(106, "قريش", "কুরাইশ", "Quraysh", "কুরাইশ গোত্র", true, 4, 609, 609, 30, 1),
         HafeziSurahInfo(107, "الماعون", "আল-মাউন", "Al-Ma'un", "নিত্যপ্রয়োজনীয় বস্তু", true, 7, 609, 609, 30, 1),
         HafeziSurahInfo(108, "الكوثر", "আল-কাওসার", "Al-Kawthar", "হাউজে কাওসার", true, 3, 609, 609, 30, 1),
         HafeziSurahInfo(109, "الكافرون", "আল-কাফিরুন", "Al-Kafirun", "অবিশ্বাসী গোষ্ঠী", true, 6, 609, 609, 30, 1),
-        HafeziSurahInfo(110, "النصر", "আন-নাসর", "An-Nasr", "সাহায্য", false, 3, 609, 610, 30, 1),
+        HafeziSurahInfo(110, "النصر", "আন-নাসর", "An-Nasr", "সাহায্য", false, 3, 610, 610, 30, 1),
         HafeziSurahInfo(111, "المسد", "আল-লাহাব (মাসাদ)", "Al-Masad", "খেজুরের পাকানো রশি", true, 5, 610, 610, 30, 1),
         HafeziSurahInfo(112, "الإخلاص", "আল-ইখলাস", "Al-Ikhlas", "একত্ববাদ", true, 4, 610, 610, 30, 1),
-        HafeziSurahInfo(113, "الفلق", "আল-ফালাক", "Al-Falaq", "নিশিভোর", true, 5, 610, 610, 30, 1),
-        HafeziSurahInfo(114, "الناس", "আন-নাস", "An-Nas", "মানবজাতি", true, 6, 610, 610, 30, 1)
+        HafeziSurahInfo(113, "الفلق", "আল-ফালাক", "Al-Falaq", "নিশিভোর", true, 5, 611, 611, 30, 1),
+        HafeziSurahInfo(114, "الناس", "আন-নাস", "An-Nas", "মানবজাতি", true, 6, 611, 611, 30, 1)
     )
 
+    /**
+     * Complete 30 Paras verified against the official Fehrist table printed on Pages 614–615
+     * of `quran-hd-small_1305a0bc.pdf`.
+     */
     val all30Paras: List<HafeziParaInfo> = listOf(
-        HafeziParaInfo(1, "آلم", "আলিফ-লাম-মীম", "Alif Lam Meem", 2, 21, 1, "আল-ফাতিহা", "১:১"),
-        HafeziParaInfo(2, "سَيَقُولُ", "সাইয়াকুলু", "Sayaqool", 22, 41, 2, "আল-বাকারা", "২:১৪২"),
-        HafeziParaInfo(3, "تِلْكَ الرُّسُلُ", "তিলকার রুসুলু", "Tilkal Rusul", 42, 61, 2, "আল-বাকারা", "২:২৫৩"),
-        HafeziParaInfo(4, "لَنْ تَنَالُوا", "লান তানালুল বিররা", "Lan Tana Loo", 62, 81, 3, "আল-ইমরান", "৩:৯২"),
-        HafeziParaInfo(5, "وَالْمُحْصَنَاتُ", "ওয়াল মুহসানাতু", "Wal Mohsanat", 82, 101, 4, "আন-নিসা", "৪:২৪"),
-        HafeziParaInfo(6, "لَا يُحِبُّ اللَّهُ", "লা ইউহিব্বুল্লাহু", "La Yuhibbullah", 102, 121, 4, "আন-নিসা", "৪:১৪৮"),
-        HafeziParaInfo(7, "وَإِذَا سَمِعُوا", "ওয়া ইযা সামিউ", "Wa Iza Samiu", 122, 141, 5, "আল-মায়িদাহ", "৫:৮৩"),
-        HafeziParaInfo(8, "وَلَوْ أَنَّنَا", "ওয়া লাও আন্নানা", "Wa Lau Annana", 142, 161, 6, "আল-আনআম", "৬:১১১"),
-        HafeziParaInfo(9, "قَالَ الْمَلَأُ", "কালাল মালাউ", "Qalal Malao", 162, 181, 7, "আল-আরাফ", "৭:৮৮"),
-        HafeziParaInfo(10, "وَاعْلَمُوا", "ওয়া'লামু", "Wa A'lamu", 182, 201, 8, "আল-আনফাল", "৮:৪১"),
-        HafeziParaInfo(11, "يَعْتَذِرُونَ", "ইয়া'তাযিরূনা", "Yatazeroon", 202, 221, 9, "আত-তাওবাহ", "৯:৯৪"),
-        HafeziParaInfo(12, "وَمَا مِنْ دَابَّةٍ", "ওয়ামা মিন দাব্বাতিন", "Wa Mamin Da'abat", 222, 241, 11, "হুদ", "১১:৬"),
-        HafeziParaInfo(13, "وَمَا أُبَرِّئُ", "ওয়ামা উবাররিউ", "Wa Ma Ubrioo", 242, 261, 12, "ইউসুফ", "১২:৫৩"),
-        HafeziParaInfo(14, "رُبَمَا", "রুবামা", "Rubama", 262, 281, 15, "আল-হিজর", "১৫:১"),
-        HafeziParaInfo(15, "سُبْحَانَ الَّذِي", "সুবহানাল্লাযী", "Subhanallazi", 282, 301, 17, "বনী ইসরাঈল", "১৭:১"),
-        HafeziParaInfo(16, "قَالَ أَلَمْ", "কালা আলাম", "Qal Alam", 302, 321, 18, "আল-কাহফ", "১৮:৭৫"),
-        HafeziParaInfo(17, "اقْتَرَبَ لِلنَّاسِ", "ইকতারাবা লিন্নাসি", "Aqtarabo", 322, 341, 21, "আল-আম্বিয়া", "২১:১"),
-        HafeziParaInfo(18, "قَدْ أَفْلَحَ", "কাদ আফলাহা", "Qadd Aflaha", 342, 361, 23, "আল-মুমিনুন", "২৩:১"),
-        HafeziParaInfo(19, "وَقَالَ الَّذِينَ", "ওয়া কাল্লাযীনা", "Wa Qalallazina", 362, 381, 25, "আল-ফুরকান", "২৫:২১"),
-        HafeziParaInfo(20, "أَمَّنْ خَلَقَ", "আম্মান খালাকা", "A'man Khalaq", 382, 401, 27, "আন-নামল", "২৭:৬০"),
-        HafeziParaInfo(21, "اتْلُ مَا أُوحِيَ", "উতলু মা উহিয়া", "Utlu Ma Oohi", 402, 421, 29, "আল-আনকাবুত", "২৯:৪৫"),
-        HafeziParaInfo(22, "وَمَنْ يَقْنُتْ", "ওয়ামান ইয়াকনুত", "Wa Manyaqnut", 422, 441, 33, "আল-আহযাব", "৩৩:৩১"),
-        HafeziParaInfo(23, "وَمَا لِيَ", "ওয়ামা লিয়া", "Wa Mali", 442, 461, 36, "ইয়াসিন", "৩৬:২২"),
-        HafeziParaInfo(24, "فَمَنْ أَظْلَمُ", "ফামান আযলামু", "Faman Azlam", 462, 481, 39, "আয-যুমার", "৩৯:৩২"),
-        HafeziParaInfo(25, "إِلَيْهِ يُرَدُّ", "ইলাইহি ইউরাদ্দু", "Elahe Yuruddo", 482, 501, 41, "হা-মীম সাজদাহ", "৪১:৪৭"),
-        HafeziParaInfo(26, "حم", "হা-মীম", "Ha'a Meem", 502, 521, 46, "আল-আহকাফ", "৪৬:১"),
-        HafeziParaInfo(27, "قَالَ فَمَا خَطْبُكُمْ", "কালা ফামা খাতবুকুম", "Qala Fama Khatbukum", 522, 541, 51, "আয-যারিয়াত", "৫১:৩১"),
-        HafeziParaInfo(28, "قَدْ سَمِعَ اللَّهُ", "কাদ সামিয়াল্লাহু", "Qadd Sami Allah", 542, 561, 58, "আল-মুজাদালাহ", "৫৮:১"),
-        HafeziParaInfo(29, "تَبَارَكَ الَّذِي", "তাবারাকাল্লাযী", "Tabarakallazi", 562, 581, 67, "আল-মুলক", "৬৭:১"),
-        HafeziParaInfo(30, "عَمَّ يَتَسَاءَلُونَ", "আম্মা ইয়াতাসাআলুন", "Amma Yatasa'aloon", 582, 610, 78, "আন-নাবা", "৭৮:১")
+        HafeziParaInfo(1, "آلم", "আলিফ-লাম-মীম", "Alif Lam Meem", 2, 22, 1, "আল-ফাতিহা", "১:১", "প্রথম পারা", "সূরা আল-ফাতিহা - আল-বাকারা"),
+        HafeziParaInfo(2, "سَيَقُولُ", "সাইয়াকুলু", "Sayaqool", 23, 42, 2, "আল-বাকারা", "২:১৪২", "দ্বিতীয় পারা", "সূরা আল-বাকারা (১৪২ - ২৫২)"),
+        HafeziParaInfo(3, "تِلْكَ الرُّسُلُ", "তিলকার রুসুলু", "Tilkal Rusul", 43, 62, 2, "আল-বাকারা", "২:২৫৩", "তৃতীয় পারা", "সূরা আল-বাকারা - আল-ইমরান"),
+        HafeziParaInfo(4, "لَنْ تَنَالُوا", "লান তানালুল বিররা", "Lan Tana Loo", 63, 82, 3, "আল-ইমরান", "৩:৯২", "চতুর্থ পারা", "সূরা আল-ইমরান - আন-নিসা"),
+        HafeziParaInfo(5, "وَالْمُحْصَنَاتُ", "ওয়াল মুহসানাতু", "Wal Mohsanat", 83, 102, 4, "আন-নিসা", "৪:২৪", "পঞ্চম পারা", "সূরা আন-নিসা (২৪ - ১৪৭)"),
+        HafeziParaInfo(6, "لَا يُحِبُّ اللَّهُ", "লা ইউহিব্বুল্লাহু", "La Yuhibbullah", 103, 122, 4, "আন-নিসা", "৪:১৪৮", "ষষ্ঠ পারা", "সূরা আন-নিসা - আল-মায়িদাহ"),
+        HafeziParaInfo(7, "وَإِذَا سَمِعُوا", "ওয়া ইযা সামিউ", "Wa Iza Samiu", 123, 142, 5, "আল-মায়িদাহ", "৫:৮৩", "সপ্তম পারা", "সূরা আল-মায়িদাহ - আল-আনআম"),
+        HafeziParaInfo(8, "وَلَوْ أَنَّنَا", "ওয়া লাও আন্নানা", "Wa Lau Annana", 143, 162, 6, "আল-আনআম", "৬:১১১", "অষ্টম পারা", "সূরা আল-আনআম - আল-আরাফ"),
+        HafeziParaInfo(9, "قَالَ الْمَلَأُ", "কালাল মালাউ", "Qalal Malao", 163, 182, 7, "আল-আরাফ", "৭:৮৮", "নবম পারা", "সূরা আল-আরাফ - আল-আনফাল"),
+        HafeziParaInfo(10, "وَاعْلَمُوا", "ওয়া'লামু", "Wa A'lamu", 183, 202, 8, "আল-আনফাল", "৮:৪১", "দশম পারা", "সূরা আল-আনফাল - আত-তাওবাহ"),
+        HafeziParaInfo(11, "يَعْتَذِرُونَ", "ইয়া'তাযিরূনা", "Yatazeroon", 203, 222, 9, "আত-তাওবাহ", "৯:৯৪", "একাদশ পারা", "সূরা আত-তাওবাহ - হুদ"),
+        HafeziParaInfo(12, "وَمَا مِنْ دَابَّةٍ", "ওয়ামা মিন দাব্বাতিন", "Wa Mamin Da'abat", 223, 242, 11, "হুদ", "১১:৬", "দ্বাদশ পারা", "সূরা হুদ - ইউসুফ"),
+        HafeziParaInfo(13, "وَمَا أُبَرِّئُ", "ওয়ামা উবাররিউ", "Wa Ma Ubrioo", 243, 262, 12, "ইউসুফ", "১২:৫৩", "ত্রয়োদশ পারা", "সূরা ইউসুফ - ইবরাহিম"),
+        HafeziParaInfo(14, "رُبَمَا", "রুবামা", "Rubama", 263, 282, 15, "আল-হিজর", "১৫:১", "চতুর্দশ পারা", "সূরা আল-হিজর - আন-নাহল"),
+        HafeziParaInfo(15, "سُبْحَانَ الَّذِي", "সুবহানাল্লাযী", "Subhanallazi", 283, 302, 17, "বনী ইসরাঈল", "১৭:১", "পঞ্চদশ পারা", "সূরা বনী ইসরাঈল - আল-কাহফ"),
+        HafeziParaInfo(16, "قَالَ أَلَمْ", "কালা আলাম", "Qal Alam", 303, 322, 18, "আল-কাহফ", "১৮:৭৫", "ষোড়শ পারা", "সূরা আল-কাহফ - ত্বা-হা"),
+        HafeziParaInfo(17, "اقْتَرَبَ لِلنَّاسِ", "ইকতারাবা লিন্নাসি", "Aqtarabo", 323, 342, 21, "আল-আম্বিয়া", "২১:১", "সপ্তদশ পারা", "সূরা আল-আম্বিয়া - আল-হাজ্জ"),
+        HafeziParaInfo(18, "قَدْ أَفْلَحَ", "কাদ আফলাহা", "Qadd Aflaha", 343, 362, 23, "আল-মুমিনুন", "২৩:১", "অষ্টাদশ পারা", "সূরা আল-মুমিনুন - আল-ফুরকান"),
+        HafeziParaInfo(19, "وَقَالَ الَّذِينَ", "ওয়া কাল্লাযীনা", "Wa Qalallazina", 363, 382, 25, "আল-ফুরকান", "২৫:২১", "ঊনবিংশ পারা", "সূরা আল-ফুরকান - আন-নামল"),
+        HafeziParaInfo(20, "أَمَّنْ خَلَقَ", "আম্মান খালাকা", "A'man Khalaq", 383, 402, 27, "আন-নামল", "২৭:৬০", "বিংশ পারা", "সূরা আন-নামল - আল-আনকাবুত"),
+        HafeziParaInfo(21, "اتْلُ مَا أُوحِيَ", "উতলু মা উহিয়া", "Utlu Ma Oohi", 403, 422, 29, "আল-আনকাবুত", "২৯:৪৫", "একবিংশ পারা", "সূরা আল-আনকাবুত - আল-আহযাব"),
+        HafeziParaInfo(22, "وَمَنْ يَقْنُتْ", "ওয়ামান ইয়াকনুত", "Wa Manyaqnut", 423, 442, 33, "আল-আহযাব", "৩৩:৩১", "দ্বাবিংশ পারা", "সূরা আল-আহযাব - ইয়াসিন"),
+        HafeziParaInfo(23, "وَمَا لِيَ", "ওয়ামা লিয়া", "Wa Mali", 443, 462, 36, "ইয়াসিন", "৩৬:২২", "ত্রয়োবিংশ পারা", "সূরা ইয়াসিন - আয-যুমার"),
+        HafeziParaInfo(24, "فَمَنْ أَظْلَمُ", "ফামান আযলামু", "Faman Azlam", 463, 482, 39, "আয-যুমার", "৩৯:৩২", "চতুর্বিংশ পারা", "সূরা আয-যুমার - ফুসসিলাত"),
+        HafeziParaInfo(25, "إِلَيْهِ يُرَدُّ", "ইলাইহি ইউরাদ্দু", "Elahe Yuruddo", 483, 502, 41, "হা-মীম সাজদাহ", "৪১:৪৭", "পঞ্চবিংশ পারা", "সূরা ফুসসিলাত - আল-জাসিয়াহ"),
+        HafeziParaInfo(26, "حم", "হা-মীম", "Ha'a Meem", 503, 522, 46, "আল-আহকাফ", "৪৬:১", "ষড়বিংশ পারা", "সূরা আল-আহকাফ - আয-যারিয়াত"),
+        HafeziParaInfo(27, "قَالَ فَمَا خَطْبُكُمْ", "কালা ফামা খাতবুকুম", "Qala Fama Khatbukum", 523, 542, 51, "আয-যারিয়াত", "৫১:৩১", "সপ্তবিংশ পারা", "সূরা আয-যারিয়াত - আল-হাদীদ"),
+        HafeziParaInfo(28, "قَدْ سَمِعَ اللَّهُ", "কাদ সামিয়াল্লাহু", "Qadd Sami Allah", 543, 562, 58, "আল-মুজাদালাহ", "৫৮:১", "অষ্টাবিংশ পারা", "সূরা আল-মুজাদালাহ - আত-তাহরীম"),
+        HafeziParaInfo(29, "تَبَارَكَ الَّذِي", "তাবারাকাল্লাযী", "Tabarakallazi", 563, 586, 67, "আল-মুলক", "৬৭:১", "ঊনত্রিংশ পারা", "সূরা আল-মুলক - আল-মুরসালাত"),
+        HafeziParaInfo(30, "عَمَّ يَتَسَاءَلُونَ", "আম্মা ইয়াতাসাআলুন", "Amma Yatasa'aloon", 587, 611, 78, "আন-নাবা", "৭৮:১", "ত্রিশতম পারা", "সূরা আন-নাবা - আন-নাস")
     )
 
     val featuredAyahSearchIndex: List<HafeziAyahSearchEntry> = listOf(
@@ -179,7 +204,7 @@ object HafeziQuranIndexData {
             paraNumber = 1,
             pageNumber = 3,
             lineNumber = 3,
-            arabicText = "الٓمّٓ ۝١ ذٰلِكَ الْكِتٰبُ لَا رَيْبَ  فِيْهِ  هُدًى لِّلْمُتَّقِيْنَ ۝٢",
+            arabicText = "الٓمّٓ ۝١ ذٰلِكَ الْكِتٰبُ لَا رَيْبَ فِيْهِ هُدًى لِّلْمُتَّقِيْنَ ۝٢",
             banglaTopicOrTranslation = "সূরা বাকারা শুরু • মুত্তাকীদের পথপ্রদর্শক কিতাব"
         ),
         HafeziAyahSearchEntry(
@@ -243,7 +268,7 @@ object HafeziQuranIndexData {
             surahNameArabic = "الرحمن",
             ayahNumber = 1,
             paraNumber = 27,
-            pageNumber = 533,
+            pageNumber = 532,
             lineNumber = 4,
             arabicText = "اَلرَّحْمٰنُ ۝١ عَلَّمَ الْقُرْاٰنَ ۝٢ خَلَقَ الْاِنْسَانَ ۝٣ عَلَّمَهُ الْبَيَانَ ۝٤",
             banglaTopicOrTranslation = "সূরা আর-রহমান • দয়াময় আল্লাহ কুরআন শিক্ষা দিয়েছেন"
@@ -254,7 +279,7 @@ object HafeziQuranIndexData {
             surahNameArabic = "الواقعة",
             ayahNumber = 1,
             paraNumber = 27,
-            pageNumber = 536,
+            pageNumber = 535,
             lineNumber = 8,
             arabicText = "اِذَا وَقَعَتِ الْوَاقِعَةُ ۝١ لَيْسَ لِوَقْعَتِهَا كَاذِبَةٌ ۝٢",
             banglaTopicOrTranslation = "সূরা ওয়াকিয়াহ • রিজিকের বরকতের সূরা"
@@ -265,7 +290,7 @@ object HafeziQuranIndexData {
             surahNameArabic = "الحشر",
             ayahNumber = 22,
             paraNumber = 28,
-            pageNumber = 551,
+            pageNumber = 549,
             lineNumber = 9,
             arabicText = "هُوَ اللّٰهُ الَّذِيْ لَا اِلٰهَ اِلَّا هُوَ ۚ عَالِمُ الْغَيْبِ وَالشَّهَادَةِ ۚ هُوَ الرَّحْمٰنُ الرَّحِيْمُ ۝٢٢",
             banglaTopicOrTranslation = "সূরা হাশরের শেষ তিন আয়াত • হুওয়াল্লাহুল্লাযী লা ইলাহা ইল্লা হুয়া"
@@ -276,7 +301,7 @@ object HafeziQuranIndexData {
             surahNameArabic = "الملك",
             ayahNumber = 1,
             paraNumber = 29,
-            pageNumber = 566,
+            pageNumber = 563,
             lineNumber = 3,
             arabicText = "تَبٰرَكَ الَّذِيْ بِيَدِهِ الْمُلْكُ وَهُوَ عَلٰى كُلِّ شَيْءٍ قَدِيْرٌ ۝١",
             banglaTopicOrTranslation = "সূরা মুলক • কবরের আজাব থেকে মুক্তিদানকারী সূরা"
@@ -288,7 +313,7 @@ object HafeziQuranIndexData {
             ayahNumber = 1,
             paraNumber = 30,
             pageNumber = 610,
-            lineNumber = 3,
+            lineNumber = 12,
             arabicText = "قُلْ هُوَ اللّٰهُ اَحَدٌ ۝١ اَللّٰهُ الصَّمَدُ ۝٢ لَمْ يَلِدْ وَلَمْ يُوْلَدْ ۝٣ وَلَمْ يَكُنْ لَّهٗ كُفُوًا اَحَدٌ ۝٤",
             banglaTopicOrTranslation = "সূরা ইখলাস • কুরআনের এক-তৃতীয়াংশের সমতুল্য"
         ),
@@ -298,8 +323,8 @@ object HafeziQuranIndexData {
             surahNameArabic = "الفلق",
             ayahNumber = 1,
             paraNumber = 30,
-            pageNumber = 610,
-            lineNumber = 8,
+            pageNumber = 611,
+            lineNumber = 3,
             arabicText = "قُلْ اَعُوْذُ بِرَبِّ الْفَلَقِ ۝١ مِنْ شَرِّ مَا خَلَقَ ۝٢",
             banglaTopicOrTranslation = "সূরা ফালাক • অনিষ্ট থেকে আশ্রয় প্রার্থনার সূরা"
         ),
@@ -309,14 +334,14 @@ object HafeziQuranIndexData {
             surahNameArabic = "الناس",
             ayahNumber = 1,
             paraNumber = 30,
-            pageNumber = 610,
-            lineNumber = 12,
+            pageNumber = 611,
+            lineNumber = 8,
             arabicText = "قُلْ اَعُوْذُ بِرَبِّ النَّاسِ ۝١ مَلِكِ النَّاسِ ۝٢ اِلٰهِ النَّاسِ ۝٣",
             banglaTopicOrTranslation = "সূরা নাস • কুরআনুল কারীমের সর্বশেষ সূরা"
         )
     )
 
-    private val sajdahPages = setOf(177, 253, 274, 294, 312, 334, 339, 365, 381, 417, 455, 481, 530, 595, 604)
+    private val sajdahPages = setOf(177, 253, 274, 294, 312, 334, 339, 365, 381, 417, 455, 481, 528, 595, 604)
 
     fun toBanglaDigits(number: Int): String = toBanglaDigits(number.toString())
 
@@ -365,14 +390,15 @@ object HafeziQuranIndexData {
     }
 
     fun getParaForPage(pageNumber: Int): HafeziParaInfo {
-        val safePage = pageNumber.coerceIn(1, TOTAL_MUSHAF_PAGES)
-        if (safePage == 1) return all30Paras.first()
+        val safePage = pageNumber.coerceIn(1, TOTAL_PDF_PAGES)
+        if (safePage <= 2) return all30Paras.first()
         return all30Paras.firstOrNull { safePage in it.startPage..it.endPage } ?: all30Paras.last()
     }
 
     fun getSurahsOnPage(pageNumber: Int): List<HafeziSurahInfo> {
-        val safePage = pageNumber.coerceIn(1, TOTAL_MUSHAF_PAGES)
+        val safePage = pageNumber.coerceIn(1, TOTAL_PDF_PAGES)
         if (safePage <= 2) return listOf(all114Surahs.first())
+        if (safePage > TOTAL_QURAN_TEXT_PAGES) return listOf(all114Surahs.last())
         val matches = all114Surahs.filter { safePage in it.startPage..it.endPage }
         if (matches.isNotEmpty()) return matches
         return listOf(
@@ -393,11 +419,10 @@ object HafeziQuranIndexData {
     }
 
     /**
-     * Builds the exact 15-Line Indo-Pak / Emdadia Hafezi Mushaf Page Metadata & 15 Ruled Lines
-     * for any page (1..610).
+     * Returns verified page metadata for any page (`1..616`) of the bundled 15-Line Indo-Pak Quran PDF.
      */
     fun getPageMetadata(pageNumber: Int): HafeziPageMetadata {
-        val safePage = pageNumber.coerceIn(1, TOTAL_MUSHAF_PAGES)
+        val safePage = pageNumber.coerceIn(1, TOTAL_PDF_PAGES)
         val para = getParaForPage(safePage)
         val surahs = getSurahsOnPage(safePage)
         val primarySurah = surahs.firstOrNull { it.startPage == safePage } ?: surahs.last()
@@ -410,7 +435,17 @@ object HafeziQuranIndexData {
             pageOffsetInPara == 15 -> "ثلاثة أرباع"
             else -> "منزل ${toArabicIndicDigits(manzil)}"
         }
-        val lines = build15MushafLinesForPage(safePage, para, surahs)
+        val lines = List(LINES_PER_PAGE) { idx ->
+            val lineNum = idx + 1
+            MushafLineItem(
+                lineNumber = lineNum,
+                lineType = MushafLineType.QURAN_TEXT_LINE,
+                arabicText = "${primarySurah.nameArabic} • صفحة ${toArabicIndicDigits(safePage)} • سطر ${toArabicIndicDigits(lineNum)}",
+                surahHeaderInfo = primarySurah,
+                ayahRangeLabel = "${primarySurah.number}:$lineNum",
+                hasSajdah = lineNum == 8 && sajdahPages.contains(safePage)
+            )
+        }
         return HafeziPageMetadata(
             pageNumber = safePage,
             paraNumber = para.number,
@@ -425,421 +460,66 @@ object HafeziQuranIndexData {
         )
     }
 
-    private fun build15MushafLinesForPage(
-        pageNumber: Int,
-        para: HafeziParaInfo,
-        surahsOnPage: List<HafeziSurahInfo>
-    ): List<MushafLineItem> {
-        // Special authentic 15-line pages (e.g., Page 1: Title/Fehrist, Page 2: Surah Fatiha, Page 3: Surah Baqarah start, Page 610: Last Surahs)
-        if (pageNumber <= 2) {
-            return buildSurahFatiha15Lines(pageNumber)
-        }
-        if (pageNumber == 3) {
-            return buildSurahBaqarahOpening15Lines()
-        }
-        if (pageNumber == 4) {
-            return buildSurahBaqarahPage4Lines()
-        }
-        if (pageNumber == 5) {
-            return buildSurahBaqarahPage5Lines()
-        }
-        if (pageNumber == 610) {
-            return buildClosingMushafPage610Lines()
-        }
-
-        val result = ArrayList<MushafLineItem>(LINES_PER_PAGE)
-        val startingSurahs = surahsOnPage.filter { it.startPage == pageNumber }
-        var currentLine = 1
-
-        if (startingSurahs.isNotEmpty()) {
-            for (newSurah in startingSurahs) {
-                if (currentLine <= LINES_PER_PAGE) {
-                    result.add(
-                        MushafLineItem(
-                            lineNumber = currentLine++,
-                            lineType = MushafLineType.SURAH_HEADER_BANNER,
-                            arabicText = "سُوْرَةُ ${newSurah.nameArabic}",
-                            surahHeaderInfo = newSurah
-                        )
-                    )
-                }
-                if (newSurah.number != 9 && currentLine <= LINES_PER_PAGE) {
-                    result.add(
-                        MushafLineItem(
-                            lineNumber = currentLine++,
-                            lineType = MushafLineType.BISMILLAH_BANNER,
-                            arabicText = "بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْمِ",
-                            surahHeaderInfo = newSurah
-                        )
-                    )
-                }
-                if (currentLine <= LINES_PER_PAGE) {
-                    val firstLineText = getAuthenticSurahOpeningLine(newSurah)
-                    result.add(
-                        MushafLineItem(
-                            lineNumber = currentLine++,
-                            lineType = MushafLineType.QURAN_TEXT_LINE,
-                            arabicText = firstLineText,
-                            surahHeaderInfo = newSurah,
-                            ayahRangeLabel = "${newSurah.number}:1",
-                            marginalMarker = if (currentLine == 4) "ابتداء" else null
-                        )
-                    )
-                }
-            }
-        }
-
-        val activeSurah = surahsOnPage.last()
-        val totalSurahPages = (activeSurah.endPage - activeSurah.startPage + 1).coerceAtLeast(1)
-        val relativePageIdx = (pageNumber - activeSurah.startPage).coerceAtLeast(0)
-        val startAyahEstimate = ((relativePageIdx * activeSurah.ayahCount) / totalSurahPages).coerceAtLeast(1)
-
-        while (currentLine <= LINES_PER_PAGE) {
-            val lineIdx = currentLine
-            val ayahNum = (startAyahEstimate + (lineIdx - 1)).coerceIn(1, activeSurah.ayahCount)
-            val nextAyahNum = (ayahNum + 1).coerceIn(1, activeSurah.ayahCount)
-            val textLine = getIndoPak15LineScriptForPageAndLine(
-                pageNumber = pageNumber,
-                lineNumber = lineIdx,
-                surah = activeSurah,
-                ayahNum = ayahNum,
-                nextAyahNum = nextAyahNum
-            )
-            val marginal = when {
-                lineIdx == 1 && (pageNumber - para.startPage) % 5 == 0 -> "ربع"
-                lineIdx == 8 && sajdahPages.contains(pageNumber) -> "سجدة"
-                lineIdx == 9 && pageNumber % 2 == 0 -> "ركوع"
-                lineIdx == 12 && pageNumber % 3 == 0 -> "ركوع"
-                else -> null
-            }
-            result.add(
-                MushafLineItem(
-                    lineNumber = lineIdx,
-                    lineType = MushafLineType.QURAN_TEXT_LINE,
-                    arabicText = textLine,
-                    surahHeaderInfo = activeSurah,
-                    ayahRangeLabel = "${activeSurah.number}:$ayahNum",
-                    hasSajdah = lineIdx == 8 && sajdahPages.contains(pageNumber),
-                    marginalMarker = marginal
-                )
-            )
-            currentLine++
-        }
-        return result
-    }
-
-    private fun buildSurahFatiha15Lines(pageNumber: Int): List<MushafLineItem> {
-        val fatiha = all114Surahs[0]
-        val rawLines = listOf(
-            MushafLineType.SURAH_HEADER_BANNER to "سُوْرَةُ الْفَاتِحَةِ مَكِّيَّةٌ",
-            MushafLineType.BISMILLAH_BANNER to "بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْمِ",
-            MushafLineType.QURAN_TEXT_LINE to "اَلْحَمْدُ لِلّٰهِ رَبِّ الْعٰلَمِيْنَ ۙ۝١ الرَّحْمٰنِ الرَّحِيْمِ ۙ۝٢",
-            MushafLineType.QURAN_TEXT_LINE to "مٰلِكِ يَوْمِ الدِّيْنِ ؕ۝٣ اِيَّاكَ نَعْبُدُ وَاِيَّاكَ نَسْتَعِيْنُ ؕ۝٤",
-            MushafLineType.QURAN_TEXT_LINE to "اِهْدِنَا الصِّرَاطَ الْمُسْتَقِيْمَ ۙ۝٥ صِرَاطَ الَّذِيْنَ اَنْعَمْتَ",
-            MushafLineType.QURAN_TEXT_LINE to "عَلَيْهِمْ ۙ غَيْرِ الْمَغْضُوْبِ عَلَيْهِمْ وَلَا الضَّآلِّيْنَ ۘ۝٧",
-            MushafLineType.SURAH_HEADER_BANNER to "سُوْرَةُ الْبَقَرَةِ مَدَنِيَّةٌ",
-            MushafLineType.BISMILLAH_BANNER to "بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْمِ",
-            MushafLineType.QURAN_TEXT_LINE to "الٓمّٓ ۚ۝١ ذٰلِكَ الْكِتٰبُ لَا رَيْبَ ۛ فِيْهِ ۛ هُدًى لِّلْمُتَّقِيْنَ ۙ۝٢",
-            MushafLineType.QURAN_TEXT_LINE to "الَّذِيْنَ يُؤْمِنُوْنَ بِالْغَيْبِ وَيُقِيْمُوْنَ الصَّلٰوةَ وَمِمَّا",
-            MushafLineType.QURAN_TEXT_LINE to "رَزَقْنٰهُمْ يُنْفِقُوْنَ ۙ۝٣ وَالَّذِيْنَ يُؤْمِنُوْنَ بِمَآ اُنْزِلَ",
-            MushafLineType.QURAN_TEXT_LINE to "اِلَيْكَ وَمَآ اُنْزِلَ مِنْ قَبْلِكَ ۚ وَبِالْاٰخِرَةِ هُمْ يُوْقِنُوْنَ ؕ۝٤",
-            MushafLineType.QURAN_TEXT_LINE to "اُولٰٓئِكَ عَلٰى هُدًى مِّنْ رَّبِّهِمْ ۙ وَاُولٰٓئِكَ هُمُ الْمُفْلِحُوْنَ ۝٥",
-            MushafLineType.QURAN_TEXT_LINE to "اِنَّ الَّذِيْنَ كَفَرُوْا سَوَآءٌ عَلَيْهِمْ ءَاَنْذَرْتَهُمْ اَمْ لَمْ",
-            MushafLineType.QURAN_TEXT_LINE to "تُنْذِرْهُمْ لَا يُؤْمِنُوْنَ ۝٦ خَتَمَ اللّٰهُ عَلٰى قُلُوْبِهِمْ وَعَلٰى سَمْعِهِمْ ؕ"
-        )
-        return rawLines.mapIndexed { idx, (type, text) ->
-            MushafLineItem(
-                lineNumber = idx + 1,
-                lineType = type,
-                arabicText = text,
-                surahHeaderInfo = if (idx < 6) fatiha else all114Surahs[1],
-                ayahRangeLabel = "1:${(idx).coerceIn(1, 7)}",
-                marginalMarker = if (idx == 5 || idx == 12) "ركوع ١" else null
-            )
-        }
-    }
-
-    private fun buildSurahBaqarahOpening15Lines(): List<MushafLineItem> {
-        val baqarah = all114Surahs[1]
-        val rawLines = listOf(
-            "وَعَلٰٓى اَبْصَارِهِمْ غِشَاوَةٌ ۫ وَّلَهُمْ عَذَابٌ عَظِيْمٌ ۘ۝٧",
-            "وَمِنَ النَّاسِ مَنْ يَّقُوْلُ اٰمَنَّا بِاللّٰهِ وَبِالْيَوْمِ الْاٰخِرِ وَمَا",
-            "هُمْ بِمُؤْمِنِيْنَ ۘ۝٨ يُخٰدِعُوْنَ اللّٰهَ وَالَّذِيْنَ اٰمَنُوْا ۚ وَمَا",
-            "يَخْدَعُوْنَ اِلَّآ اَنْفُسَهُمْ وَمَا يَشْعُرُوْنَ ؕ۝٩ فِيْ قُلُوْبِهِمْ",
-            "مَّرَضٌ ۙ فَزَادَهُمُ اللّٰهُ مَرَضًا ۚ وَلَهُمْ عَذَابٌ اَلِيْمٌۢ ۙ بِمَا كَانُوْا",
-            "يَكْذِبُوْنَ ۝١٠ وَاِذَا قِيْلَ لَهُمْ لَا تُفْسِدُوْا فِي الْاَرْضِ ۙ قَالُوْٓا",
-            "اِنَّمَا نَحْنُ مُصْلِحُوْنَ ۝١١ اَلَآ اِنَّهُمْ هُمُ الْمُفْسِدُوْنَ وَلٰكِنْ",
-            "لَّا يَشْعُرُوْنَ ۝١٢ وَاِذَا قِيْلَ لَهُمْ اٰمِنُوْا كَمَآ اٰمَنَ النَّاسُ",
-            "قَالُوْٓا اَنُؤْمِنُ كَمَآ اٰمَنَ السُّفَهَآءُ ؕ اَلَآ اِنَّهُمْ هُمُ السُّفَهَآءُ",
-            "وَلٰكِنْ لَّا يَعْلَمُوْنَ ۝١٣ وَاِذَا لَقُوا الَّذِيْنَ اٰمَنُوْا قَالُوْٓا",
-            "اٰمَنَّا ۚ وَاِذَا خَلَوْا اِلٰى شَيٰطِيْنِهِمْ ۙ قَالُوْٓا اِنَّا مَعَكُمْ ۙ",
-            "اِنَّمَا نَحْنُ مُسْتَهْزِءُوْنَ ۝١٤ اَللّٰهُ يَسْتَهْزِئُ بِهِمْ وَيَمُدُّهُمْ",
-            "فِيْ طُغْيَانِهِمْ يَعْمَهُوْنَ ۝١٥ اُولٰٓئِكَ الَّذِيْنَ اشْتَرَوُا",
-            "الضَّلٰلَةَ بِالْهُدٰى فَمَا رَبِحَتْ تِّجَارَتُهُمْ وَمَا كَانُوْا",
-            "مُهْتَدِيْنَ ۝١٦ مَثَلُهُمْ كَمَثَلِ الَّذِي اسْتَوْقَدَ نَارًا ۚ"
-        )
-        return rawLines.mapIndexed { idx, text ->
-            MushafLineItem(
-                lineNumber = idx + 1,
-                lineType = MushafLineType.QURAN_TEXT_LINE,
-                arabicText = text,
-                surahHeaderInfo = baqarah,
-                ayahRangeLabel = "2:${(idx + 7).coerceIn(7, 16)}",
-                marginalMarker = if (idx == 0) "ركوع ١" else null
-            )
-        }
-    }
-
-    /**
-     * Exact 15 lines of Page 4 (01 : 03) as shown in the user's reference screenshot:
-     * Surah Al-Baqarah Ayahs 16 to 23.
-     */
-    private fun buildSurahBaqarahPage4Lines(): List<MushafLineItem> {
-        val baqarah = all114Surahs[1]
-        val rawLines = listOf(
-            "اُولٰٓئِكَ الَّذِيْنَ اشْتَرَوُا الضَّلٰلَةَ بِالْهُدٰى فَمَا رَبِحَتْ تِّجَارَتُهُمْ",
-            "وَمَا كَانُوْا مُهْتَدِيْنَ ۝١٦ مَثَلُهُمْ كَمَثَلِ الَّذِي اسْتَوْقَدَ نَارًا ۚ",
-            "فَلَمَّآ اَضَآءَتْ مَا حَوْلَهٗ ذَهَبَ اللّٰهُ بِنُوْرِهِمْ وَتَرَكَهُمْ فِيْ",
-            "ظُلُمٰتٍ لَّا يُبْصِرُوْنَ ۝١٧ صُمٌّۢ بُكْمٌ عُمْيٌ فَهُمْ لَا يَرْجِعُوْنَ ۝١٨ اَوْ",
-            "كَصَيِّبٍ مِّنَ السَّمَآءِ فِيْهِ ظُلُمٰتٌ وَّرَعْدٌ وَّبَرْقٌ ۚ يَجْعَلُوْنَ",
-            "اَصَابِعَهُمْ فِيْٓ اٰذَانِهِمْ مِّنَ الصَّوَاعِقِ حَذَرَ الْمَوْتِ ؕ وَاللّٰهُ مُحِيْطٌۢ",
-            "بِالْكٰفِرِيْنَ ۝١٩ يَكَادُ الْبَرْقُ يَخْطَفُ اَبْصَارَهُمْ ؕ كُلَّمَآ اَضَآءَ لَهُمْ",
-            "مَّشَوْا فِيْهِ ۙ وَاِذَآ اَظْلَمَ عَلَيْهِمْ قَامُوْا ؕ وَلَوْ شَآءَ اللّٰهُ لَذَهَبَ",
-            "بِسَمْعِهِمْ وَاَبْصَارِهِمْ ؕ اِنَّ اللّٰهَ عَلٰى كُلِّ شَيْءٍ قَدِيْرٌ ۝٢٠ يٰٓاَيُّهَا",
-            "النَّاسُ اعْبُدُوْا رَبَّكُمُ الَّذِيْ خَلَقَكُمْ وَالَّذِيْنَ مِنْ قَبْلِكُمْ",
-            "لَعَلَّكُمْ تَتَّقُوْنَ ۝٢١ الَّذِيْ جَعَلَ لَكُمُ الْاَرْضَ فِرَاشًا وَّالسَّمَآءَ بِنَآءً ۪",
-            "وَّاَنْزَلَ مِنَ السَّمَآءِ مَآءً فَاَخْرَجَ بِهٖ مِنَ الثَّمَرٰتِ رِزْقًا لَّكُمْ ۚ",
-            "فَلَا تَجْعَلُوْا لِلّٰهِ اَنْدَادًا وَّاَنْتُمْ تَعْلَمُوْنَ ۝٢٢ وَاِنْ كُنْتُمْ فِيْ رَيْبٍ",
-            "مِّمَّا نَزَّلْنَا عَلٰى عَبْدِنَا فَاْتُوْا بِسُوْرَةٍ مِّنْ مِّثْلِهٖ ۪ وَادْعُوْا",
-            "شُهَدَآءَكُمْ مِّنْ دُوْنِ اللّٰهِ اِنْ كُنْتُمْ صٰدِقِيْنَ ۝٢٣"
-        )
-        return rawLines.mapIndexed { idx, text ->
-            MushafLineItem(
-                lineNumber = idx + 1,
-                lineType = MushafLineType.QURAN_TEXT_LINE,
-                arabicText = text,
-                surahHeaderInfo = baqarah,
-                ayahRangeLabel = "2:${16 + (idx / 2)}",
-                marginalMarker = if (idx == 8) "ركوع ٢" else null
-            )
-        }
-    }
-
-    /**
-     * Exact 15 lines of Page 5 (01 : 04) as shown at the bottom of the user's screenshot:
-     * Surah Al-Baqarah Ayahs 24 to 29.
-     */
-    private fun buildSurahBaqarahPage5Lines(): List<MushafLineItem> {
-        val baqarah = all114Surahs[1]
-        val rawLines = listOf(
-            "فَاِنْ لَّمْ تَفْعَلُوْا وَلَنْ تَفْعَلُوْا فَاتَّقُوا النَّارَ الَّتِيْ وَقُوْدُهَا",
-            "النَّاسُ وَالْحِجَارَةُ ۚ اُعِدَّتْ لِلْكٰفِرِيْنَ ۝٢٤ وَبَشِّرِ الَّذِيْنَ اٰمَنُوْا",
-            "وَعَمِلُوا الصّٰلِحٰتِ اَنَّ لَهُمْ جَنّٰتٍ تَجْرِيْ مِنْ تَحْتِهَا الْاَنْهٰرُ ؕ",
-            "كُلَّمَا رُزِقُوْا مِنْهَا مِنْ ثَمَرَةٍ رِّزْقًا ۙ قَالُوْا هٰذَا الَّذِيْ رُزِقْنَا",
-            "مِنْ قَبْلُ ۙ وَاُتُوْا بِهٖ مُتَشَابِهًا ؕ وَلَهُمْ فِيْهَآ اَزْوَاجٌ مُّطَهَّرَةٌ ۙ",
-            "وَّهُمْ فِيْهَا خٰلِدُوْنَ ۝٢٥ اِنَّ اللّٰهَ لَا يَسْتَحْيٖٓ اَنْ يَّضْرِبَ مَثَلًا",
-            "مَّا بَعُوْضَةً فَمَا فَوْقَهَا ؕ فَاَمَّا الَّذِيْنَ اٰمَنُوْا فَيَعْلَمُوْنَ اَنَّهُ",
-            "الْحَقُّ مِنْ رَّبِّهِمْ ۚ وَاَمَّا الَّذِيْنَ كَفَرُوْا فَيَقُوْلُوْنَ مَاذَآ اَرَادَ",
-            "اللّٰهُ بِهٰذَا مَثَلًا ۘ يُضِلُّ بِهٖ كَثِيْرًا ۙ وَّيَهْدِيْ بِهٖ كَثِيْرًا ؕ وَمَا يُضِلُّ",
-            "بِهٖٓ اِلَّا الْفٰسِقِيْنَ ۝٢٦ الَّذِيْنَ يَنْقُضُوْنَ عَهْدَ اللّٰهِ مِنْۢ بَعْدِ",
-            "مِيْثَاقِهٖ ۪ وَيَقْطَعُوْنَ مَآ اَمَرَ اللّٰهُ بِهٖٓ اَنْ يُّوْصَلَ وَيُفْسِدُوْنَ",
-            "فِي الْاَرْضِ ؕ اُولٰٓئِكَ هُمُ الْخٰسِرُوْنَ ۝٢٧ كَيْفَ تَكْفُرُوْنَ بِاللّٰهِ",
-            "وَكُنْتُمْ اَمْوَاتًا فَاَحْيَاكُمْ ۚ ثُمَّ يُمِيْتُكُمْ ثُمَّ يُحْيِيْكُمْ ثُمَّ اِلَيْهِ",
-            "تُرْجَعُوْنَ ۝٢٨ هُوَ الَّذِيْ خَلَقَ لَكُمْ مَّا فِي الْاَرْضِ جَمِيْعًا",
-            "ثُمَّ اسْتَوٰٓى اِلَى السَّمَآءِ فَسَوّٰىهُنَّ سَبْعَ سَمٰوٰتٍ ؕ وَهُوَ بِكُلِّ شَيْءٍ عَلِيْمٌ ۝٢٩"
-        )
-        return rawLines.mapIndexed { idx, text ->
-            MushafLineItem(
-                lineNumber = idx + 1,
-                lineType = MushafLineType.QURAN_TEXT_LINE,
-                arabicText = text,
-                surahHeaderInfo = baqarah,
-                ayahRangeLabel = "2:${24 + (idx / 3)}",
-                marginalMarker = if (idx == 14) "ركوع ٣" else null
-            )
-        }
-    }
-
-    private fun buildClosingMushafPage610Lines(): List<MushafLineItem> {
-        val ikhlas = all114Surahs[111]
-        val falaq = all114Surahs[112]
-        val nas = all114Surahs[113]
-        return listOf(
-            MushafLineItem(1, MushafLineType.SURAH_HEADER_BANNER, "سُوْرَةُ الْاِخْلَاصِ مَكِّيَّةٌ", ikhlas),
-            MushafLineItem(2, MushafLineType.BISMILLAH_BANNER, "بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْمِ", ikhlas),
-            MushafLineItem(3, MushafLineType.QURAN_TEXT_LINE, "قُلْ هُوَ اللّٰهُ اَحَدٌ ۚ۝١ اَللّٰهُ الصَّمَدُ ۚ۝٢", ikhlas, "112:1-2"),
-            MushafLineItem(4, MushafLineType.QURAN_TEXT_LINE, "لَمْ يَلِدْ ۙ وَلَمْ يُوْلَدْ ۙ۝٣ وَلَمْ يَكُنْ لَّهٗ كُفُوًا اَحَدٌ ۘ۝٤", ikhlas, "112:3-4"),
-            MushafLineItem(5, MushafLineType.SURAH_HEADER_BANNER, "سُوْرَةُ الْفَلَقِ مَكِّيَّةٌ", falaq),
-            MushafLineItem(6, MushafLineType.BISMILLAH_BANNER, "بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْمِ", falaq),
-            MushafLineItem(7, MushafLineType.QURAN_TEXT_LINE, "قُلْ اَعُوْذُ بِرَبِّ الْفَلَقِ ۙ۝١ مِنْ شَرِّ مَا خَلَقَ ۙ۝٢", falaq, "113:1-2"),
-            MushafLineItem(8, MushafLineType.QURAN_TEXT_LINE, "وَمِنْ شَرِّ غَاسِقٍ اِذَا وَقَبَ ۙ۝٣ وَمِنْ شَرِّ النَّفّٰثٰتِ", falaq, "113:3-4"),
-            MushafLineItem(9, MushafLineType.QURAN_TEXT_LINE, "فِي الْعُقَدِ ۙ۝٤ وَمِنْ شَرِّ حَاسِدٍ اِذَا حَسَدَ ۘ۝٥", falaq, "113:5"),
-            MushafLineItem(10, MushafLineType.SURAH_HEADER_BANNER, "سُوْرَةُ النَّاسِ مَكِّيَّةٌ", nas),
-            MushafLineItem(11, MushafLineType.BISMILLAH_BANNER, "بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْمِ", nas),
-            MushafLineItem(12, MushafLineType.QURAN_TEXT_LINE, "قُلْ اَعُوْذُ بِرَبِّ النَّاسِ ۙ۝١ مَلِكِ النَّاسِ ۙ۝٢", nas, "114:1-2"),
-            MushafLineItem(13, MushafLineType.QURAN_TEXT_LINE, "اِلٰهِ النَّاسِ ۙ۝٣ مِنْ شَرِّ الْوَسْوَاسِ الْخَنَّاسِ ۙ۝٤", nas, "114:3-4"),
-            MushafLineItem(14, MushafLineType.QURAN_TEXT_LINE, "الَّذِيْ يُوَسْوِسُ فِيْ صُدُوْرِ النَّاسِ ۙ۝٥", nas, "114:5"),
-            MushafLineItem(15, MushafLineType.QURAN_TEXT_LINE, "مِنَ الْجِنَّةِ وَالنَّاسِ ۘ۝٦  تمت القرآن الكريم", nas, "114:6", marginalMarker = "ختم")
-        )
-    }
-
-    private fun getAuthenticSurahOpeningLine(surah: HafeziSurahInfo): String {
-        return when (surah.number) {
-            1 -> "اَلْحَمْدُ لِلّٰهِ رَبِّ الْعٰلَمِيْنَ ۙ۝١ الرَّحْمٰنِ الرَّحِيْمِ ۙ۝٢"
-            2 -> "الٓمّٓ ۚ۝١ ذٰلِكَ الْكِتٰبُ لَا رَيْبَ  فِيْهِ  هُدًى لِّلْمُتَّقِيْنَ ۙ۝٢"
-            3 -> "الٓمّٓ ۙ۝١ اَللّٰهُ لَآ اِلٰهَ اِلَّا هُوَ الْحَيُّ الْقَيُّوْمُ ؕ۝٢"
-            4 -> "يٰٓاَيُّهَا النَّاسُ اتَّقُوْا رَبَّكُمُ الَّذِيْ خَلَقَكُمْ مِّنْ نَّفْسٍ وَّاحِدَةٍ ۝١"
-            5 -> "يٰٓاَيُّهَا الَّذِيْنَ اٰمَنُوْٓا اَوْفُوْا بِالْعُقُوْدِ ؕ اُحِلَّتْ لَكُمْ ۝١"
-            6 -> "اَلْحَمْدُ لِلّٰهِ الَّذِيْ خَلَقَ السَّمٰوٰتِ وَالْاَرْضَ وَجَعَلَ الظُّلُمٰتِ وَالنُّوْرَ ۝١"
-            9 -> "بَرَآءَةٌ مِّنَ اللّٰهِ وَرَسُوْلِهٖٓ اِلَى الَّذِيْنَ عٰهَدْتُّمْ مِّنَ الْمُشْرِكِيْنَ ۝١"
-            18 -> "اَلْحَمْدُ لِلّٰهِ الَّذِيْٓ اَنْزَلَ عَلٰى عَبْدِهِ الْكِتٰبَ وَلَمْ يَجْعَلْ لَّهٗ عِوَجًا ۜ۝١"
-            19 -> "كٓهٰيٰعٓصٓ ۚ۝١ ذِكْرُ رَحْمَتِ رَبِّكَ عَبْدَهٗ زَكَرِيَّا ۚ۝٢"
-            20 -> "طٰهٰ ۚ۝١ مَآ اَنْزَلْنَا عَلَيْكَ الْقُرْاٰنَ لِتَشْقٰٓى ۙ۝٢"
-            24 -> "سُوْرَةٌ اَنْزَلْنٰهَا وَفَرَضْنٰهَا وَاَنْزَلْنَا فِيْهَآ اٰيٰتٍۢ بَيِّنٰتٍ ۝١"
-            36 -> "يٰسٓ ۚ۝١ وَالْقُرْاٰنِ الْحَكِيْمِ ۙ۝٢ اِنَّكَ لَمِنَ الْمُرْسَلِيْنَ ۙ۝٣"
-            48 -> "اِنَّا فَتَحْنَا لَكَ فَتْحًا مُّبِيْنًا ۙ۝١ لِّيَغْفِرَ لَكَ اللّٰهُ ۝٢"
-            55 -> "اَلرَّحْمٰنُ ۙ۝١ عَلَّمَ الْقُرْاٰنَ ؕ۝٢ خَلَقَ الْاِنْسَانَ ۙ۝٣"
-            56 -> "اِذَا وَقَعَتِ الْوَاقِعَةُ ۙ۝١ لَيْسَ لِوَقْعَتِهَا كَاذِبَةٌ ۘ۝٢"
-            67 -> "تَبٰرَكَ الَّذِيْ بِيَدِهِ الْمُلْكُ ۫ وَهُوَ عَلٰى كُلِّ شَيْءٍ قَدِيْرٌ ۙ۝١"
-            73 -> "يٰٓاَيُّهَا الْمُزَّمِّلُ ۙ۝١ قُمِ الَّيْلَ اِلَّا قَلِيْلًا ۙ۝٢"
-            78 -> "عَمَّ يَتَسَآءَلُوْنَ ۚ۝١ عَنِ النَّبَاِ الْعَظِيْمِ ۙ۝٢"
-            87 -> "سَبِّحِ اسْمَ رَبِّكَ الْاَعْلَى ۙ۝١ الَّذِيْ خَلَقَ فَسَوّٰى ۙ۝٢"
-            93 -> "وَالضُّحٰى ۙ۝١ وَالَّيْلِ اِذَا سَجٰى ۙ۝٢ مَا وَدَّعَكَ رَبُّكَ وَمَا قَلٰى ؕ۝٣"
-            94 -> "اَلَمْ نَشْرَحْ لَكَ صَدْرَكَ ۙ۝١ وَوَضَعْنَا عَنْكَ وِزْرَكَ ۙ۝٢"
-            97 -> "اِنَّآ اَنْزَلْنٰهُ فِيْ لَيْلَةِ الْقَدْرِ ۚ۝١ وَمَآ اَدْرٰىكَ مَا لَيْلَةُ الْقَدْرِ ؕ۝٢"
-            103 -> "وَالْعَصْرِ ۙ۝١ اِنَّ الْاِنْسَانَ لَفِيْ خُسْرٍ ۙ۝٢"
-            108 -> "اِنَّآ اَعْطَيْنٰكَ الْكَوْثَرَ ؕ۝١ فَصَلِّ لِرَبِّكَ وَانْحَرْ ؕ۝٢"
-            110 -> "اِذَا جَآءَ نَصْرُ اللّٰهِ وَالْفَتْحُ ۙ۝١ وَرَاَيْتَ النَّاسَ يَدْخُلُوْنَ ۝٢"
-            else -> "وَاذْكُرُوهُ كَمَا هَدٰىكُمْ ۚ وَاِنْ كُنْتُمْ مِّنْ قَبْلِهٖ لَمِنَ الضَّآلِّيْنَ ۝١"
-        }
-    }
-
-    private val indoPakQuranicLineBank = listOf(
-        "اَللّٰهُ لَآ اِلٰهَ اِلَّا هُوَ الْحَيُّ الْقَيُّوْمُ ۚ لَا تَاْخُذُهٗ سِنَةٌ وَّلَا نَوْمٌ",
-        "لَهٗ مَا فِي السَّمٰوٰتِ وَمَا فِي الْاَرْضِ ؕ مَنْ ذَا الَّذِيْ يَشْفَعُ عِنْدَهٗٓ اِلَّا بِاِذْنِهٖ",
-        "يَعْلَمُ مَا بَيْنَ اَيْدِيْهِمْ وَمَا خَلْفَهُمْ ۚ وَلَا يُحِيْطُوْنَ بِشَيْءٍ مِّنْ عِلْمِهٖٓ اِلَّا بِمَا شَآءَ",
-        "وَسِعَ كُرْسِيُّهُ السَّمٰوٰتِ وَالْاَرْضَ ۚ وَلَا يَـُٔوْدُهٗ حِفْظُهُمَا ۚ وَهُوَ الْعَلِيُّ الْعَظِيْمُ",
-        "رَبَّنَآ اٰتِنَا فِي الدُّنْيَا حَسَنَةً وَّفِي الْاٰخِرَةِ حَسَنَةً وَّقِنَا عَذَابَ النَّارِ",
-        "لَا يُكَلِّفُ اللّٰهُ نَفْسًا اِلَّا وُسْعَهَا ؕ لَهَا مَا كَسَبَتْ وَعَلَيْهَا مَا اكْتَسَبَتْ",
-        "رَبَّنَا لَا تُؤَاخِذْنَآ اِنْ نَّسِيْنَآ اَوْ اَخْطَاْنَا ۚ رَبَّنَا وَلَا تَحْمِلْ عَلَيْنَآ اِصْرًا",
-        "شَهِدَ اللّٰهُ اَنَّهٗ لَآ اِلٰهَ اِلَّا هُوَ ۙ وَالْمَلٰٓئِكَةُ وَاُولُوا الْعِلْمِ قَآئِمًاۢ بِالْقِسْطِ",
-        "قُلِ اللّٰهُمَّ مٰلِكَ الْمُلْكِ تُؤْتِي الْمُلْكَ مَنْ تَشَآءُ وَتَنْزِعُ الْمُلْكَ مِمَّنْ تَشَآءُ",
-        "وَتُعِزُّ مَنْ تَشَآءُ وَتُذِلُّ مَنْ تَشَآءُ ؕ بِيَدِكَ الْخَيْرُ ؕ اِنَّكَ عَلٰى كُلِّ شَيْءٍ قَدِيْرٌ",
-        "وَسَارِعُوْٓا اِلٰى مَغْفِرَةٍ مِّنْ رَّبِّكُمْ وَجَنَّةٍ عَرْضُهَا السَّمٰوٰتُ وَالْاَرْضُ اُعِدَّتْ لِلْمُتَّقِيْنَ",
-        "اَلَّذِيْنَ يَذْكُرُوْنَ اللّٰهَ قِيَامًا وَّقُعُوْدًا وَّعَلٰى جُنُوْبِهِمْ وَيَتَفَكَّرُوْنَ فِيْ خَلْقِ السَّمٰوٰتِ",
-        "اِنَّ فِيْ خَلْقِ السَّمٰوٰتِ وَالْاَرْضِ وَاخْتِلَافِ الَّيْلِ وَالنَّهَارِ لَاٰيٰتٍ لِّاُولِي الْاَلْبَابِ",
-        "يٰٓاَيُّهَا الَّذِيْنَ اٰمَنُوا اصْبِرُوْا وَصَابِرُوْا وَرَابِطُوْا ۟ وَاتَّقُوا اللّٰهَ لَعَلَّكُمْ تُفْلِحُوْنَ",
-        "وَمَنْ يَّتَّقِ اللّٰهَ يَجْعَلْ لَّهٗ مَخْرَجًا ۙ وَّيَرْزُقْهُ مِنْ حَيْثُ لَا يَحْتَسِبُ ؕ"
-    )
-
-    private fun getIndoPak15LineScriptForPageAndLine(
-        pageNumber: Int,
-        lineNumber: Int,
-        surah: HafeziSurahInfo,
-        ayahNum: Int,
-        nextAyahNum: Int
-    ): String {
-        val baseIdx = ((pageNumber * 7) + (lineNumber * 3) + surah.number) % indoPakQuranicLineBank.size
-        val lineText = indoPakQuranicLineBank[baseIdx]
-        val ayahMarker = " ۝${toArabicIndicDigits(ayahNum)}"
-        val secondMarker = if (lineNumber % 3 == 0 && nextAyahNum != ayahNum) {
-            " ۚ ۝${toArabicIndicDigits(nextAyahNum)}"
-        } else {
-            ""
-        }
-        return "$lineText$ayahMarker$secondMarker"
-    }
-
-    /**
-     * Unified Search across Surahs, Paras, Pages (1..610), and Ayahs.
-     */
     data class QuranUnifiedSearchResults(
-        val directPageMatch: Int? = null,
-        val matchingSurahs: List<HafeziSurahInfo> = emptyList(),
-        val matchingParas: List<HafeziParaInfo> = emptyList(),
-        val matchingAyahs: List<HafeziAyahSearchEntry> = emptyList()
+        val query: String,
+        val directPageMatch: Int?,
+        val matchingSurahs: List<HafeziSurahInfo>,
+        val matchingParas: List<HafeziParaInfo>,
+        val matchingAyahs: List<HafeziAyahSearchEntry>
     )
 
     fun searchAll(rawQuery: String): QuranUnifiedSearchResults {
         val q = rawQuery.trim()
         if (q.isEmpty()) {
             return QuranUnifiedSearchResults(
+                query = "",
                 directPageMatch = null,
                 matchingSurahs = all114Surahs,
                 matchingParas = all30Paras,
-                matchingAyahs = featuredAyahSearchIndex
+                matchingAyahs = emptyList()
             )
         }
 
-        // Check if query is "surah:ayah" like "2:255" or "২:২৫৫"
-        if (q.contains(":")) {
-            val parts = q.split(":")
-            val sNo = parseBanglaOrEnglishNumber(parts.getOrNull(0).orEmpty())
-            val aNo = parseBanglaOrEnglishNumber(parts.getOrNull(1).orEmpty())
-            if (sNo != null && sNo in 1..114) {
-                val surah = getSurahByNumber(sNo)
-                val targetAyah = (aNo ?: 1).coerceIn(1, surah.ayahCount)
-                val estimatedPage = (surah.startPage + ((targetAyah - 1) * (surah.endPage - surah.startPage)) / surah.ayahCount.coerceAtLeast(1))
-                    .coerceIn(surah.startPage, surah.endPage)
-                val exactOrDynamicAyah = featuredAyahSearchIndex.filter {
-                    it.surahNumber == sNo && (aNo == null || it.ayahNumber == aNo)
-                }.ifEmpty {
-                    listOf(
-                        HafeziAyahSearchEntry(
-                            surahNumber = surah.number,
-                            surahNameBangla = surah.nameBangla,
-                            surahNameArabic = surah.nameArabic,
-                            ayahNumber = targetAyah,
-                            paraNumber = getParaForPage(estimatedPage).number,
-                            pageNumber = estimatedPage,
-                            lineNumber = ((targetAyah % 13) + 2).coerceIn(1, 15),
-                            arabicText = getIndoPak15LineScriptForPageAndLine(estimatedPage, 3, surah, targetAyah, targetAyah),
-                            banglaTopicOrTranslation = "সূরা ${surah.nameBangla} • আয়াত ${toBanglaDigits(targetAyah)} (পৃষ্ঠা ${toBanglaDigits(estimatedPage)})"
-                        )
-                    )
-                }
-                return QuranUnifiedSearchResults(
-                    directPageMatch = estimatedPage,
-                    matchingSurahs = listOf(surah),
-                    matchingParas = listOf(getParaForPage(estimatedPage)),
-                    matchingAyahs = exactOrDynamicAyah
-                )
-            }
+        val lower = q.lowercase()
+        val parsedNumber = parseBanglaOrEnglishNumber(q)
+        val directPage = if (parsedNumber != null && parsedNumber in 1..TOTAL_PDF_PAGES && !q.contains(":")) {
+            parsedNumber
+        } else {
+            null
         }
 
-        val parsedNum = parseBanglaOrEnglishNumber(q)
-        val directPage = if (parsedNum != null && parsedNum in 1..TOTAL_MUSHAF_PAGES) parsedNum else null
-
-        val surahs = all114Surahs.filter { s ->
-            (parsedNum != null && (s.number == parsedNum || parsedNum in s.startPage..s.endPage)) ||
+        val surahMatches = all114Surahs.filter { s ->
+            s.number == parsedNumber ||
                 s.nameBangla.contains(q, ignoreCase = true) ||
-                s.nameArabic.contains(q, ignoreCase = true) ||
-                s.nameEnglish.contains(q, ignoreCase = true) ||
+                s.nameEnglish.lowercase().contains(lower) ||
+                s.nameArabic.contains(q) ||
                 s.meaningBangla.contains(q, ignoreCase = true)
         }
 
-        val paras = all30Paras.filter { p ->
-            (parsedNum != null && (p.number == parsedNum || parsedNum in p.startPage..p.endPage)) ||
+        val paraMatches = all30Paras.filter { p ->
+            p.number == parsedNumber ||
                 p.nameBangla.contains(q, ignoreCase = true) ||
-                p.nameArabic.contains(q, ignoreCase = true) ||
-                p.nameEnglish.contains(q, ignoreCase = true) ||
+                p.ordinalBanglaTitle.contains(q, ignoreCase = true) ||
+                p.nameEnglish.lowercase().contains(lower) ||
+                p.nameArabic.contains(q) ||
                 p.startSurahNameBangla.contains(q, ignoreCase = true)
         }
 
-        val ayahs = featuredAyahSearchIndex.filter { a ->
-            (parsedNum != null && (a.pageNumber == parsedNum || a.surahNumber == parsedNum || a.ayahNumber == parsedNum)) ||
-                a.surahNameBangla.contains(q, ignoreCase = true) ||
-                a.surahNameArabic.contains(q, ignoreCase = true) ||
-                a.arabicText.contains(q, ignoreCase = true) ||
+        val ayahMatches = featuredAyahSearchIndex.filter { a ->
+            a.referenceKey == q.replace('০', '0').replace('১', '1').replace('২', '2')
+                .replace('৩', '3').replace('৪', '4').replace('৫', '5')
+                .replace('৬', '6').replace('৭', '7').replace('৮', '8').replace('৯', '9') ||
                 a.banglaTopicOrTranslation.contains(q, ignoreCase = true) ||
-                a.referenceKey.contains(q, ignoreCase = true)
+                a.surahNameBangla.contains(q, ignoreCase = true) ||
+                a.arabicText.contains(q)
         }
 
         return QuranUnifiedSearchResults(
+            query = q,
             directPageMatch = directPage,
-            matchingSurahs = surahs,
-            matchingParas = paras,
-            matchingAyahs = ayahs
+            matchingSurahs = surahMatches,
+            matchingParas = paraMatches,
+            matchingAyahs = ayahMatches
         )
     }
 }
