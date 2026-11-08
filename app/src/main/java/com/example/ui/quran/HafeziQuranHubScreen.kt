@@ -1,6 +1,8 @@
 package com.example.ui.quran
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -34,9 +37,11 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FindInPage
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.PauseCircle
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.VerifiedUser
@@ -125,6 +130,7 @@ fun HafeziQuranHubScreen(
 
     LaunchedEffect(Unit) {
         HafeziQuranStorageManager.init(context)
+        HafeziDrivePdfManager.init(context)
     }
 
     val progress by HafeziQuranStorageManager.progressFlow.collectAsState()
@@ -132,6 +138,7 @@ fun HafeziQuranHubScreen(
     val history by HafeziQuranStorageManager.historyFlow.collectAsState()
     val downloadState by HafeziQuranStorageManager.downloadStateFlow.collectAsState()
     val themeMode by HafeziQuranStorageManager.themeModeFlow.collectAsState()
+    val drivePdfState by HafeziDrivePdfManager.stateFlow.collectAsState()
 
     val isNightMode = themeMode == MushafThemeMode.NIGHT_MODE
     val screenBg = if (isNightMode) Color(0xFF0B1914) else QuranLightBg
@@ -140,6 +147,7 @@ fun HafeziQuranHubScreen(
     val secondaryText = if (isNightMode) Color(0xFFB7CFC4) else Color(0xFF4A6359)
 
     var activeReaderPage by rememberSaveable { mutableStateOf<Int?>(null) }
+    var openReaderInDriveEmbeddedMode by rememberSaveable { mutableStateOf(false) }
     var selectedTabOrdinal by rememberSaveable { mutableIntStateOf(QuranHubTab.SURAHS.ordinal) }
     val selectedTab = QuranHubTab.entries.getOrElse(selectedTabOrdinal) { QuranHubTab.SURAHS }
 
@@ -147,6 +155,19 @@ fun HafeziQuranHubScreen(
     var directPageQuery by rememberSaveable { mutableStateOf("") }
     var showDirectPageModal by rememberSaveable { mutableStateOf(false) }
     var showTilawatDuaModal by rememberSaveable { mutableStateOf(false) }
+
+    val pdfPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            HafeziDrivePdfManager.importPdfFromUri(context, uri, scope) { success, _ ->
+                if (success) {
+                    openReaderInDriveEmbeddedMode = false
+                    activeReaderPage = progress.lastReadPage
+                }
+            }
+        }
+    }
 
     val searchResults = remember(searchQuery) {
         HafeziQuranIndexData.searchAll(searchQuery)
@@ -156,10 +177,15 @@ fun HafeziQuranHubScreen(
     if (activeReaderPage != null) {
         BackHandler {
             activeReaderPage = null
+            openReaderInDriveEmbeddedMode = false
         }
         HafeziQuranReaderView(
             initialPage = activeReaderPage ?: 2,
-            onBackToHub = { activeReaderPage = null }
+            initialOpenDriveEmbedded = openReaderInDriveEmbeddedMode,
+            onBackToHub = {
+                activeReaderPage = null
+                openReaderInDriveEmbeddedMode = false
+            }
         )
         return
     }
@@ -434,6 +460,38 @@ fun HafeziQuranHubScreen(
                         }
                     }
                 }
+            }
+
+            // B0. গুগল ড্রাইভ কুরআন শরীফ পিডিএফ (Google Drive PDF Mushaf) কার্ড
+            item {
+                GoogleDrivePdfMushafSectionCard(
+                    drivePdfState = drivePdfState,
+                    cardBg = cardBg,
+                    primaryText = primaryText,
+                    secondaryText = secondaryText,
+                    onOpenDriveMushafInApp = {
+                        if (drivePdfState.status == DrivePdfStatus.READY_OFFLINE) {
+                            HafeziDrivePdfManager.setRenderSource(
+                                context,
+                                QuranMushafRenderSource.DRIVE_PDF_MUSHAF
+                            )
+                            openReaderInDriveEmbeddedMode = false
+                            activeReaderPage = progress.lastReadPage
+                        } else {
+                            openReaderInDriveEmbeddedMode = true
+                            activeReaderPage = progress.lastReadPage
+                        }
+                    },
+                    onDownloadDrivePdfOffline = {
+                        HafeziDrivePdfManager.startDrivePdfDownload(context, scope)
+                    },
+                    onPickLocalPdfFromPhone = {
+                        pdfPickerLauncher.launch("application/pdf")
+                    },
+                    onOpenInGoogleDriveApp = {
+                        HafeziDrivePdfManager.openDriveLinkExternally(context)
+                    }
+                )
             }
 
             // B. Offline Download, Pause/Resume & File Integrity Verification Card
@@ -1711,3 +1769,232 @@ private fun EmptyStateInfoCard(
         }
     }
 }
+
+@Composable
+private fun GoogleDrivePdfMushafSectionCard(
+    drivePdfState: DrivePdfState,
+    cardBg: Color,
+    primaryText: Color,
+    secondaryText: Color,
+    onOpenDriveMushafInApp: () -> Unit,
+    onDownloadDrivePdfOffline: () -> Unit,
+    onPickLocalPdfFromPhone: () -> Unit,
+    onOpenInGoogleDriveApp: () -> Unit
+) {
+    val isReadyOffline = drivePdfState.status == DrivePdfStatus.READY_OFFLINE
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.5.dp, QuranGold, RoundedCornerShape(16.dp))
+            .testTag("quran_hub_google_drive_pdf_card"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBg)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Surface(
+                        modifier = Modifier.size(40.dp),
+                        shape = CircleShape,
+                        color = QuranPrimaryGreen.copy(alpha = 0.14f)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = if (isReadyOffline) Icons.Default.CheckCircle else Icons.Default.PictureAsPdf,
+                                contentDescription = null,
+                                tint = QuranPrimaryGreen,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "গুগল ড্রাইভ কুরআন শরীফ (PDF)",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = primaryText,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = if (isReadyOffline) Color(0xFFE8F5E9) else QuranGold.copy(alpha = 0.22f)
+                            ) {
+                                Text(
+                                    text = if (isReadyOffline) "অফলাইন প্রস্তুত" else "ড্রাইভ সংযুক্ত",
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    color = QuranPrimaryGreen,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        Text(
+                            text = drivePdfState.statusMessageBangla,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = secondaryText,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+            }
+
+            if (drivePdfState.status == DrivePdfStatus.DOWNLOADING) {
+                LinearProgressIndicator(
+                    progress = { drivePdfState.progressFraction },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(50)),
+                    color = QuranPrimaryGreen,
+                    trackColor = QuranMintBorder
+                )
+            }
+
+            // Primary Action: Open Google Drive PDF Mushaf in App Reader
+            Button(
+                onClick = onOpenDriveMushafInApp,
+                colors = ButtonDefaults.buttonColors(containerColor = QuranPrimaryGreen),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("quran_hub_open_drive_pdf_reader_button")
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                    contentDescription = null,
+                    tint = QuranGold,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (isReadyOffline) {
+                        "পিডিএফ মুসহাফ তিলাওয়াত শুরু করুন (${HafeziQuranIndexData.toBanglaDigits(drivePdfState.pdfPageCount)} পৃষ্ঠা)"
+                    } else {
+                        "সরাসরি গুগল ড্রাইভ পিডিএফ মুসহাফ পড়ুন"
+                    },
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.5.sp
+                )
+            }
+
+            // Secondary Actions Row: Offline Download from Drive | Pick PDF from Phone | Open in Drive App
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = QuranPrimaryGreen.copy(alpha = 0.1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .border(1.dp, QuranMintBorder, RoundedCornerShape(10.dp))
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(onClick = onDownloadDrivePdfOffline)
+                        .testTag("quran_hub_download_drive_pdf_button")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudDownload,
+                            contentDescription = null,
+                            tint = QuranPrimaryGreen,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (isReadyOffline) "পুনরায় সিঙ্ক" else "অফলাইন সেভ",
+                            color = QuranPrimaryGreen,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = QuranGold.copy(alpha = 0.14f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .border(1.dp, QuranGold.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(onClick = onPickLocalPdfFromPhone)
+                        .testTag("quran_hub_pick_local_pdf_button")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FolderOpen,
+                            contentDescription = null,
+                            tint = primaryText,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "ফোন থেকে PDF",
+                            color = primaryText,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = cardBg,
+                    modifier = Modifier
+                        .border(1.dp, QuranMintBorder, RoundedCornerShape(10.dp))
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(onClick = onOpenInGoogleDriveApp)
+                        .testTag("quran_hub_open_drive_external_button")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                            contentDescription = null,
+                            tint = QuranPrimaryGreen,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "ড্রাইভ",
+                            color = QuranPrimaryGreen,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+

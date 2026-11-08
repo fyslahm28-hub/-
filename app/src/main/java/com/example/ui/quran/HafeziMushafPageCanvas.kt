@@ -21,6 +21,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -81,6 +82,10 @@ fun HafeziMushafPageView(
     isPrimaryActivePage: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    val drivePdfState by HafeziDrivePdfManager.stateFlow.collectAsState()
+    val useOfflineDrivePdf = drivePdfState.status == DrivePdfStatus.READY_OFFLINE &&
+        drivePdfState.renderSource == QuranMushafRenderSource.DRIVE_PDF_MUSHAF
+
     var scale by remember(pageMetadata.pageNumber) { mutableFloatStateOf(externalZoomScale) }
     var offset by remember(pageMetadata.pageNumber) { mutableStateOf(Offset.Zero) }
 
@@ -172,112 +177,126 @@ fun HafeziMushafPageView(
                 .background(paperColor),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 1. Classic Printed Top Margin Header Outside Frame:
-            //    - Centered "منزل ١"
-            //    - Centered bold "( 01 : 03 )"
-            //    - Left: "البقرة ٢" | Right: "الٓمّٓ ١"
-            ClassicMushafTopMarginHeader(
-                pageMetadata = pageMetadata,
-                formattedParaPageCode = formattedParaPageCode,
-                inkColor = inkColor
-            )
-
-            // 2. Main Framed 15-Line Mushaf Area with Outer Margin Ruku & Ornamental Canvas Frame
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 2.dp)
-            ) {
-                // Traditional Intricate Black-and-White Floral/Arabesque Border Frame
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    drawTraditionalHafeziOrnamentalFrame(
-                        frameColor = frameColor,
-                        paperColor = paperColor
-                    )
-                }
-
-                // Outer Left Margin Ruku ("ع") Indicator (matching screenshot left margin)
-                if (rukuLineIndex >= 0) {
-                    val verticalFraction = ((rukuLineIndex + 0.5f) / 15f).coerceIn(0.08f, 0.92f)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .width(18.dp)
-                            .align(Alignment.TopStart)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .padding(top = (verticalFraction * 440f).dp.coerceIn(24.dp, 460.dp)),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = HafeziQuranIndexData.toArabicIndicDigits((pageMetadata.pageNumber % 3) + 1),
-                                color = inkColor,
-                                fontFamily = QuranAmiriFontFamily,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                lineHeight = 9.sp
-                            )
-                            Text(
-                                text = "ع",
-                                color = inkColor,
-                                fontFamily = QuranAmiriFontFamily,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                lineHeight = 14.sp
-                            )
-                            Text(
-                                text = HafeziQuranIndexData.toArabicIndicDigits((pageMetadata.pageNumber % 9) + 1),
-                                color = inkColor,
-                                fontFamily = QuranAmiriFontFamily,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                lineHeight = 9.sp
-                            )
-                        }
-                    }
-                }
-
-                // Bottom-Right Outer Margin Page Numeral (matching screenshot bottom-right "٥")
-                Text(
-                    text = HafeziQuranIndexData.toBanglaDigits(pageMetadata.pageNumber),
-                    color = inkColor,
-                    fontFamily = QuranAmiriFontFamily,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 1.dp, bottom = 2.dp)
-                )
-
-                // Strictly 15 Ruled Lines Inside the Double-Ruled Inner Box
-                Column(
+            if (useOfflineDrivePdf) {
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 17.dp, vertical = 14.dp)
                         .testTag(linesContainerTag)
                 ) {
-                    pageMetadata.lines.take(HafeziQuranIndexData.LINES_PER_PAGE).forEachIndexed { idx, lineItem ->
+                    HafeziDrivePdfPageSurface(
+                        pageNumber = pageMetadata.pageNumber,
+                        themeMode = themeMode,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            } else {
+                // 1. Classic Printed Top Margin Header Outside Frame:
+                //    - Centered "منزل ١"
+                //    - Centered bold "( 01 : 03 )"
+                //    - Left: "البقرة ٢" | Right: "الٓمّٓ ١"
+                ClassicMushafTopMarginHeader(
+                    pageMetadata = pageMetadata,
+                    formattedParaPageCode = formattedParaPageCode,
+                    inkColor = inkColor
+                )
+
+                // 2. Main Framed 15-Line Mushaf Area with Outer Margin Ruku & Ornamental Canvas Frame
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 2.dp)
+                ) {
+                    // Traditional Intricate Black-and-White Floral/Arabesque Border Frame
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        drawTraditionalHafeziOrnamentalFrame(
+                            frameColor = frameColor,
+                            paperColor = paperColor
+                        )
+                    }
+
+                    // Outer Left Margin Ruku ("ع") Indicator (matching screenshot left margin)
+                    if (rukuLineIndex >= 0) {
+                        val verticalFraction = ((rukuLineIndex + 0.5f) / 15f).coerceIn(0.08f, 0.92f)
                         Box(
                             modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .testTag("hafezi_mushaf_line_${lineItem.lineNumber}"),
-                            contentAlignment = Alignment.Center
+                                .fillMaxHeight()
+                                .width(18.dp)
+                                .align(Alignment.TopStart)
                         ) {
-                            ClassicMushafSingleLineRow(
-                                lineItem = lineItem,
-                                inkColor = inkColor,
-                                paperColor = paperColor
-                            )
-                            if (idx < HafeziQuranIndexData.LINES_PER_PAGE - 1) {
-                                HorizontalDivider(
-                                    modifier = Modifier.align(Alignment.BottomCenter),
-                                    thickness = 1.dp,
-                                    color = inkColor.copy(alpha = 0.88f)
+                            Column(
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .padding(top = (verticalFraction * 440f).dp.coerceIn(24.dp, 460.dp)),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = HafeziQuranIndexData.toArabicIndicDigits((pageMetadata.pageNumber % 3) + 1),
+                                    color = inkColor,
+                                    fontFamily = QuranAmiriFontFamily,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    lineHeight = 9.sp
                                 )
+                                Text(
+                                    text = "ع",
+                                    color = inkColor,
+                                    fontFamily = QuranAmiriFontFamily,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    lineHeight = 14.sp
+                                )
+                                Text(
+                                    text = HafeziQuranIndexData.toArabicIndicDigits((pageMetadata.pageNumber % 9) + 1),
+                                    color = inkColor,
+                                    fontFamily = QuranAmiriFontFamily,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    lineHeight = 9.sp
+                                )
+                            }
+                        }
+                    }
+
+                    // Bottom-Right Outer Margin Page Numeral (matching screenshot bottom-right "٥")
+                    Text(
+                        text = HafeziQuranIndexData.toBanglaDigits(pageMetadata.pageNumber),
+                        color = inkColor,
+                        fontFamily = QuranAmiriFontFamily,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 1.dp, bottom = 2.dp)
+                    )
+
+                    // Strictly 15 Ruled Lines Inside the Double-Ruled Inner Box
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 17.dp, vertical = 14.dp)
+                            .testTag(linesContainerTag)
+                    ) {
+                        pageMetadata.lines.take(HafeziQuranIndexData.LINES_PER_PAGE).forEachIndexed { idx, lineItem ->
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                                    .testTag("hafezi_mushaf_line_${lineItem.lineNumber}"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                ClassicMushafSingleLineRow(
+                                    lineItem = lineItem,
+                                    inkColor = inkColor,
+                                    paperColor = paperColor
+                                )
+                                if (idx < HafeziQuranIndexData.LINES_PER_PAGE - 1) {
+                                    HorizontalDivider(
+                                        modifier = Modifier.align(Alignment.BottomCenter),
+                                        thickness = 1.dp,
+                                        color = inkColor.copy(alpha = 0.88f)
+                                    )
+                                }
                             }
                         }
                     }

@@ -126,12 +126,8 @@ jobs:
       - name: Ensure debug.keystore is available
         run: |
           is_valid_keystore() {
-            [ -s "debug.keystore" ] && keytool -list -keystore debug.keystore -storepass android -alias androiddebugkey >/dev/null 2>&1
+            [ -s "debug.keystore" ] && keytool -list -v -keystore debug.keystore -storepass android -alias androiddebugkey 2>/dev/null | grep -qi "BA:A7:97:A0:A6:F0:2B:71:11:BA:DA:47:95:A4:53:1B:BD:4C:E1:23"
           }
-
-          if ! is_valid_keystore && [ -f "debug.keystore.base64" ]; then
-            tr -d '[:space:]' < debug.keystore.base64 | base64 -d > debug.keystore 2>/dev/null || true
-          fi
 
           if ! is_valid_keystore; then
             python3 - << 'PYEOF' || true
@@ -145,6 +141,10 @@ jobs:
               with open("debug.keystore", "wb") as f:
                   f.write(raw)
           PYEOF
+          fi
+
+          if ! is_valid_keystore && [ -f "debug.keystore.base64" ]; then
+            tr -d '[:space:]' < debug.keystore.base64 | base64 -d > debug.keystore 2>/dev/null || true
           fi
 
           if ! is_valid_keystore; then
@@ -352,7 +352,7 @@ jobs:
           RELEASE_APK_SHA256: ${{ needs.build-and-distribute.outputs.apk_sha256 }}
           RELEASE_APK_SIZE_BYTES: ${{ needs.build-and-distribute.outputs.apk_size_bytes }}
           RELEASE_TAG: ${{ needs.build-and-distribute.outputs.release_tag }}
-          RELEASE_NOTES: ${{ github.event.inputs.release_notes || format('কওমি কর্মসংস্থান বাংলাদেশ নতুন সংস্করণ {0} প্রকাশিত হয়েছে। হাফেজি কুরআন শরীফ অপশনে ফজিলতপূর্ণ সূরা শর্টকাট, ৭ মঞ্জিল নেভিগেশন, হিফজ সবক ট্র্যাকার এবং মুসহাফ রিডারে অটো-স্ক্রল ও কুইক পেজ কন্ট্রোল বার যুক্ত করা হয়েছে।', needs.build-and-distribute.outputs.version_name) }}
+          RELEASE_NOTES: ${{ github.event.inputs.release_notes || format('কওমি কর্মসংস্থান বাংলাদেশ নতুন সংস্করণ {0} প্রকাশিত হয়েছে। হোম স্ক্রিনের পরিচ্ছন্ন ডিজাইন এবং আল-কুরআন অপশনে ফজিলতপূর্ণ সূরা শর্টকাট, ৭ মঞ্জিল নেভিগেশন ও মুসহাফ রিডারে অটো-স্ক্রল সুবিধা যুক্ত করা হয়েছে।', needs.build-and-distribute.outputs.version_name) }}
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_ACTOR: ${{ github.actor }}
         run: |

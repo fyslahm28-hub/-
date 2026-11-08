@@ -1,5 +1,7 @@
 package com.example.ui.quran
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -89,10 +91,30 @@ import kotlinx.coroutines.launch
 @Composable
 fun HafeziQuranReaderView(
     initialPage: Int,
+    initialOpenDriveEmbedded: Boolean = false,
     onBackToHub: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        HafeziDrivePdfManager.init(context)
+    }
+
+    val drivePdfState by HafeziDrivePdfManager.stateFlow.collectAsState()
+    var showDriveEmbeddedWebView by rememberSaveable { mutableStateOf(initialOpenDriveEmbedded) }
+
+    val pdfPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            HafeziDrivePdfManager.importPdfFromUri(context, uri, scope) { success, msg ->
+                if (success) {
+                    showDriveEmbeddedWebView = false
+                }
+            }
+        }
+    }
 
     val safeInitialPage = initialPage.coerceIn(1, HafeziQuranIndexData.TOTAL_MUSHAF_PAGES)
 
@@ -437,16 +459,34 @@ fun HafeziQuranReaderView(
             }
         }
 
-        // 2. Full-Screen Crisp 15-Line Hafezi Mushaf Pages
-        //    - Vertical Continuous Scroll (LazyColumn) shows current page and top of next page right below it (matching screenshot!)
-        //    - Horizontal Pager Mode allows classic page-by-page swipe
+        // 2. Full-Screen Crisp 15-Line Hafezi Mushaf Pages OR Embedded Google Drive PDF Viewer
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .background(themeMode.pageBackground)
         ) {
-            if (isVerticalScrollMode) {
+            if (showDriveEmbeddedWebView && drivePdfState.status != DrivePdfStatus.READY_OFFLINE) {
+                GoogleDriveEmbeddedMushafView(
+                    drivePdfState = drivePdfState,
+                    onStartOfflineDownload = {
+                        HafeziDrivePdfManager.startDrivePdfDownload(context, scope)
+                    },
+                    onPickLocalPdf = {
+                        pdfPickerLauncher.launch("application/pdf")
+                    },
+                    onOpenInDriveApp = {
+                        HafeziDrivePdfManager.openDriveLinkExternally(context)
+                    },
+                    onSwitchToDigital15Line = {
+                        showDriveEmbeddedWebView = false
+                        HafeziDrivePdfManager.setRenderSource(
+                            context,
+                            QuranMushafRenderSource.DIGITAL_15LINE_MUSHAF
+                        )
+                    }
+                )
+            } else if (isVerticalScrollMode) {
                 LazyColumn(
                     state = lazyListState,
                     userScrollEnabled = currentZoomScale <= 1.05f,
@@ -590,23 +630,67 @@ fun HafeziQuranReaderView(
                             .testTag("quran_reader_autoscroll_toggle_button")
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = if (isAutoScrollActive) Icons.Default.Pause else Icons.Default.PlayArrow,
                                 contentDescription = "অটো-স্ক্রল",
                                 tint = if (isAutoScrollActive) Color(0xFF0B1914) else Color(0xFFFFE082),
-                                modifier = Modifier.size(14.dp)
+                                modifier = Modifier.size(13.dp)
                             )
-                            Spacer(modifier = Modifier.width(3.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
                             Text(
                                 text = if (isAutoScrollActive) "থামান" else "অটো-স্ক্রল",
                                 color = if (isAutoScrollActive) Color(0xFF0B1914) else Color.White,
-                                fontSize = 10.5.sp,
+                                fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
+                    }
+
+                    // Toggle between Google Drive PDF Mushaf and 15-Line Mushaf
+                    val isDriveActive = showDriveEmbeddedWebView ||
+                        (drivePdfState.status == DrivePdfStatus.READY_OFFLINE &&
+                            drivePdfState.renderSource == QuranMushafRenderSource.DRIVE_PDF_MUSHAF)
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = if (isDriveActive) Color(0xFFD9A82E) else Color.White.copy(alpha = 0.14f),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .clickable {
+                                if (drivePdfState.status == DrivePdfStatus.READY_OFFLINE) {
+                                    val nextSource =
+                                        if (drivePdfState.renderSource == QuranMushafRenderSource.DRIVE_PDF_MUSHAF) {
+                                            QuranMushafRenderSource.DIGITAL_15LINE_MUSHAF
+                                        } else {
+                                            QuranMushafRenderSource.DRIVE_PDF_MUSHAF
+                                        }
+                                    HafeziDrivePdfManager.setRenderSource(context, nextSource)
+                                    showDriveEmbeddedWebView = false
+                                    feedbackToast = if (nextSource == QuranMushafRenderSource.DRIVE_PDF_MUSHAF) {
+                                        "গুগল ড্রাইভ পিডিএফ মুসহাফ চালু হয়েছে"
+                                    } else {
+                                        "১৫-লাইন ডিজিটাল মুসহাফ চালু হয়েছে"
+                                    }
+                                } else {
+                                    showDriveEmbeddedWebView = !showDriveEmbeddedWebView
+                                    feedbackToast = if (showDriveEmbeddedWebView) {
+                                        "গুগল ড্রাইভ পিডিএফ ভিউয়ার চালু হয়েছে"
+                                    } else {
+                                        "১৫-লাইন ডিজিটাল মুসহাফ চালু হয়েছে"
+                                    }
+                                }
+                            }
+                            .testTag("quran_reader_drive_pdf_toggle_button")
+                    ) {
+                        Text(
+                            text = if (isDriveActive) "PDF সক্রিয়" else "ড্রাইভ PDF",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                            color = if (isDriveActive) Color(0xFF0B1914) else Color(0xFFFFE082),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
 
