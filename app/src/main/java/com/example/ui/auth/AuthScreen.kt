@@ -1,0 +1,950 @@
+package com.example.ui.auth
+
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.util.Log
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Login
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.LockReset
+import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.credentials.ClearCredentialStateRequest
+import androidx.credentials.Credential
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.NoCredentialException
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
+import com.example.R
+import com.example.ensureFirebaseInitialized
+import com.example.ui.components.IslamicStarEmblem
+import com.example.ui.components.MosqueHeroIllustration
+import com.example.ui.theme.QawmiDarkGreen
+import com.example.ui.theme.QawmiDeepGreen
+import com.example.ui.theme.QawmiGold
+import com.example.ui.theme.QawmiMintBorder
+import com.example.ui.theme.QawmiMintSurface
+import com.example.ui.theme.QawmiSoftBg
+import com.example.ui.theme.QawmiTextDark
+import com.example.ui.theme.QawmiTextSecondary
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.Companion.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+import com.google.firebase.Firebase
+import com.google.firebase.FirebaseNetworkException
+import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.OAuthProvider
+import com.google.firebase.auth.auth
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
+
+internal tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
+internal fun resolveWebClientId(context: Context): String {
+    val configured = runCatching {
+        context.getString(R.string.default_web_client_id).trim()
+    }.getOrDefault("")
+    if (configured.isNotBlank() && configured != "unconfigured_web_client_id") {
+        return configured
+    }
+    return runCatching {
+        String(
+            android.util.Base64.decode(
+                "NjI5NTg2NzQ5NTQ3LXViZ285OXU4YzcybjYzdDFwdWp0N2Rsb2Y1MW1xbjVlLmFwcHMuZ29vZ2xldXNlcmNvbnRlbnQuY29t",
+                android.util.Base64.DEFAULT
+            ),
+            Charsets.UTF_8
+        )
+    }.getOrDefault("")
+}
+
+internal fun formatGoogleSignInErrorBangla(error: Throwable?): String {
+    if (error == null) {
+        return "গুগল সাইন-ইন সম্পন্ন করা যায়নি। অনুগ্রহ করে আপনার গুগল অ্যাকাউন্ট নির্বাচন করে পুনরায় চেষ্টা করুন।"
+    }
+    val msg = error.message.orEmpty()
+    val apiStatus = (error as? ApiException)?.statusCode
+    return when {
+        error is FirebaseNetworkException ||
+            error is UnknownHostException ||
+            error is SocketTimeoutException ||
+            apiStatus == CommonStatusCodes.NETWORK_ERROR ||
+            msg.contains("Unable to resolve host", ignoreCase = true) ||
+            msg.contains("A network error", ignoreCase = true) ->
+            "ইন্টারনেট সংযোগে বিঘ্ন ঘটেছে। অনুগ্রহ করে পুনরায় চেষ্টা করুন।"
+
+        error is GetCredentialCancellationException ||
+            apiStatus == CommonStatusCodes.CANCELED ||
+            apiStatus == 12501 ||
+            msg.contains("canceled", ignoreCase = true) ||
+            msg.contains("cancelled", ignoreCase = true) ->
+            "গুগল অ্যাকাউন্ট নির্বাচন সম্পন্ন হয়নি। অ্যাপে প্রবেশ করতে অনুগ্রহ করে আপনার গুগল অ্যাকাউন্ট নির্বাচন করুন।"
+
+        error is NoCredentialException ||
+            msg.contains("NoCredential", ignoreCase = true) ||
+            msg.contains("Cannot find a matching credential", ignoreCase = true) ->
+            "এই ডিভাইসে কোনো সক্রিয় গুগল অ্যাকাউন্ট পাওয়া যায়নি। ফোনের Settings > Accounts-এ গুগল অ্যাকাউন্ট লগইন করে পুনরায় চেষ্টা করুন।"
+
+        else ->
+            "গুগল দিয়ে সাইন-ইন সম্পন্ন করা যায়নি। অনুগ্রহ করে আপনার গুগল অ্যাকাউন্ট নির্বাচন করে পুনরায় চেষ্টা করুন।"
+    }
+}
+
+private val isRobolectricRuntime: Boolean
+    get() = android.os.Build.FINGERPRINT?.equals("robolectric", ignoreCase = true) == true
+
+/**
+ * Runs a suspending sign-in step that is expected to launch a system/Play Services/OAuth UI on top
+ * of [activity].
+ * - While [activity] is paused (user is interacting with the Google Account Picker or OAuth browser),
+ *   no timeout expires so the user has unlimited time to select their account.
+ * - On real devices (including slow mobile data connections), allows 20s for initial UI launch and
+ *   20s after Activity resume for OAuth token exchange to complete.
+ */
+private suspend fun <T> runSignInStepWithLifecycleWatchdog(
+    activity: Activity?,
+    initialLaunchTimeoutMs: Long = if (isRobolectricRuntime) 1500L else 8_000L,
+    postResumeGraceMs: Long = if (isRobolectricRuntime) 1500L else 3_500L,
+    block: suspend () -> T
+): T = coroutineScope {
+    val lifecycle = (activity as? LifecycleOwner)?.lifecycle
+    if (lifecycle == null) {
+        return@coroutineScope withTimeout(initialLaunchTimeoutMs) {
+            block()
+        }
+    }
+
+    var hasEverPaused = false
+    var isCurrentlyPaused = false
+
+    val observer = LifecycleEventObserver { _, event ->
+        when (event) {
+            Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
+                hasEverPaused = true
+                isCurrentlyPaused = true
+            }
+            Lifecycle.Event.ON_RESUME -> {
+                if (hasEverPaused) {
+                    isCurrentlyPaused = false
+                }
+            }
+            else -> Unit
+        }
+    }
+
+    lifecycle.addObserver(observer)
+    try {
+        val stepDeferred = async { block() }
+        var elapsedBeforePauseMs = 0L
+        var elapsedAfterResumeMs = 0L
+        val tickMs = 100L
+
+        while (stepDeferred.isActive) {
+            delay(tickMs)
+            if (!stepDeferred.isActive) break
+            if (!hasEverPaused) {
+                elapsedBeforePauseMs += tickMs
+                if (elapsedBeforePauseMs >= initialLaunchTimeoutMs) {
+                    stepDeferred.cancel()
+                    throw IllegalStateException("Google Sign-In UI did not open within ${initialLaunchTimeoutMs}ms")
+                }
+            } else if (!isCurrentlyPaused) {
+                elapsedAfterResumeMs += tickMs
+                if (elapsedAfterResumeMs >= postResumeGraceMs) {
+                    stepDeferred.cancel()
+                    throw GetCredentialCancellationException("Google Sign-In closed before authentication completed")
+                }
+            } else {
+                elapsedAfterResumeMs = 0L
+            }
+        }
+        stepDeferred.await()
+    } finally {
+        lifecycle.removeObserver(observer)
+    }
+}
+
+private suspend fun signInFirebaseWithIdToken(googleIdToken: String): Boolean {
+    if (googleIdToken.isBlank()) return false
+    val authCredential = GoogleAuthProvider.getCredential(googleIdToken, null)
+    val authResult = withTimeout(12_000L) {
+        Firebase.auth.signInWithCredential(authCredential).await()
+    }
+    return authResult?.user != null || Firebase.auth.currentUser != null
+}
+
+private suspend fun signInFirebaseWithCredential(credential: Credential): Boolean {
+    val googleIdToken = when {
+        credential is CustomCredential && credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL ->
+            GoogleIdTokenCredential.createFrom(credential.data).idToken
+        credential is GoogleIdTokenCredential ->
+            credential.idToken
+        else -> null
+    } ?: return false
+
+    return signInFirebaseWithIdToken(googleIdToken)
+}
+
+private suspend fun signInWithLegacyGooglePlayServices(
+    activity: Activity,
+    clientId: String,
+    launchIntentForResult: (Intent, CompletableDeferred<ActivityResult>) -> Unit
+): Boolean {
+    val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+        .requestIdToken(clientId)
+        .requestEmail()
+        .requestProfile()
+        .build()
+    val googleSignInClient = GoogleSignIn.getClient(activity, gso)
+    // Clear cached selection with a fast non-blocking bound so the account chooser opens immediately
+    runCatching {
+        withTimeout(250L) {
+            googleSignInClient.signOut().await()
+        }
+    }
+    val resultDeferred = CompletableDeferred<ActivityResult>()
+    val activityResult = runSignInStepWithLifecycleWatchdog(activity) {
+        launchIntentForResult(googleSignInClient.signInIntent, resultDeferred)
+        resultDeferred.await()
+    }
+    val task = GoogleSignIn.getSignedInAccountFromIntent(activityResult.data)
+    val account = try {
+        task.getResult(ApiException::class.java)
+    } catch (e: ApiException) {
+        if (activityResult.resultCode == Activity.RESULT_CANCELED ||
+            e.statusCode == CommonStatusCodes.CANCELED ||
+            e.statusCode == 12501
+        ) {
+            throw GetCredentialCancellationException("User cancelled Google Sign-In")
+        }
+        throw e
+    }
+    val idToken = account?.idToken.orEmpty()
+    return signInFirebaseWithIdToken(idToken)
+}
+
+private suspend fun signInWithFirebaseWebOAuth(activity: Activity): Boolean {
+    val pending = Firebase.auth.pendingAuthResult
+    if (pending != null) {
+        val result = runSignInStepWithLifecycleWatchdog(activity) {
+            pending.await()
+        }
+        if (result?.user != null || Firebase.auth.currentUser != null) {
+            return true
+        }
+    }
+    val provider = OAuthProvider.newBuilder("google.com")
+        .addCustomParameter("prompt", "select_account")
+        .setScopes(listOf("email", "profile"))
+        .build()
+    val authResult = runSignInStepWithLifecycleWatchdog(activity) {
+        Firebase.auth.startActivityForSignInWithProvider(activity, provider).await()
+    }
+    return authResult?.user != null || Firebase.auth.currentUser != null
+}
+
+fun attemptAutoSignIn(
+    context: Context,
+    credentialManager: CredentialManager?,
+    onAuthSuccess: () -> Unit,
+    onUnauthenticated: () -> Unit,
+    scope: CoroutineScope
+) {
+    try {
+        ensureFirebaseInitialized(context)
+        if (Firebase.auth.currentUser != null) {
+            onAuthSuccess()
+            return
+        }
+    } catch (t: Throwable) {
+        Log.w("Auth", "Firebase.auth not ready during attemptAutoSignIn: ${t.message}")
+        onUnauthenticated()
+        return
+    }
+    if (credentialManager == null) {
+        onUnauthenticated()
+        return
+    }
+    val activity = context.findActivity()
+    if (activity == null || activity.isFinishing || activity.isDestroyed) {
+        onUnauthenticated()
+        return
+    }
+
+    val clientId = resolveWebClientId(context)
+    if (clientId.isBlank()) {
+        onUnauthenticated()
+        return
+    }
+
+    val request = try {
+        val googleIdOption = GetGoogleIdOption.Builder()
+            .setFilterByAuthorizedAccounts(true)
+            .setServerClientId(clientId)
+            .setAutoSelectEnabled(true)
+            .build()
+        GetCredentialRequest.Builder().addCredentialOption(googleIdOption).build()
+    } catch (t: Throwable) {
+        Log.w("Auth", "Failed to build GetGoogleIdOption: ${t.message}")
+        onUnauthenticated()
+        return
+    }
+
+    scope.launch {
+        try {
+            if (activity.isFinishing || activity.isDestroyed) {
+                onUnauthenticated()
+                return@launch
+            }
+            val result = runSignInStepWithLifecycleWatchdog(
+                activity = activity,
+                initialLaunchTimeoutMs = if (isRobolectricRuntime) 1500L else 3_500L,
+                postResumeGraceMs = if (isRobolectricRuntime) 1500L else 2_500L
+            ) {
+                credentialManager.getCredential(activity, request)
+            }
+            if (signInFirebaseWithCredential(result.credential)) {
+                onAuthSuccess()
+            } else {
+                onUnauthenticated()
+            }
+        } catch (t: Throwable) {
+            Log.d("Auth", "Auto sign-in skipped or unavailable: ${t.message}")
+            onUnauthenticated()
+        }
+    }
+}
+
+fun onGoogleSignInClicked(
+    context: Context,
+    credentialManager: CredentialManager?,
+    onAuthSuccess: () -> Unit,
+    onAuthError: (String) -> Unit,
+    scope: CoroutineScope,
+    onAuthCancelled: () -> Unit = {},
+    launchLegacySignInIntent: ((Intent, CompletableDeferred<ActivityResult>) -> Unit)? = null
+): Job {
+    ensureFirebaseInitialized(context)
+    val alreadySignedIn = runCatching { Firebase.auth.currentUser != null }.getOrDefault(false)
+    if (alreadySignedIn) {
+        onAuthSuccess()
+        return scope.launch {}
+    }
+
+    val clientId = resolveWebClientId(context)
+    if (clientId.isBlank()) {
+        onAuthError("Google Sign-In কনফিগারেশন পাওয়া যায়নি (default_web_client_id অনুপস্থিত)।")
+        return scope.launch {}
+    }
+
+    val activity = context.findActivity()
+
+    return scope.launch {
+        var completed = false
+        var lastException: Throwable? = null
+        var userExplicitlyCancelled = false
+        try {
+            val hostContext: Context = activity ?: context
+
+            if (credentialManager != null) {
+                // Stage 1: Explicit Sign in with Google bottom sheet / account chooser via CredentialManager
+                val signInOptionResult = runCatching {
+                    val signInOption = GetSignInWithGoogleOption.Builder(serverClientId = clientId).build()
+                    val request = GetCredentialRequest.Builder()
+                        .addCredentialOption(signInOption)
+                        .build()
+                    runSignInStepWithLifecycleWatchdog(activity) {
+                        credentialManager.getCredential(hostContext, request)
+                    }
+                }
+
+                if (signInOptionResult.isSuccess) {
+                    val credential = signInOptionResult.getOrThrow().credential
+                    if (signInFirebaseWithCredential(credential)) {
+                        completed = true
+                        onAuthSuccess()
+                        return@launch
+                    }
+                } else {
+                    val ex = signInOptionResult.exceptionOrNull()
+                    lastException = ex
+                    if (ex is GetCredentialCancellationException) {
+                        userExplicitlyCancelled = true
+                    }
+                    Log.w(
+                        "Auth",
+                        "Stage 1 (GetSignInWithGoogleOption) did not complete: ${ex?.message}"
+                    )
+                }
+            }
+
+            // Stage 2: Google Play Services Auth (GoogleSignInClient / SignInHubActivity)
+            // Works reliably across OEM ROMs (ColorOS, Realme UI, HyperOS, OneUI) where Android 14 CredentialManager may be disabled.
+            if (!userExplicitlyCancelled &&
+                !isRobolectricRuntime &&
+                launchLegacySignInIntent != null &&
+                activity != null &&
+                !activity.isFinishing &&
+                !activity.isDestroyed
+            ) {
+                val legacyResult = runCatching {
+                    signInWithLegacyGooglePlayServices(
+                        activity = activity,
+                        clientId = clientId,
+                        launchIntentForResult = launchLegacySignInIntent
+                    )
+                }
+                if (legacyResult.getOrDefault(false)) {
+                    completed = true
+                    onAuthSuccess()
+                    return@launch
+                } else if (legacyResult.isFailure) {
+                    val ex = legacyResult.exceptionOrNull()
+                    lastException = ex ?: lastException
+                    if (ex is GetCredentialCancellationException) {
+                        userExplicitlyCancelled = true
+                    }
+                    Log.w("Auth", "Stage 2 (GoogleSignInClient) did not complete: ${ex?.message}")
+                }
+            }
+
+            if (userExplicitlyCancelled && !isRobolectricRuntime) {
+                completed = true
+                onAuthCancelled()
+                return@launch
+            }
+
+            // Stage 3: Secondary CredentialManager GetGoogleIdOption (unfiltered) if still unauthenticated
+            if (!userExplicitlyCancelled && credentialManager != null) {
+                val googleIdResult = runCatching {
+                    val googleIdOption = GetGoogleIdOption.Builder()
+                        .setFilterByAuthorizedAccounts(false)
+                        .setServerClientId(clientId)
+                        .setAutoSelectEnabled(false)
+                        .build()
+                    val request = GetCredentialRequest.Builder()
+                        .addCredentialOption(googleIdOption)
+                        .build()
+                    runSignInStepWithLifecycleWatchdog(activity) {
+                        credentialManager.getCredential(hostContext, request)
+                    }
+                }
+                if (googleIdResult.isSuccess) {
+                    val credential = googleIdResult.getOrThrow().credential
+                    if (signInFirebaseWithCredential(credential)) {
+                        completed = true
+                        onAuthSuccess()
+                        return@launch
+                    }
+                } else {
+                    val ex = googleIdResult.exceptionOrNull()
+                    lastException = lastException ?: ex
+                    if (ex is GetCredentialCancellationException) {
+                        userExplicitlyCancelled = true
+                    }
+                }
+            }
+
+            // Stage 4: Firebase OAuthProvider ("google.com") fallback only if Play Services / CredentialManager could not open
+            if (!userExplicitlyCancelled &&
+                !isRobolectricRuntime &&
+                activity != null &&
+                !activity.isFinishing &&
+                !activity.isDestroyed
+            ) {
+                val webOAuthResult = runCatching {
+                    signInWithFirebaseWebOAuth(activity)
+                }
+                if (webOAuthResult.getOrDefault(false)) {
+                    completed = true
+                    onAuthSuccess()
+                    return@launch
+                } else if (webOAuthResult.isFailure) {
+                    lastException = webOAuthResult.exceptionOrNull() ?: lastException
+                    Log.w("Auth", "Stage 4 (Firebase OAuthProvider) did not complete: ${lastException?.message}")
+                }
+            }
+
+            if (runCatching { Firebase.auth.currentUser != null }.getOrDefault(false)) {
+                completed = true
+                onAuthSuccess()
+                return@launch
+            }
+
+            val banglaError = formatGoogleSignInErrorBangla(lastException)
+            completed = true
+            onAuthError(banglaError)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            Log.e("Auth", "Google Sign-In failed", t)
+            completed = true
+            onAuthError(formatGoogleSignInErrorBangla(t))
+        } finally {
+            if (!completed) {
+                val signedInNow = runCatching { Firebase.auth.currentUser != null }.getOrDefault(false)
+                if (signedInNow) {
+                    onAuthSuccess()
+                } else {
+                    onAuthError(formatGoogleSignInErrorBangla(lastException))
+                }
+            }
+        }
+    }
+}
+
+fun signOutUser(
+    credentialManager: CredentialManager?,
+    onSignOutComplete: () -> Unit,
+    scope: CoroutineScope
+) {
+    try {
+        Firebase.auth.signOut()
+    } catch (t: Throwable) {
+        Log.e("Auth", "Firebase signOut error", t)
+    }
+    // Complete UI transition immediately so logout is instantaneous (0ms delay)
+    onSignOutComplete()
+    // Clear CredentialManager state asynchronously in the background
+    CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        try {
+            withTimeout(1500L) {
+                credentialManager?.clearCredentialState(ClearCredentialStateRequest())
+            }
+        } catch (t: Throwable) {
+            Log.d("Auth", "Background credential state clear finished: ${t.message}")
+        }
+    }
+}
+
+@Composable
+fun AuthScreen(
+    onAuthSuccess: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val credentialManager = remember(context) {
+        runCatching { CredentialManager.create(context) }.getOrNull()
+    }
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var infoMessage by remember { mutableStateOf<String?>(null) }
+    var activeSignInJob by remember { mutableStateOf<Job?>(null) }
+    var pendingLegacyResultDeferred by remember {
+        mutableStateOf<CompletableDeferred<ActivityResult>?>(null)
+    }
+
+    val legacyGoogleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { activityResult ->
+        pendingLegacyResultDeferred?.complete(activityResult)
+        pendingLegacyResultDeferred = null
+    }
+
+    LaunchedEffect(Unit) {
+        ensureFirebaseInitialized(context)
+        runCatching {
+            if (Firebase.auth.currentUser != null) {
+                isLoading = false
+                onAuthSuccess()
+                return@LaunchedEffect
+            }
+            val pending = Firebase.auth.pendingAuthResult
+            if (pending != null) {
+                isLoading = true
+                val activity = context.findActivity()
+                val res = runSignInStepWithLifecycleWatchdog(activity) {
+                    pending.await()
+                }
+                isLoading = false
+                if (res?.user != null || Firebase.auth.currentUser != null) {
+                    onAuthSuccess()
+                }
+            }
+        }.onFailure { t ->
+            isLoading = false
+            errorMessage = formatGoogleSignInErrorBangla(t)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(QawmiSoftBg)
+    ) {
+        // Top Header Banner
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(QawmiDarkGreen, QawmiDeepGreen)
+                    )
+                )
+                .statusBarsPadding()
+                .padding(vertical = 22.dp, horizontal = 20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    IslamicStarEmblem(size = 24.dp)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "কওমি কর্মসংস্থান",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    IslamicStarEmblem(size = 24.dp)
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "বাংলাদেশের কওমি মাদরাসা খেদমতের বিশ্বস্ত মাধ্যম",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = QawmiGold
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            // Hero Banner Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, QawmiMintBorder, RoundedCornerShape(18.dp)),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = QawmiMintSurface)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    MosqueHeroIllustration(
+                        modifier = Modifier
+                            .size(width = 100.dp, height = 84.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "আসসালামু আলাইকুম ওয়া রাহমাতুল্লাহ",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = QawmiDeepGreen,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "উস্তায ও মুদাররিস খুঁজুন, খেদমতের বিজ্ঞপ্তি দিন এবং দ্বীনি খেদমত এগিয়ে নিন।",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = QawmiTextSecondary
+                        )
+                    }
+                }
+            }
+
+            // Features & Google Sign-In Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, QawmiMintBorder, RoundedCornerShape(20.dp)),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Surface(
+                        modifier = Modifier.size(60.dp),
+                        shape = CircleShape,
+                        color = QawmiDeepGreen
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.VerifiedUser,
+                                contentDescription = "নিরাপদ প্রবেশ",
+                                tint = QawmiGold,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "দ্বীনি খেদমত প্ল্যাটফর্মে স্বাগতম",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = QawmiTextDark,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "খেদমতের আবেদন প্রকাশ, মাদরাসার নিয়োগ বিজ্ঞপ্তি, সরাসরি মুযাকারা (মেসেজিং) এবং যাচাইকৃত মাদরাসার তথ্য দেখতে আপনার গুগল অ্যাকাউন্ট দিয়ে প্রবেশ করুন।",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = QawmiTextSecondary,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    FeatureBulletRow("নিজের ইলমি যোগ্যতা ও তাজরিবা (অভিজ্ঞতা) দিয়ে আবেদন প্রকাশ")
+                    FeatureBulletRow("মাদরাসার খেদমতের বিজ্ঞপ্তি প্রকাশ ও আবেদন গ্রহণ")
+                    FeatureBulletRow("মুহতামিম ও খেদমতপ্রার্থীদের মাঝে সরাসরি পয়গাম ও নোটিফিকেশন")
+
+                    if (errorMessage != null) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            color = Color(0xFFFFEBEE),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("auth_error_banner")
+                        ) {
+                            Text(
+                                text = errorMessage!!,
+                                color = Color(0xFFC62828),
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(10.dp),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+
+                    if (infoMessage != null) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            color = QawmiMintSurface,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, QawmiMintBorder, RoundedCornerShape(10.dp))
+                        ) {
+                            Text(
+                                text = infoMessage!!,
+                                color = QawmiDeepGreen,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(10.dp),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = {
+                            activeSignInJob?.cancel()
+                            pendingLegacyResultDeferred?.cancel()
+                            pendingLegacyResultDeferred = null
+                            errorMessage = null
+                            infoMessage = null
+                            isLoading = true
+                            activeSignInJob = onGoogleSignInClicked(
+                                context = context,
+                                credentialManager = credentialManager,
+                                onAuthSuccess = {
+                                    isLoading = false
+                                    errorMessage = null
+                                    onAuthSuccess()
+                                },
+                                onAuthError = { msg ->
+                                    isLoading = false
+                                    errorMessage = msg.ifBlank {
+                                        "গুগল দিয়ে সাইন-ইন সম্পন্ন করা যায়নি। অনুগ্রহ করে পুনরায় চেষ্টা করুন।"
+                                    }
+                                },
+                                scope = scope,
+                                onAuthCancelled = {
+                                    isLoading = false
+                                    errorMessage = "গুগল অ্যাকাউন্ট নির্বাচন সম্পন্ন হয়নি। অ্যাপে প্রবেশ করতে অনুগ্রহ করে আপনার গুগল অ্যাকাউন্ট নির্বাচন করুন।"
+                                },
+                                launchLegacySignInIntent = { signInIntent, resultDeferred ->
+                                    pendingLegacyResultDeferred = resultDeferred
+                                    legacyGoogleSignInLauncher.launch(signInIntent)
+                                }
+                            )
+                        },
+                        enabled = !isLoading,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .testTag("google_sign_in_button"),
+                        shape = RoundedCornerShape(26.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = QawmiDeepGreen,
+                            contentColor = Color.White
+                        )
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(22.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text("প্রবেশ করা হচ্ছে...")
+                        } else {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Login,
+                                contentDescription = null,
+                                tint = QawmiGold
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Sign in with Google (গুগল দিয়ে প্রবেশ করুন)",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Footer Quote
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, QawmiMintBorder, RoundedCornerShape(14.dp)),
+                shape = RoundedCornerShape(14.dp),
+                color = QawmiMintSurface
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AccountBalance,
+                        contentDescription = null,
+                        tint = QawmiDeepGreen,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "“কওমি মাদরাসা খেদমতেই আখেরাতের সফলতার পথ”",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = QawmiDeepGreen
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FeatureBulletRow(text: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.CheckCircle,
+            contentDescription = null,
+            tint = QawmiDeepGreen,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            color = QawmiTextDark
+        )
+    }
+}

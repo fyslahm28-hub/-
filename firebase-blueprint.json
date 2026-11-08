@@ -1,0 +1,426 @@
+{
+  "entities": {
+    "AdminRegistryEntry": {
+      "description": "Server-verified administrator identity record bound to Firebase Auth UID, email, and admin phone.",
+      "properties": {
+        "adminId": { "type": "string", "required": true },
+        "email": { "type": "string", "required": true },
+        "adminPhone": { "type": "string", "required": true },
+        "role": { "type": "string", "required": true, "enum": ["SUPER_ADMIN"] },
+        "verifiedByAuthToken": { "type": "boolean", "required": true },
+        "updatedAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "UserProfile": {
+      "description": "Authenticated user profile for Qawmi Madrasa teachers/seekers (Khadim) and Madrasa authorities (Muhtamim) with profile photo, real-time online/last-seen/typing presence, blocked user IDs, and custom conversation themes.",
+      "properties": {
+        "userId": { "type": "string", "required": true },
+        "fullName": { "type": "string", "required": true },
+        "accountType": { "type": "string", "required": true, "enum": ["khadim", "muhtamim"] },
+        "district": { "type": "string", "required": true },
+        "designation": { "type": "string", "required": true },
+        "qualification": { "type": "string", "required": true },
+        "experience": { "type": "string", "required": true },
+        "preferredDistricts": { "type": "string", "required": true },
+        "bio": { "type": "string", "required": true },
+        "contactInfo": { "type": "string", "required": true },
+        "contactEmail": { "type": "string", "required": false },
+        "phonePrivacy": { "type": "string", "required": false, "enum": ["ONLY_ME", "FRIENDS", "PUBLIC"] },
+        "emailPrivacy": { "type": "string", "required": false, "enum": ["ONLY_ME", "FRIENDS", "PUBLIC"] },
+        "madrasaName": { "type": "string", "required": true },
+        "photoUrl": { "type": "string", "required": false },
+        "isOnline": { "type": "boolean", "required": false },
+        "lastSeenAt": { "type": "timestamp", "required": false },
+        "typingToUserId": { "type": "string", "required": false },
+        "typingUpdatedAt": { "type": "timestamp", "required": false },
+        "blockedUserIds": { "type": "array", "required": false },
+        "chatThemes": { "type": "object", "required": false },
+        "isVerified": { "type": "boolean", "required": true },
+        "createdAt": { "type": "timestamp", "required": true },
+        "updatedAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "FeedPost": {
+      "description": "Public feed item representing a Madrasa job circular (JOB_CIRCULAR), a candidate's application post (SEEKER_APPLICATION), or an Islamic discussion/shared post (GENERAL_POST), supporting multi-select Khedmot categories, custom category, reactions, comments, shares, and Admin Boost.",
+      "properties": {
+        "authorId": { "type": "string", "required": true },
+        "authorName": { "type": "string", "required": true },
+        "authorPhotoUrl": { "type": "string", "required": false },
+        "postType": { "type": "string", "required": true, "enum": ["JOB_CIRCULAR", "SEEKER_APPLICATION", "GENERAL_POST"] },
+        "title": { "type": "string", "required": true },
+        "district": { "type": "string", "required": true },
+        "upazilaOrLocation": { "type": "string", "required": true },
+        "designation": { "type": "string", "required": true },
+        "qualification": { "type": "string", "required": true },
+        "salaryOrExperience": { "type": "string", "required": true },
+        "deadlineOrPreferredDistricts": { "type": "string", "required": true },
+        "description": { "type": "string", "required": true },
+        "contactNumber": { "type": "string", "required": true },
+        "madrasaId": { "type": "string", "required": true },
+        "isVerifiedMadrasa": { "type": "boolean", "required": true },
+        "isBoosted": { "type": "boolean", "required": false },
+        "khedmotCategories": { "type": "array", "required": false },
+        "customCategory": { "type": "string", "required": false },
+        "imageUrls": { "type": "array", "required": false },
+        "mediaTypes": { "type": "array", "required": false },
+        "mediaMetadata": { "type": "array", "required": false },
+        "attachmentDocId": { "type": "string", "required": false },
+        "userReactions": { "type": "object", "required": false },
+        "userReactionNames": { "type": "object", "required": false },
+        "commentCount": { "type": "number", "required": false },
+        "shareCount": { "type": "number", "required": false },
+        "sharedPostId": { "type": "string", "required": false },
+        "sharedAuthorId": { "type": "string", "required": false },
+        "sharedAuthorName": { "type": "string", "required": false },
+        "sharedTitle": { "type": "string", "required": false },
+        "sharedDescription": { "type": "string", "required": false },
+        "sharedPostType": { "type": "string", "required": false },
+        "isEdited": { "type": "boolean", "required": false },
+        "visibility": { "type": "string", "required": true, "enum": ["PUBLIC", "ARCHIVED"] },
+        "approvalStatus": { "type": "string", "required": true, "enum": ["APPROVED", "PENDING", "REJECTED"] },
+        "createdAt": { "type": "timestamp", "required": true },
+        "updatedAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "FeedComment": {
+      "description": "Comment or nested reply on a public FeedPost.",
+      "properties": {
+        "postId": { "type": "string", "required": true },
+        "authorId": { "type": "string", "required": true },
+        "authorName": { "type": "string", "required": true },
+        "authorPhotoUrl": { "type": "string", "required": false },
+        "text": { "type": "string", "required": true },
+        "parentCommentId": { "type": "string", "required": false },
+        "replyToAuthorName": { "type": "string", "required": false },
+        "isEdited": { "type": "boolean", "required": false },
+        "visibility": { "type": "string", "required": true, "enum": ["PUBLIC", "HIDDEN"] },
+        "createdAt": { "type": "timestamp", "required": true },
+        "updatedAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "MadrasaProfile": {
+      "description": "Registered Qawmi Madrasa profile in the directory.",
+      "properties": {
+        "ownerId": { "type": "string", "required": true },
+        "name": { "type": "string", "required": true },
+        "district": { "type": "string", "required": true },
+        "address": { "type": "string", "required": true },
+        "establishedYear": { "type": "string", "required": true },
+        "highestMarhala": { "type": "string", "required": true },
+        "facilities": { "type": "string", "required": true },
+        "studentCount": { "type": "string", "required": true },
+        "contactPhone": { "type": "string", "required": true },
+        "isVerified": { "type": "boolean", "required": true },
+        "visibility": { "type": "string", "required": true, "enum": ["PUBLIC", "HIDDEN"] },
+        "createdAt": { "type": "timestamp", "required": true },
+        "updatedAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "KhedmotSubmission": {
+      "description": "Direct job application submitted by a teacher/applicant to a Madrasa circular.",
+      "properties": {
+        "postId": { "type": "string", "required": true },
+        "postTitle": { "type": "string", "required": true },
+        "postDesignation": { "type": "string", "required": true },
+        "applicantId": { "type": "string", "required": true },
+        "applicantName": { "type": "string", "required": true },
+        "applicantQualification": { "type": "string", "required": true },
+        "applicantExperience": { "type": "string", "required": true },
+        "applicantPhone": { "type": "string", "required": true },
+        "coverNote": { "type": "string", "required": true },
+        "recipientId": { "type": "string", "required": true },
+        "status": { "type": "string", "required": true, "enum": ["PENDING", "SHORTLISTED", "ACCEPTED", "REJECTED"] },
+        "createdAt": { "type": "timestamp", "required": true },
+        "updatedAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "BookmarkItem": {
+      "description": "Saved/bookmarked feed post under a user's private bookmarks subcollection.",
+      "properties": {
+        "userId": { "type": "string", "required": true },
+        "postId": { "type": "string", "required": true },
+        "postType": { "type": "string", "required": true },
+        "title": { "type": "string", "required": true },
+        "district": { "type": "string", "required": true },
+        "designation": { "type": "string", "required": true },
+        "qualification": { "type": "string", "required": true },
+        "salaryOrExperience": { "type": "string", "required": true },
+        "deadlineOrPreferredDistricts": { "type": "string", "required": true },
+        "authorId": { "type": "string", "required": true },
+        "createdAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "ChatGroup": {
+      "description": "Group conversation room supporting group name, group photo, member addition/removal, and custom theme.",
+      "properties": {
+        "groupId": { "type": "string", "required": true },
+        "name": { "type": "string", "required": true },
+        "photoUrl": { "type": "string", "required": false },
+        "creatorId": { "type": "string", "required": true },
+        "creatorName": { "type": "string", "required": true },
+        "memberIds": { "type": "array", "required": true },
+        "memberNames": { "type": "object", "required": false },
+        "memberPhotos": { "type": "object", "required": false },
+        "themeSpec": { "type": "string", "required": false },
+        "createdAt": { "type": "timestamp", "required": true },
+        "updatedAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "DirectMessage": {
+      "description": "Direct or Group message (Paygam) supporting 1-5 image attachments, Islamic reactions, message editing, and scoped deletion.",
+      "properties": {
+        "senderId": { "type": "string", "required": true },
+        "senderName": { "type": "string", "required": true },
+        "senderPhotoUrl": { "type": "string", "required": false },
+        "receiverId": { "type": "string", "required": true },
+        "receiverName": { "type": "string", "required": true },
+        "groupId": { "type": "string", "required": false },
+        "groupName": { "type": "string", "required": false },
+        "groupMemberIds": { "type": "array", "required": false },
+        "subject": { "type": "string", "required": true },
+        "body": { "type": "string", "required": true },
+        "imageUrls": { "type": "array", "required": false },
+        "isRead": { "type": "boolean", "required": true },
+        "readByUserIds": { "type": "array", "required": false },
+        "senderReaction": { "type": "string", "required": false },
+        "receiverReaction": { "type": "string", "required": false },
+        "userReactions": { "type": "object", "required": false },
+        "isEdited": { "type": "boolean", "required": false },
+        "editedAt": { "type": "timestamp", "required": false },
+        "deletedForSender": { "type": "boolean", "required": false },
+        "deletedForReceiver": { "type": "boolean", "required": false },
+        "deletedForUserIds": { "type": "array", "required": false },
+        "isDeletedForEveryone": { "type": "boolean", "required": false },
+        "createdAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "AppNotification": {
+      "description": "In-app and push notification item for a specific recipient userId or ALL_USERS community feed.",
+      "properties": {
+        "recipientId": { "type": "string", "required": true },
+        "senderId": { "type": "string", "required": true },
+        "senderName": { "type": "string", "required": true },
+        "title": { "type": "string", "required": true },
+        "message": { "type": "string", "required": true },
+        "type": { "type": "string", "required": true, "enum": ["APPLICATION", "MESSAGE", "VERIFICATION", "NEW_CIRCULAR", "NEW_APPLICATION", "ANNOUNCEMENT", "BOOST"] },
+        "referenceId": { "type": "string", "required": true },
+        "isRead": { "type": "boolean", "required": true },
+        "createdAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "NotificationReadReceipt": {
+      "description": "Per-user read receipt for notifications stored under /users/{userId}/notification_reads/{notificationId}.",
+      "properties": {
+        "userId": { "type": "string", "required": true },
+        "notificationId": { "type": "string", "required": true },
+        "readAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "TelegramNotificationLog": {
+      "description": "Server-backed Telegram alert queue and audit log for platform events and admin actions.",
+      "properties": {
+        "eventType": { "type": "string", "required": true, "enum": ["NEW_CIRCULAR", "NEW_APPLICATION", "KHEDMOT_SUBMISSION", "NEW_MADRASA", "ADMIN_ANNOUNCEMENT", "ADMIN_VERIFICATION", "ADMIN_SECURITY"] },
+        "title": { "type": "string", "required": true },
+        "message": { "type": "string", "required": true },
+        "actorId": { "type": "string", "required": true },
+        "actorName": { "type": "string", "required": true },
+        "targetPhone": { "type": "string", "required": true },
+        "referenceId": { "type": "string", "required": true },
+        "deliveryStatus": { "type": "string", "required": true, "enum": ["DELIVERED", "QUEUED", "FAILED"] },
+        "createdAt": { "type": "timestamp", "required": true },
+        "updatedAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "AppReleaseInfo": {
+      "description": "Latest APK release metadata managed via Firebase and GitHub Actions for in-app auto-update detection, SHA-256 verification, and installation.",
+      "properties": {
+        "releaseId": { "type": "string", "required": true },
+        "versionCode": { "type": "number", "required": true },
+        "versionName": { "type": "string", "required": true },
+        "apkDownloadUrl": { "type": "string", "required": true },
+        "apkSha256": { "type": "string", "required": false },
+        "apkFileSizeBytes": { "type": "number", "required": false },
+        "releaseNotes": { "type": "string", "required": true },
+        "commitSha": { "type": "string", "required": false },
+        "githubReleaseTag": { "type": "string", "required": false },
+        "isMandatory": { "type": "boolean", "required": false },
+        "isPublished": { "type": "boolean", "required": false },
+        "releaseStatus": { "type": "string", "required": false, "enum": ["PUBLISHED", "PAUSED", "DISABLED"] },
+        "publishedBy": { "type": "string", "required": true },
+        "publishedAt": { "type": "timestamp", "required": true },
+        "updatedAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "FeedPostExtendedAttachment": {
+      "description": "Separate document storing extended post text or large attachment metadata/payloads outside /feed_posts/{postId} so feed_posts documents always remain lightweight and well under 1 MiB.",
+      "properties": {
+        "postId": { "type": "string", "required": true },
+        "authorId": { "type": "string", "required": true },
+        "attachmentType": { "type": "string", "required": true, "enum": ["EXTENDED_CONTENT", "IMAGE", "VIDEO"] },
+        "mimeType": { "type": "string", "required": true },
+        "fileName": { "type": "string", "required": false },
+        "downloadUrl": { "type": "string", "required": false },
+        "extendedText": { "type": "string", "required": false },
+        "mediaDataUrl": { "type": "string", "required": false },
+        "sizeBytes": { "type": "number", "required": true },
+        "visibility": { "type": "string", "required": true, "enum": ["PUBLIC", "ARCHIVED"] },
+        "createdAt": { "type": "timestamp", "required": true },
+        "updatedAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "IntelligenceConfig": {
+      "description": "Global KKS Intelligence Engine ranking weights, anti-fraud thresholds, and feature flags controlled exclusively by verified Admins.",
+      "properties": {
+        "configId": { "type": "string", "required": true },
+        "skillMatchWeight": { "type": "number", "required": true },
+        "locationMatchWeight": { "type": "number", "required": true },
+        "experienceWeight": { "type": "number", "required": true },
+        "freshnessHalfLifeHours": { "type": "number", "required": true },
+        "trendingWeight": { "type": "number", "required": true },
+        "verifiedMadrasaBonus": { "type": "number", "required": true },
+        "newPostBoostHours": { "type": "number", "required": true },
+        "minDwellTimeMs": { "type": "number", "required": true },
+        "fraudPenaltyWeight": { "type": "number", "required": true },
+        "smartNotificationThreshold": { "type": "number", "required": true },
+        "isSmartRankingEnabled": { "type": "boolean", "required": true },
+        "isTrendingEnabled": { "type": "boolean", "required": true },
+        "isFraudDetectionEnabled": { "type": "boolean", "required": true },
+        "isSmartNotificationEnabled": { "type": "boolean", "required": true },
+        "updatedBy": { "type": "string", "required": true },
+        "updatedAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "PostIntelligenceMetrics": {
+      "description": "Per-post deduplicated engagement counters, dwell time, trending velocity, quality score, and anti-fraud anomaly flags.",
+      "properties": {
+        "postId": { "type": "string", "required": true },
+        "uniqueViewCount": { "type": "number", "required": true },
+        "uniqueClickCount": { "type": "number", "required": true },
+        "applyCount": { "type": "number", "required": true },
+        "bookmarkCount": { "type": "number", "required": true },
+        "shareCount": { "type": "number", "required": true },
+        "totalDwellTimeMs": { "type": "number", "required": true },
+        "trendingScore": { "type": "number", "required": true },
+        "qualityScore": { "type": "number", "required": true },
+        "anomalyScore": { "type": "number", "required": true },
+        "isFlagged": { "type": "boolean", "required": true },
+        "flagReason": { "type": "string", "required": false },
+        "lastInteractionAt": { "type": "timestamp", "required": false },
+        "updatedAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "EngagementReceipt": {
+      "description": "Deterministic per-user per-event deduplication receipt ({uid}_{eventType}) preventing duplicate views/clicks and artificial engagement.",
+      "properties": {
+        "userId": { "type": "string", "required": true },
+        "postId": { "type": "string", "required": true },
+        "eventType": { "type": "string", "required": true, "enum": ["VIEW", "CLICK", "APPLY", "BOOKMARK", "SHARE"] },
+        "dwellTimeMs": { "type": "number", "required": true },
+        "createdAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "UserAffinityState": {
+      "description": "Per-user adaptive learning affinity profile storing time-decayed category and district preference weights.",
+      "properties": {
+        "userId": { "type": "string", "required": true },
+        "categoryWeights": { "type": "map", "required": true },
+        "districtWeights": { "type": "map", "required": true },
+        "totalInteractions": { "type": "number", "required": true },
+        "lastEventAt": { "type": "timestamp", "required": false },
+        "updatedAt": { "type": "timestamp", "required": true }
+      }
+    }
+  },
+  "collections": [
+    {
+      "path": "/admins/{adminId}",
+      "entity": "AdminRegistryEntry",
+      "access": "Only verified admins (authenticated via Firebase Auth token / Custom Claims) can read or sync their own registry entry."
+    },
+    {
+      "path": "/users/{userId}",
+      "entity": "UserProfile",
+      "access": "Authenticated users can read profiles; only the owner can create/update their own profile, blockedUserIds, and chatThemes (admins can toggle isVerified)."
+    },
+    {
+      "path": "/users/{userId}/bookmarks/{bookmarkId}",
+      "entity": "BookmarkItem",
+      "access": "Strict owner-only read, create, and delete."
+    },
+    {
+      "path": "/users/{userId}/notification_reads/{notificationId}",
+      "entity": "NotificationReadReceipt",
+      "access": "Strict owner-only read, create, update, and delete."
+    },
+    {
+      "path": "/users/{userId}/intelligence_state/{docId}",
+      "entity": "UserAffinityState",
+      "access": "Strict owner-only read, create, and update (admins can read for diagnostics)."
+    },
+    {
+      "path": "/feed_posts/{postId}",
+      "entity": "FeedPost",
+      "access": "Authenticated users can read public posts, create posts with their own authorId, and update reaction/comment/share counters; authors can update/delete their own posts; admins can moderate, verify, and boost."
+    },
+    {
+      "path": "/feed_post_attachments/{attachmentId}",
+      "entity": "FeedPostExtendedAttachment",
+      "access": "Authenticated users can read public post attachments; post authors can create, update, or delete their own attachment documents; admins can moderate."
+    },
+    {
+      "path": "/post_comments/{commentId}",
+      "entity": "FeedComment",
+      "access": "Authenticated users can read public comments and create comments with their own authorId; only comment author can edit text; comment author or admin can delete."
+    },
+    {
+      "path": "/madrasas/{madrasaId}",
+      "entity": "MadrasaProfile",
+      "access": "Authenticated users can read public madrasas and register their own madrasa; owners can update; admins can toggle isVerified."
+    },
+    {
+      "path": "/khedmot_submissions/{submissionId}",
+      "entity": "KhedmotSubmission",
+      "access": "Authenticated applicants can create submissions; only the applicant, recipient madrasa author, or admin can read; recipient or admin can update status."
+    },
+    {
+      "path": "/chat_groups/{groupId}",
+      "entity": "ChatGroup",
+      "access": "Authenticated members can read and update group metadata/members; creator can create and delete the group."
+    },
+    {
+      "path": "/messages/{messageId}",
+      "entity": "DirectMessage",
+      "access": "Authenticated users can create personal or group messages with up to 5 images; sender can edit body, react, delete-for-me, or delete-for-everyone; recipients/members can mark read, react, or delete-for-me."
+    },
+    {
+      "path": "/notifications/{notificationId}",
+      "entity": "AppNotification",
+      "access": "Authenticated users can create notifications where senderId == auth.uid; recipient or ALL_USERS can read; recipient can mark isRead; only admin can create ANNOUNCEMENT or BOOST notifications."
+    },
+    {
+      "path": "/telegram_notifications/{logId}",
+      "entity": "TelegramNotificationLog",
+      "access": "Authenticated users can enqueue event notifications for their own actions; only verified admins can read, list, or delete logs."
+    },
+    {
+      "path": "/app_releases/{releaseId}",
+      "entity": "AppReleaseInfo",
+      "access": "Authenticated users can read release metadata for auto-update detection; only verified admins or CI service account can create, update, or delete release records."
+    },
+    {
+      "path": "/intelligence_config/{configId}",
+      "entity": "IntelligenceConfig",
+      "access": "Authenticated users can read global ranking configuration; only verified admins can create, update, or delete."
+    },
+    {
+      "path": "/post_intelligence_metrics/{postId}",
+      "entity": "PostIntelligenceMetrics",
+      "access": "Authenticated users can read and update post intelligence metrics with validated bounds; only verified admins can delete."
+    },
+    {
+      "path": "/post_intelligence_metrics/{postId}/engagement_receipts/{receiptId}",
+      "entity": "EngagementReceipt",
+      "access": "Create-only deterministic receipt ({uid}_{eventType}) for authenticated users; no updates allowed; admins can audit/delete."
+    }
+  ]
+}
