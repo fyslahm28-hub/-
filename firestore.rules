@@ -1263,6 +1263,59 @@ service cloud.firestore {
         allow delete: if isTokenVerifiedAdmin();
       }
     }
+
+    // Bangla Hadith Sharah & Qawmi Kitab Library Catalog (হাদিস শরাহ ও কওমি কিতাব লাইব্রেরি ক্যাটালগ)
+    function isValidKitabCatalogEntry(data, bookId) {
+      let downloadUrl = data.get('downloadUrl', '');
+      let sha256Checksum = data.get('sha256Checksum', '');
+      let licenseNote = data.get('licenseNote', '');
+      let coverSubtitle = data.get('coverSubtitle', '');
+      return data.bookId is string && data.bookId == bookId &&
+             data.seriesId is string && data.seriesId.size() >= 1 && data.seriesId.size() <= 128 &&
+             data.titleBangla is string && data.titleBangla.size() >= 1 && data.titleBangla.size() <= 300 &&
+             data.authorBangla is string && data.authorBangla.size() >= 1 && data.authorBangla.size() <= 250 &&
+             data.translatorOrCompilerBangla is string && data.translatorOrCompilerBangla.size() >= 1 && data.translatorOrCompilerBangla.size() <= 250 &&
+             data.publisherBangla is string && data.publisherBangla.size() >= 1 && data.publisherBangla.size() <= 250 &&
+             data.categoryId is string && data.categoryId.size() >= 1 && data.categoryId.size() <= 80 &&
+             data.volumeNumber is int && data.volumeNumber >= 1 && data.volumeNumber <= 50 &&
+             data.totalVolumes is int && data.totalVolumes >= 1 && data.totalVolumes <= 50 &&
+             data.fileSizeBytes is int && data.fileSizeBytes >= 0 && data.fileSizeBytes <= 1073741824 &&
+             data.languageBangla is string && data.languageBangla.size() >= 1 && data.languageBangla.size() <= 100 &&
+             data.shortDescriptionBangla is string && data.shortDescriptionBangla.size() >= 1 && data.shortDescriptionBangla.size() <= 2500 &&
+             (coverSubtitle is string && coverSubtitle.size() <= 200) &&
+             (downloadUrl is string && downloadUrl.size() <= 2000 && (downloadUrl == '' || downloadUrl.matches('^https://.*'))) &&
+             (sha256Checksum is string && (sha256Checksum == '' || sha256Checksum.size() == 64)) &&
+             data.isOpenLicenseVerified is bool &&
+             data.isAdminApproved is bool &&
+             (licenseNote is string && licenseNote.size() <= 600) &&
+             data.publishedBy is string && data.publishedBy.size() >= 1 && data.publishedBy.size() <= 200 &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    match /kitab_catalog/{bookId} {
+      allow get, list: if true;
+
+      allow create, update: if isTokenVerifiedAdmin() &&
+                               isValidId(bookId) &&
+                               incoming().keys().hasAll([
+                                 'bookId', 'seriesId', 'titleBangla', 'authorBangla',
+                                 'translatorOrCompilerBangla', 'publisherBangla', 'categoryId',
+                                 'volumeNumber', 'totalVolumes', 'fileSizeBytes', 'languageBangla',
+                                 'shortDescriptionBangla', 'downloadUrl', 'sha256Checksum',
+                                 'isOpenLicenseVerified', 'isAdminApproved', 'publishedBy', 'updatedAt'
+                               ]) &&
+                               incoming().keys().hasOnly([
+                                 'bookId', 'seriesId', 'titleBangla', 'authorBangla',
+                                 'translatorOrCompilerBangla', 'publisherBangla', 'categoryId',
+                                 'volumeNumber', 'totalVolumes', 'fileSizeBytes', 'languageBangla',
+                                 'shortDescriptionBangla', 'coverSubtitle', 'downloadUrl',
+                                 'sha256Checksum', 'isOpenLicenseVerified', 'isAdminApproved',
+                                 'licenseNote', 'publishedBy', 'updatedAt'
+                               ]) &&
+                               isValidKitabCatalogEntry(incoming(), bookId);
+
+      allow delete: if isTokenVerifiedAdmin() && isValidId(bookId);
+    }
   }
 }
 

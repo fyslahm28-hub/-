@@ -157,6 +157,7 @@ fun IslamicAndEssentialServicesSection(
 ) {
     var selectedInfoItem by remember { mutableStateOf<IslamicServiceGridItem?>(null) }
     var showHafeziQuranHub by rememberSaveable { mutableStateOf(false) }
+    var showKitabLibraryHub by rememberSaveable { mutableStateOf(false) }
 
     val ilmAndAmolItems = remember {
         listOf(
@@ -207,10 +208,11 @@ fun IslamicAndEssentialServicesSection(
     fun handleServiceClick(item: IslamicServiceGridItem) {
         when (item.id) {
             "quran", "quran_learning", "tilawat" -> showHafeziQuranHub = true
+            "islamic_books", "hadith" -> showKitabLibraryHub = true
             "prayer_times", "islamic_calendar" -> onOpenPrayerTimes()
             "bookmarks" -> onNavigate(MainDestination.BOOKMARKS)
             "support" -> onNavigate(MainDestination.HELP_AND_SUPPORT)
-            "amol_tracker", "dua", "hadith", "sunnah" -> onNavigate(MainDestination.AJKER_SMORON)
+            "amol_tracker", "dua", "sunnah" -> onNavigate(MainDestination.AJKER_SMORON)
             "my_mosque", "find_mosque" -> onNavigate(MainDestination.MADRASA)
             else -> selectedInfoItem = item
         }
@@ -295,6 +297,12 @@ fun IslamicAndEssentialServicesSection(
     if (showHafeziQuranHub) {
         HafeziQuranHubDialog(
             onDismiss = { showHafeziQuranHub = false }
+        )
+    }
+
+    if (showKitabLibraryHub) {
+        com.example.ui.kitab.KitabLibraryHubDialog(
+            onDismiss = { showKitabLibraryHub = false }
         )
     }
 
