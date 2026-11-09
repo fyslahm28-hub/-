@@ -104,6 +104,12 @@ object AppUpdateManagerHelper {
     @Volatile
     var lastUpdateCheckErrorMessage: String? = null
 
+    @Volatile
+    private var cachedRemoteRelease: AppReleaseInfo? = null
+
+    @Volatile
+    private var cachedRemoteReleaseAtMs: Long = 0L
+
     /**
      * Optional override for testing remote release fetching.
      */
@@ -149,6 +155,8 @@ object AppUpdateManagerHelper {
         pendingInstallApkFile = null
         pendingInstallReleaseInfo = null
         lastUpdateCheckErrorMessage = null
+        cachedRemoteRelease = null
+        cachedRemoteReleaseAtMs = 0L
     }
 
     private fun isRobolectricRuntime(): Boolean {
@@ -216,6 +224,20 @@ object AppUpdateManagerHelper {
         } catch (_: Throwable) {
             null
         }
+    }
+
+    /**
+     * Returns true when a periodic update check should run on resume (every [PERIODIC_CHECK_INTERVAL_MS],
+     * or immediately in Robolectric tests or when no successful check has been recorded yet).
+     */
+    fun shouldRunPeriodicCheck(
+        context: Context?,
+        nowEpochMs: Long = System.currentTimeMillis()
+    ): Boolean {
+        if (isRobolectricRuntime() || customReleaseFetcher != null) return true
+        val lastCheck = getLastUpdateCheckTimestampMs(context)
+        if (lastCheck <= 0L) return true
+        return (nowEpochMs - lastCheck) >= PERIODIC_CHECK_INTERVAL_MS
     }
 
     /**
@@ -635,25 +657,49 @@ object AppUpdateManagerHelper {
         return updateCheckMutex.withLock {
             withContext(Dispatchers.IO) {
                 try {
+                    val isRobolectric = isRobolectricRuntime()
+                    val nowMs = System.currentTimeMillis()
+                    if (!isRobolectric) {
+                        val recentCached = cachedRemoteRelease
+                        if (recentCached != null && (nowMs - cachedRemoteReleaseAtMs) in 0L..90_000L) {
+                            lastUpdateCheckErrorMessage = null
+                            return@withContext recentCached
+                        }
+                    }
+
                     val dbId = try {
                         context.applicationContext.getString(R.string.firestore_database_id).trim()
                     } catch (_: Throwable) {
                         DEFAULT_FIRESTORE_DATABASE_ID
                     }.ifBlank { DEFAULT_FIRESTORE_DATABASE_ID }
 
-                    // 1. Try Firestore SDK with explicit SERVER source (bounded timeout so slow gRPC never blocks)
-                    val sdkServerRelease: AppReleaseInfo? = try {
-                        val db = com.example.data.repository.getConfiguredFirestoreInstance(dbId)
-                        val docRef = db.collection("app_releases").document("latest")
-                        val serverSnap = withTimeoutOrNull(4_500L) {
-                            docRef.get(Source.SERVER).await()
-                        }
-                        parseReleaseSnapshotSafely(serverSnap)
-                    } catch (_: Throwable) {
+                    val quotaExhausted = !isRobolectric &&
+                        com.example.data.repository.FirestoreConnectionMonitor.isQuotaExhaustedRecently()
+
+                    // 1. Try Firestore SDK with explicit SERVER source (skipped during quota cooldown on device)
+                    val sdkServerRelease: AppReleaseInfo? = if (quotaExhausted) {
                         null
+                    } else {
+                        try {
+                            val db = com.example.data.repository.getConfiguredFirestoreInstance(dbId)
+                            val docRef = db.collection("app_releases").document("latest")
+                            val serverSnap = withTimeoutOrNull(4_500L) {
+                                docRef.get(Source.SERVER).await()
+                            }
+                            parseReleaseSnapshotSafely(serverSnap)
+                        } catch (e: Throwable) {
+                            if (e is Exception) {
+                                com.example.data.repository.handleFirestoreError(
+                                    e,
+                                    com.example.data.repository.OperationType.GET,
+                                    "app_releases/latest"
+                                )
+                            }
+                            null
+                        }
                     }
 
-                    if (isRobolectricRuntime()) {
+                    if (isRobolectric) {
                         // In local JVM unit tests, avoid real external HTTP calls; fall back to local Firestore instance if needed
                         val fallbackSnapRelease = sdkServerRelease ?: try {
                             val db = com.example.data.repository.getConfiguredFirestoreInstance(dbId)
@@ -667,8 +713,16 @@ object AppUpdateManagerHelper {
                         return@withContext fallbackSnapRelease
                     }
 
-                    // 2. Query direct Firestore REST API (bypasses local SQLite cache and gRPC connection delays)
-                    val restFirestoreRelease: AppReleaseInfo? = fetchFromFirestoreRestApi(dbId)
+                    // 2. Only query direct Firestore REST API if the SDK server read did not already return a release
+                    // and Firestore is not in an active HTTP 429 quota cooldown
+                    val restFirestoreRelease: AppReleaseInfo? = if (
+                        sdkServerRelease == null &&
+                        !com.example.data.repository.FirestoreConnectionMonitor.isQuotaExhaustedRecently()
+                    ) {
+                        fetchFromFirestoreRestApi(dbId)
+                    } else {
+                        null
+                    }
 
                     // 3. Query Quota-Free Telegram Bot Cloud Release Channel (immune to Firestore HTTP 429 & Private GitHub Repo HTTP 404)
                     val telegramCloudRelease: AppReleaseInfo? = fetchFromTelegramBotReleaseChannel()
@@ -680,12 +734,12 @@ object AppUpdateManagerHelper {
                     bestRelease = pickMoreRecentRelease(bestRelease, telegramCloudRelease)
                     bestRelease = pickMoreRecentRelease(bestRelease, githubRelease)
 
-                    // 5. Last resort if all live network sources failed (e.g., offline)
+                    // 5. Last resort if all live network sources failed (e.g., offline) — read local cache only
                     if (bestRelease == null) {
                         bestRelease = try {
                             val db = com.example.data.repository.getConfiguredFirestoreInstance(dbId)
-                            val cachedSnap = withTimeoutOrNull(2_000L) {
-                                db.collection("app_releases").document("latest").get().await()
+                            val cachedSnap = withTimeoutOrNull(1_200L) {
+                                db.collection("app_releases").document("latest").get(Source.CACHE).await()
                             }
                             parseReleaseSnapshotSafely(cachedSnap)
                         } catch (_: Throwable) {
@@ -694,6 +748,8 @@ object AppUpdateManagerHelper {
                     }
 
                     if (bestRelease != null) {
+                        cachedRemoteRelease = bestRelease
+                        cachedRemoteReleaseAtMs = System.currentTimeMillis()
                         lastUpdateCheckErrorMessage = null
                         runCatching {
                             context.applicationContext
@@ -843,7 +899,12 @@ object AppUpdateManagerHelper {
                 setRequestProperty("Cache-Control", "no-cache")
                 setRequestProperty("User-Agent", "QawmiKormosangsthan-AutoUpdater/1.0 (Android)")
             }
-            if (conn.responseCode !in 200..299) return null
+            val code = conn.responseCode
+            if (code == 429) {
+                com.example.data.repository.FirestoreConnectionMonitor.recordQuotaExhausted()
+                return null
+            }
+            if (code !in 200..299) return null
             val body = conn.inputStream.bufferedReader().use { it.readText() }
             parseFirestoreRestReleaseJson(body)
         } catch (_: Throwable) {

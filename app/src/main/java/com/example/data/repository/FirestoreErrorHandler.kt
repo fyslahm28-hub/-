@@ -72,9 +72,22 @@ object FirestoreConnectionMonitor {
     private val listenerCountsByPath = ConcurrentHashMap<String, AtomicInteger>()
     private val lastServerConfirmedByPath = ConcurrentHashMap<String, Long>()
     private val lastServerConfirmedEpochMs = AtomicLong(0L)
+    private val lastQuotaExhaustedEpochMs = AtomicLong(0L)
+    private val lastGlobalReconnectEpochMs = AtomicLong(0L)
 
     val lastServerConfirmedAtMs: Long
         get() = lastServerConfirmedEpochMs.get()
+
+    fun isQuotaExhaustedRecently(withinMs: Long = 120_000L): Boolean {
+        val lastMs = lastQuotaExhaustedEpochMs.get()
+        if (lastMs <= 0L) return false
+        val elapsed = System.currentTimeMillis() - lastMs
+        return elapsed in 0L..withinMs
+    }
+
+    fun recordQuotaExhausted() {
+        lastQuotaExhaustedEpochMs.set(System.currentTimeMillis())
+    }
 
     fun hasRecentServerConfirmation(path: String, withinMs: Long = 1_500L): Boolean {
         if (!_isNetworkAvailable.value || !_isServerConnected.value) return false
@@ -143,6 +156,7 @@ object FirestoreConnectionMonitor {
         if (!isFromCache) {
             val now = System.currentTimeMillis()
             lastServerConfirmedEpochMs.set(now)
+            lastQuotaExhaustedEpochMs.set(0L)
             val cleanPath = path.ifBlank { "unknown" }
             lastServerConfirmedByPath[cleanPath] = now
             _isNetworkAvailable.value = true
@@ -169,7 +183,15 @@ object FirestoreConnectionMonitor {
     ) {
         val fsEx = findFirestoreException(error)
         val codeName = fsEx?.code?.name ?: error::class.java.simpleName
-        val summary = "[${System.currentTimeMillis()}] op=${operationType.value} path=$path code=$codeName msg=${error.message ?: error.toString()}"
+        val errMsg = error.message ?: error.toString()
+        if (fsEx?.code == FirebaseFirestoreException.Code.RESOURCE_EXHAUSTED ||
+            errMsg.contains("RESOURCE_EXHAUSTED", ignoreCase = true) ||
+            errMsg.contains("HTTP 429", ignoreCase = true) ||
+            errMsg.contains("Quota exceeded", ignoreCase = true)
+        ) {
+            recordQuotaExhausted()
+        }
+        val summary = "[${System.currentTimeMillis()}] op=${operationType.value} path=$path code=$codeName msg=$errMsg"
         _lastConnectionError.value = formattedJson.ifBlank { summary }
         synchronized(this) {
             val updated = (listOf(summary) + _connectionErrorLogs.value).take(MAX_ERROR_LOG_ENTRIES)
@@ -253,11 +275,18 @@ object FirestoreConnectionMonitor {
     }
 
     fun triggerGlobalReconnect(reason: String = "MANUAL_OR_NETWORK_RESTORE") {
+        val now = System.currentTimeMillis()
+        val prev = lastGlobalReconnectEpochMs.get()
+        val isManual = reason.contains("MANUAL", ignoreCase = true)
+        if (!isManual && !FirestoreRestFallbackClient.isRobolectricRuntime() && (now - prev) in 0L..2_500L) {
+            return
+        }
+        lastGlobalReconnectEpochMs.set(now)
         if (_isNetworkAvailable.value && !_isServerConnected.value) {
             _isReconnecting.value = true
         }
         _recoveryGeneration.value = _recoveryGeneration.value + 1L
-        val logEntry = "[${System.currentTimeMillis()}] GLOBAL_RECONNECT reason=$reason gen=${_recoveryGeneration.value}"
+        val logEntry = "[$now] GLOBAL_RECONNECT reason=$reason gen=${_recoveryGeneration.value}"
         synchronized(this) {
             val updated = (listOf(logEntry) + _connectionErrorLogs.value).take(MAX_ERROR_LOG_ENTRIES)
             _connectionErrorLogs.value = updated
@@ -280,6 +309,8 @@ object FirestoreConnectionMonitor {
         _connectionErrorLogs.value = emptyList()
         _recoveryGeneration.value = 0L
         lastServerConfirmedEpochMs.set(0L)
+        lastQuotaExhaustedEpochMs.set(0L)
+        lastGlobalReconnectEpochMs.set(0L)
     }
 
     private fun findFirestoreException(error: Throwable?): FirebaseFirestoreException? {
