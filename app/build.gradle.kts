@@ -205,6 +205,16 @@ val hasGoogleServicesWebClientId: Boolean = googleServicesJsonFile.exists() && r
   isValidGoogleServicesContent(googleServicesJsonFile.readText())
 }.getOrDefault(false)
 
+// Automatically materialize the bundled 15-Line Indo-Pak Quran PDF asset from public/assets/aistudio/
+val uploadedQuranPdfFile = rootProject.file("public/assets/aistudio/quran-hd-small_1305a0bc.pdf")
+val bundledQuranAssetFile = project.file("src/main/assets/quran_hafezi_15line.pdf")
+if (uploadedQuranPdfFile.exists() && uploadedQuranPdfFile.length() > 1_000_000L) {
+  if (!bundledQuranAssetFile.exists() || bundledQuranAssetFile.length() != uploadedQuranPdfFile.length()) {
+    bundledQuranAssetFile.parentFile?.mkdirs()
+    uploadedQuranPdfFile.copyTo(bundledQuranAssetFile, overwrite = true)
+  }
+}
+
 android {
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }

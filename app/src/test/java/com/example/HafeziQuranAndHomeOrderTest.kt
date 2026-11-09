@@ -252,4 +252,42 @@ class HafeziQuranAndHomeOrderTest {
         composeTestRule.onNodeWithTag("quran_reader_zoom_in_button").assertIsDisplayed()
         composeTestRule.onNodeWithTag("quran_reader_zoom_out_button").assertIsDisplayed()
     }
+
+    @Test
+    fun verifyInAppAutoUpdate_QuotaFreeTelegramMirrorAndRemixCertSupport() {
+        val sampleTelegramResponse = """
+            {
+              "ok": true,
+              "result": {
+                "description": "{\"vc\":209,\"vn\":\"1.0.109\",\"tag\":\"v1.0.109\",\"url\":\"https://files.catbox.moe/qawmi209.apk\",\"sha\":\"1305a0bcde5b9ec30b70ef7a9150c0bfcfc9af5735912b20cd204fc41a719828\",\"sz\":58123456,\"m\":true,\"st\":\"PUBLISHED\",\"notes\":\"১৫ লাইন হাফেজি কোরআন PDF রিডার আপডেট\"}"
+              }
+            }
+        """.trimIndent()
+
+        val parsedRelease = com.example.ui.util.AppUpdateManagerHelper.parseTelegramBotReleaseJson(sampleTelegramResponse)
+        assertNotNull(parsedRelease)
+        assertEquals(209, parsedRelease!!.versionCode)
+        assertEquals("1.0.109", parsedRelease.versionName)
+        assertEquals("https://files.catbox.moe/qawmi209.apk", parsedRelease.apkDownloadUrl)
+        assertTrue(parsedRelease.isMandatory)
+        assertTrue(
+            com.example.ui.util.AppUpdateManagerHelper.isUpdateAvailable(
+                installedVersionCode = 208,
+                installedVersionName = "1.0.108",
+                remoteRelease = parsedRelease
+            )
+        )
+
+        // Verify both pre-remix and post-remix official signing certificates are trusted
+        assertTrue(
+            com.example.ui.util.AppUpdateManagerHelper.OFFICIAL_SIGNING_CERT_SHA256_SET.contains(
+                "b1a449cdb9ca663b9a94af5081aba1cb463621712f8730b68449bc221cf8100c"
+            )
+        )
+        assertTrue(
+            com.example.ui.util.AppUpdateManagerHelper.OFFICIAL_SIGNING_CERT_SHA256_SET.contains(
+                "654695097463c1016bd0e37b193b76d74333f3bbc12caffddfc3e35229c4b3c3"
+            )
+        )
+    }
 }
