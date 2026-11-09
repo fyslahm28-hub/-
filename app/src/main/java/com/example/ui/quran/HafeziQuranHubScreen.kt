@@ -15,10 +15,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -97,10 +101,10 @@ import com.example.ui.components.IslamicStarEmblem
 import kotlinx.coroutines.launch
 
 private val QuranPrimaryGreen = Color(0xFF0F6B4B)
-private val QuranDeepEmerald = Color(0xFF0A4D36)
-private val QuranDarkCard = Color(0xFF0C593E)
-private val QuranGold = Color(0xFFD9A82E)
-private val QuranSoftCream = Color(0xFFF3E8C8)
+private val QuranDeepEmerald = Color(0xFF074E35)
+private val QuranDarkCard = Color(0xFF0B5C3F)
+private val QuranGold = Color(0xFFDDA83A)
+private val QuranSoftCream = Color(0xFFF4EAD2)
 private val QuranLightBg = Color(0xFFF6FAF8)
 private val QuranMintBorder = Color(0xFFCFE6DC)
 
@@ -213,18 +217,20 @@ fun HafeziQuranHubScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(screenBg)
+            .navigationBarsPadding()
             .testTag("hafezi_quran_hub_screen")
     ) {
-        // 1. Top Islamic Quran Hub AppBar
+        // 1. Top Islamic Quran Hub AppBar (Compact & Single-line Subtitles)
         Surface(
             color = QuranDeepEmerald,
-            shadowElevation = 6.dp,
+            shadowElevation = 4.dp,
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 10.dp),
+                    .statusBarsPadding()
+                    .padding(horizontal = 8.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -235,39 +241,45 @@ fun HafeziQuranHubScreen(
                     IconButton(
                         onClick = onCloseHub,
                         modifier = Modifier
-                            .size(38.dp)
+                            .size(34.dp)
                             .testTag("quran_hub_close_button")
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "ফিরে যান",
-                            tint = Color.White
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(4.dp))
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            IslamicStarEmblem(size = 15.dp)
-                            Spacer(modifier = Modifier.width(6.dp))
+                            IslamicStarEmblem(size = 13.dp)
+                            Spacer(modifier = Modifier.width(5.dp))
                             Text(
                                 text = "হাফেজি কোরআন শরীফ",
-                                style = MaterialTheme.typography.titleMedium,
+                                style = MaterialTheme.typography.titleSmall,
                                 color = Color.White,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                         Text(
-                            text = "১৫ লাইন ইন্দো-পাক হাফেজি মুসহাফ • ৬১৬ পৃষ্ঠা",
+                            text = "১৫ লাইন ইন্দো-পাক মুসহাফ • ৬১৬ পৃষ্ঠা",
                             style = MaterialTheme.typography.labelSmall,
                             color = Color(0xFFFFE082),
-                            fontSize = 11.sp
+                            fontSize = 10.5.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     // Direct Page Lookup Button
                     Surface(
@@ -280,21 +292,22 @@ fun HafeziQuranHubScreen(
                             .testTag("quran_hub_direct_page_button")
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = Icons.Default.FindInPage,
                                 contentDescription = "পৃষ্ঠা খুঁজুন",
                                 tint = QuranGold,
-                                modifier = Modifier.size(14.dp)
+                                modifier = Modifier.size(13.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = "পৃষ্ঠা খুঁজুন",
                                 color = Color.White,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
                             )
                         }
                     }
@@ -303,13 +316,14 @@ fun HafeziQuranHubScreen(
                     IconButton(
                         onClick = { showQuranSettingsModal = true },
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(32.dp)
                             .testTag("quran_hub_settings_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
                             contentDescription = "কোরআন সেটিংস",
-                            tint = QuranGold
+                            tint = QuranGold,
+                            modifier = Modifier.size(19.dp)
                         )
                     }
 
@@ -320,36 +334,42 @@ fun HafeziQuranHubScreen(
                             HafeziQuranStorageManager.setMushafTheme(context, next)
                         },
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(32.dp)
                             .testTag("quran_hub_night_mode_button")
                     ) {
                         Icon(
                             imageVector = if (isNightMode) Icons.Default.LightMode else Icons.Default.DarkMode,
                             contentDescription = "নাইট মোড",
-                            tint = QuranGold
+                            tint = QuranGold,
+                            modifier = Modifier.size(19.dp)
                         )
                     }
                 }
             }
         }
 
-        // 2. Hub Scrollable Body
+        // 2. Hub Scrollable Body with Safe Area Bottom Padding
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .testTag("quran_hub_lazy_list"),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(
+                start = 12.dp,
+                end = 12.dp,
+                top = 10.dp,
+                bottom = 84.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // A. Quran Home Dashboard Hero Card (Matching Panel 1 of Design Reference Screenshot)
+            // A. Compact Quran Home Dashboard Hero Card
             item {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .shadow(6.dp, RoundedCornerShape(22.dp))
-                        .border(1.5.dp, QuranGold, RoundedCornerShape(22.dp))
+                        .shadow(4.dp, RoundedCornerShape(18.dp))
+                        .border(1.2.dp, QuranGold, RoundedCornerShape(18.dp))
                         .testTag("quran_hub_hero_resume_card"),
-                    shape = RoundedCornerShape(22.dp),
+                    shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(containerColor = QuranDeepEmerald)
                 ) {
                     Column(
@@ -358,162 +378,182 @@ fun HafeziQuranHubScreen(
                             .background(
                                 Brush.verticalGradient(
                                     listOf(
-                                        Color(0xFF0D5F42),
+                                        Color(0xFF0B5E41),
                                         QuranDeepEmerald,
-                                        Color(0xFF073B29)
+                                        Color(0xFF053B28)
                                     )
                                 )
                             )
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                            .padding(horizontal = 12.dp, vertical = 11.dp),
+                        verticalArrangement = Arrangement.spacedBy(9.dp)
                     ) {
-                        // Top Glowing Quran Rehal Emblem + Title + Subtitle
-                        Surface(
-                            shape = CircleShape,
-                            color = QuranGold.copy(alpha = 0.18f),
-                            modifier = Modifier
-                                .size(64.dp)
-                                .border(1.5.dp, QuranGold, CircleShape)
+                        // Compact Top Header + Gold CTA Button Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = QuranGold.copy(alpha = 0.18f),
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .border(1.2.dp, QuranGold, CircleShape)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                                            contentDescription = "কোরআন শরীফ",
+                                            tint = Color(0xFFFFE082),
+                                            modifier = Modifier.size(21.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = "কোরআন শরীফ",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 18.sp
+                                    )
+                                    Text(
+                                        text = "পড়ুন, বুঝুন, আমল করুন",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFFE5F5EE),
+                                        fontSize = 11.5.sp
+                                    )
+                                }
+                            }
+
+                            // Gold CTA Button: "কোরআন পড়া চালিয়ে যান →"
+                            Button(
+                                onClick = { activeReaderPage = progress.lastReadPage },
+                                colors = ButtonDefaults.buttonColors(containerColor = QuranGold),
+                                shape = RoundedCornerShape(50),
+                                contentPadding = PaddingValues(horizontal = 13.dp, vertical = 7.dp),
+                                modifier = Modifier.testTag("quran_hub_resume_last_read_button")
+                            ) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.MenuBook,
-                                    contentDescription = "কোরআন শরীফ",
-                                    tint = Color(0xFFFFE082),
-                                    modifier = Modifier.size(34.dp)
+                                    contentDescription = null,
+                                    tint = Color(0xFF0B1914),
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = if (progress.uniquePagesReadCount > 0) {
+                                        "কোরআন পড়া চালিয়ে যান"
+                                    } else {
+                                        "কোরআন পড়া শুরু করুন"
+                                    },
+                                    color = Color(0xFF0B1914),
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 12.sp,
+                                    maxLines = 1
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = null,
+                                    tint = Color(0xFF0B1914),
+                                    modifier = Modifier.size(14.dp)
                                 )
                             }
                         }
 
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "কোরআন শরীফ",
-                                style = MaterialTheme.typography.headlineSmall,
-                                color = Color.White,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 24.sp
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "পড়ুন, বুঝুন, আমল করুন",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFFE5F5EE),
-                                fontSize = 13.5.sp
-                            )
-                        }
-
-                        // Gold CTA Button: "📖 কোরআন পড়া শুরু করুন →"
-                        Button(
-                            onClick = { activeReaderPage = progress.lastReadPage },
-                            colors = ButtonDefaults.buttonColors(containerColor = QuranGold),
-                            shape = RoundedCornerShape(50),
-                            contentPadding = PaddingValues(horizontal = 22.dp, vertical = 11.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("quran_hub_resume_last_read_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.MenuBook,
-                                contentDescription = null,
-                                tint = Color(0xFF0B1914),
-                                modifier = Modifier.size(19.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = if (progress.uniquePagesReadCount > 0) {
-                                    "কোরআন পড়া চালিয়ে যান"
-                                } else {
-                                    "কোরআন পড়া শুরু করুন"
-                                },
-                                color = Color(0xFF0B1914),
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 14.5.sp
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                contentDescription = null,
-                                tint = Color(0xFF0B1914),
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        // Last Read Info Card + Reading Progress Box (Matching Panel 1)
+                        // Compact Last Read Info Card + Reading Progress Box
                         Surface(
-                            shape = RoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(13.dp),
                             color = QuranDarkCard,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .border(1.dp, QuranGold.copy(alpha = 0.65f), RoundedCornerShape(16.dp))
-                                .clip(RoundedCornerShape(16.dp))
+                                .border(1.dp, QuranGold.copy(alpha = 0.65f), RoundedCornerShape(13.dp))
+                                .clip(RoundedCornerShape(13.dp))
                                 .clickable { activeReaderPage = progress.lastReadPage }
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    .padding(horizontal = 11.dp, vertical = 9.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = QuranGold.copy(alpha = 0.18f),
-                                        modifier = Modifier.size(44.dp)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
                                     ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                imageVector = Icons.AutoMirrored.Filled.MenuBook,
-                                                contentDescription = null,
-                                                tint = QuranGold,
-                                                modifier = Modifier.size(24.dp)
+                                        Surface(
+                                            shape = RoundedCornerShape(9.dp),
+                                            color = QuranGold.copy(alpha = 0.18f),
+                                            modifier = Modifier.size(34.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                                                    contentDescription = null,
+                                                    tint = QuranGold,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(9.dp))
+                                        Column {
+                                            Text(
+                                                text = "শেষ পড়া পৃষ্ঠা: ${HafeziQuranIndexData.toBanglaDigits(progress.lastReadPage)}",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.5.sp
+                                            )
+                                            Text(
+                                                text = "সূরা ${progress.lastReadSurahNameBangla} • পারা ${HafeziQuranIndexData.toBanglaDigits(progress.lastReadParaNumber)}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color(0xFFDDF3EC),
+                                                fontSize = 11.sp
                                             )
                                         }
                                     }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "শেষ পড়া পৃষ্ঠা: ${HafeziQuranIndexData.toBanglaDigits(progress.lastReadPage)}",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            color = Color.White,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text = "সূরা ${progress.lastReadSurahNameBangla} • পারা ${HafeziQuranIndexData.toBanglaDigits(progress.lastReadParaNumber)}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = Color(0xFFDDF3EC)
-                                        )
+
+                                    if (showReadingProgress) {
+                                        Surface(
+                                            shape = RoundedCornerShape(50),
+                                            color = QuranGold.copy(alpha = 0.2f),
+                                            modifier = Modifier.border(0.8.dp, QuranGold.copy(alpha = 0.7f), RoundedCornerShape(50))
+                                        ) {
+                                            Text(
+                                                text = "${HafeziQuranIndexData.toBanglaDigits(progress.progressPercent)}%",
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                                color = Color(0xFFFFE082),
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.ExtraBold
+                                            )
+                                        }
                                     }
                                 }
 
                                 if (showReadingProgress) {
-                                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = "পড়ার অগ্রগতি (${HafeziQuranIndexData.toBanglaDigits(progress.uniquePagesReadCount)}/${HafeziQuranIndexData.toBanglaDigits(HafeziQuranIndexData.TOTAL_PDF_PAGES)} পৃষ্ঠা)",
-                                                color = Color(0xFFDDF3EC),
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.SemiBold
-                                            )
-                                            Text(
-                                                text = "${HafeziQuranIndexData.toBanglaDigits(progress.progressPercent)}%",
-                                                color = Color.White,
-                                                fontSize = 13.sp,
-                                                fontWeight = FontWeight.ExtraBold
-                                            )
-                                        }
+                                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Text(
+                                            text = "পড়ার অগ্রগতি (${HafeziQuranIndexData.toBanglaDigits(progress.uniquePagesReadCount)}/${HafeziQuranIndexData.toBanglaDigits(HafeziQuranIndexData.TOTAL_PDF_PAGES)} পৃষ্ঠা)",
+                                            color = Color(0xFFDDF3EC),
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
                                         LinearProgressIndicator(
                                             progress = { progress.progressFraction },
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .height(8.dp)
+                                                .height(6.dp)
                                                 .clip(RoundedCornerShape(50)),
                                             color = Color(0xFF34D399),
                                             trackColor = Color.White.copy(alpha = 0.18f)
@@ -523,10 +563,10 @@ fun HafeziQuranHubScreen(
                             }
                         }
 
-                        // Bottom Cream Pill Buttons Row matching Panel 1: [🔖 বুকমার্ক] [🎧 তিলাওয়াত ও খতম]
+                        // Compact Bottom Cream Pill Buttons Row: [🔖 বুকমার্ক] [🎧 তিলাওয়াত ও খতম]
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Surface(
@@ -542,7 +582,7 @@ fun HafeziQuranHubScreen(
                                     .testTag("quran_hub_bookmarks_quick_button")
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.Center
                                 ) {
@@ -550,13 +590,13 @@ fun HafeziQuranHubScreen(
                                         imageVector = Icons.Default.Bookmark,
                                         contentDescription = null,
                                         tint = QuranDeepEmerald,
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(15.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Spacer(modifier = Modifier.width(5.dp))
                                     Text(
                                         text = "বুকমার্ক (${HafeziQuranIndexData.toBanglaDigits(bookmarks.size)})",
                                         color = Color(0xFF0B1914),
-                                        fontSize = 12.5.sp,
+                                        fontSize = 11.5.sp,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
@@ -572,7 +612,7 @@ fun HafeziQuranHubScreen(
                                     .testTag("quran_hub_tilawat_dua_button")
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.Center
                                 ) {
@@ -580,13 +620,13 @@ fun HafeziQuranHubScreen(
                                         imageVector = Icons.Default.Headphones,
                                         contentDescription = null,
                                         tint = QuranDeepEmerald,
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(15.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Spacer(modifier = Modifier.width(5.dp))
                                     Text(
                                         text = "তিলাওয়াত ও খতম",
                                         color = Color(0xFF0B1914),
-                                        fontSize = 12.5.sp,
+                                        fontSize = 11.5.sp,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
@@ -1561,7 +1601,7 @@ private fun FazilatSurahsAndManzilQuickCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, QuranGold.copy(alpha = 0.7f), RoundedCornerShape(16.dp))
+            .border(1.dp, QuranGold.copy(alpha = 0.75f), RoundedCornerShape(16.dp))
             .testTag("quran_hub_fazilat_and_manzil_card"),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = cardBg)
@@ -1569,11 +1609,13 @@ private fun FazilatSurahsAndManzilQuickCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1581,52 +1623,91 @@ private fun FazilatSurahsAndManzilQuickCard(
                     text = "ফজিলতপূর্ণ সূরা ও প্রতিদিনের আমল",
                     style = MaterialTheme.typography.titleSmall,
                     color = primaryText,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+                Spacer(modifier = Modifier.width(6.dp))
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = QuranGold.copy(alpha = 0.2f)
+                    color = QuranSoftCream,
+                    modifier = Modifier.border(0.8.dp, QuranGold.copy(alpha = 0.65f), RoundedCornerShape(50))
                 ) {
-                    Text(
-                        text = "এক ট্যাপে ওপেন",
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                        color = QuranPrimaryGreen,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "এক ট্যাপে ওপেন",
+                            color = QuranDeepEmerald,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = QuranDeepEmerald,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
                 }
             }
 
-            Row(
+            // Responsive Horizontal Carousel for Fazilat Surahs
+            LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
+                    .testTag("quran_fazilat_surahs_carousel"),
+                contentPadding = PaddingValues(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                fazilatShortcuts.forEach { item ->
+                items(
+                    items = fazilatShortcuts,
+                    key = { it.tag }
+                ) { item ->
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = QuranPrimaryGreen.copy(alpha = 0.09f),
+                        color = QuranPrimaryGreen.copy(alpha = 0.08f),
                         modifier = Modifier
+                            .widthIn(min = 136.dp)
                             .border(1.dp, QuranMintBorder, RoundedCornerShape(12.dp))
                             .clip(RoundedCornerShape(12.dp))
                             .clickable { onOpenPage(item.pageNumber) }
                             .testTag(item.tag)
                     ) {
                         Column(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            Text(
-                                text = item.titleBangla,
-                                style = MaterialTheme.typography.labelLarge,
-                                color = QuranPrimaryGreen,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = item.titleBangla,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = QuranDeepEmerald,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    maxLines = 1
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = null,
+                                    tint = QuranGold,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
                             Text(
                                 text = item.subtitleBangla,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = secondaryText,
-                                fontSize = 10.5.sp
+                                fontSize = 10.5.sp,
+                                maxLines = 1
                             )
                         }
                     }
@@ -1637,16 +1718,21 @@ private fun FazilatSurahsAndManzilQuickCard(
                 text = "সাপ্তাহিক খতমে কুরআন (৭ মঞ্জিল শর্টকাট)",
                 style = MaterialTheme.typography.labelMedium,
                 color = secondaryText,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 12.dp)
             )
 
-            Row(
+            LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
+                    .testTag("quran_manzil_carousel"),
+                contentPadding = PaddingValues(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                manzilShortcuts.forEach { manzil ->
+                items(
+                    items = manzilShortcuts,
+                    key = { "manzil_${it.manzilNumber}" }
+                ) { manzil ->
                     Surface(
                         shape = RoundedCornerShape(10.dp),
                         color = QuranGold.copy(alpha = 0.14f),
@@ -1664,13 +1750,15 @@ private fun FazilatSurahsAndManzilQuickCard(
                                 style = MaterialTheme.typography.labelMedium,
                                 color = primaryText,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp
+                                fontSize = 11.sp,
+                                maxLines = 1
                             )
                             Text(
                                 text = manzil.rangeBangla,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = secondaryText,
-                                fontSize = 10.sp
+                                fontSize = 10.sp,
+                                maxLines = 1
                             )
                         }
                     }
@@ -1795,55 +1883,52 @@ private fun OfflineMushafDownloadCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, QuranMintBorder, RoundedCornerShape(16.dp))
+            .border(1.dp, QuranMintBorder, RoundedCornerShape(14.dp))
             .testTag("quran_hub_offline_download_card"),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = cardBg)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
+                Surface(
+                    modifier = Modifier.size(34.dp),
+                    shape = CircleShape,
+                    color = QuranPrimaryGreen.copy(alpha = 0.14f)
                 ) {
-                    Surface(
-                        modifier = Modifier.size(38.dp),
-                        shape = CircleShape,
-                        color = QuranPrimaryGreen.copy(alpha = 0.14f)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = QuranPrimaryGreen,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = "১৫-লাইন ইন্দো-পাক কোরআন শরীফ (অফলাইন প্রস্তুত)",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = primaryText,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = downloadState.statusMessageBangla,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = secondaryText,
-                            fontSize = 11.sp
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = QuranPrimaryGreen,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
+                }
+                Spacer(modifier = Modifier.width(9.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "১৫-লাইন ইন্দো-পাক কোরআন শরীফ অফলাইন প্রস্তুত",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = primaryText,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.5.sp
+                    )
+                    Text(
+                        text = downloadState.statusMessageBangla,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = secondaryText,
+                        fontSize = 11.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
 
@@ -1856,63 +1941,73 @@ private fun OfflineMushafDownloadCard(
                     text = "মোট পৃষ্ঠা: ৬১৬ (মূল কোরআন ২-৬১১) • ১০০% অফলাইন",
                     style = MaterialTheme.typography.labelSmall,
                     color = QuranPrimaryGreen,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 10.5.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
                 )
+                Spacer(modifier = Modifier.width(6.dp))
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Surface(
                         shape = RoundedCornerShape(50),
-                        color = QuranPrimaryGreen,
+                        color = QuranDeepEmerald,
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
                             .clickable(onClick = onShowOfflineModal)
                             .testTag("quran_hub_offline_status_button")
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = Icons.Default.CloudDone,
                                 contentDescription = null,
                                 tint = Color.White,
-                                modifier = Modifier.size(14.dp)
+                                modifier = Modifier.size(13.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = "অফলাইন মোড",
                                 color = Color.White,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
                             )
                         }
                     }
 
                     Surface(
                         shape = RoundedCornerShape(50),
-                        color = QuranGold.copy(alpha = 0.2f),
+                        color = QuranSoftCream,
                         modifier = Modifier
-                            .border(1.dp, QuranGold, RoundedCornerShape(50))
+                            .border(0.8.dp, QuranGold, RoundedCornerShape(50))
                             .clip(RoundedCornerShape(50))
                             .clickable(onClick = onVerifyIntegrity)
                             .testTag("quran_offline_verify_integrity_button")
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = Icons.Default.VerifiedUser,
                                 contentDescription = null,
-                                tint = QuranPrimaryGreen,
-                                modifier = Modifier.size(14.dp)
+                                tint = QuranDeepEmerald,
+                                modifier = Modifier.size(12.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
                             Text(
                                 text = "SHA-256 যাচাই",
-                                color = QuranPrimaryGreen,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
+                                color = QuranDeepEmerald,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
                             )
                         }
                     }
