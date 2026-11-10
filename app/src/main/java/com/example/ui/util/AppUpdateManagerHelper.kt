@@ -352,6 +352,9 @@ object AppUpdateManagerHelper {
         if (parts.size >= 3 && parts[0] == 1 && parts[1] == 0 && parts[2] > 0) {
             return 100 + parts[2]
         }
+        if (parts.size >= 3 && parts[0] == 1 && parts[1] >= 1 && parts[2] > 0) {
+            return (parts[0] * 100) + (parts[1] * 50) + parts[2]
+        }
         if (parts.size >= 3 && parts[0] >= 1) {
             return parts[0] * 100 + parts[1] * 10 + parts[2]
         }
@@ -1183,6 +1186,11 @@ object AppUpdateManagerHelper {
 
                         try {
                             val responseCode = activeConnection.responseCode
+                            if (responseCode == 404 && currentUrl.contains("github.com", ignoreCase = true)) {
+                                throw IllegalStateException(
+                                    "APK ডাউনলোড লিংক পাওয়া যায়নি (HTTP 404)। আপনার GitHub Repository টি Private থাকলে তা Settings থেকে Public করুন অথবা পাবলিক রিপোজিটরিতে Push করুন।"
+                                )
+                            }
                             if (responseCode !in 200..299) {
                                 throw IllegalStateException("APK ডাউনলোড ব্যর্থ হয়েছে (HTTP $responseCode)।")
                             }

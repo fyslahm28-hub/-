@@ -46,8 +46,18 @@ jobs:
       - name: Compute Release Version Metadata
         id: version_meta
         run: |
-          VERSION_CODE=$((100 + ${{ github.run_number }}))
-          VERSION_NAME="1.0.${{ github.run_number }}"
+          BASE_CODE=$((200 + ${{ github.run_number }}))
+          EXISTING_FS_CODE=$(curl -s "https://firestore.googleapis.com/v1/projects/gen-lang-client-0048059944/databases/ai-studio-android-811ea734-e9e8-4ff4-8e56-ca97ec8a429c/documents/app_releases/latest" | grep -o '"versionCode"[[:space:]]*:[[:space:]]*{[[:space:]]*"integerValue"[[:space:]]*:[[:space:]]*"[0-9]*"' | grep -o '[0-9]*' | head -n 1 || echo "0")
+          if [ -n "${EXISTING_FS_CODE}" ] && [ "${EXISTING_FS_CODE}" -ge "${BASE_CODE}" ] 2>/dev/null; then
+            VERSION_CODE=$((EXISTING_FS_CODE + 1))
+          else
+            VERSION_CODE=${BASE_CODE}
+          fi
+          PATCH_NUM=$((VERSION_CODE - 200))
+          if [ "${PATCH_NUM}" -lt 1 ]; then
+            PATCH_NUM=${{ github.run_number }}
+          fi
+          VERSION_NAME="1.2.${PATCH_NUM}"
           RELEASE_TAG="v${VERSION_NAME}"
           APK_FILENAME="Qawmi-Kormosangsthan-Bangladesh.apk"
           APK_DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${RELEASE_TAG}/${APK_FILENAME}"
