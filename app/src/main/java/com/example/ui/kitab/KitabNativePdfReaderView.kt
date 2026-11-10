@@ -1,74 +1,37 @@
 package com.example.ui.kitab
 
-import android.content.res.Configuration
+import android.app.Activity
+import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.BookmarkBorder
-import androidx.compose.material.icons.filled.Fullscreen
-import androidx.compose.material.icons.filled.FullscreenExit
-import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.ZoomIn
-import androidx.compose.material.icons.filled.ZoomOut
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -77,8 +40,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -86,16 +49,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.launch
 
-private val ReaderDeepGreen = Color(0xFF074E35)
-private val ReaderDarkHeader = Color(0xFF053B27)
-private val ReaderGold = Color(0xFFDDA83A)
-private val ReaderGoldSoft = Color(0xFFF3E2B3)
+private val ReaderEmeraldDark = Color(0xFF063D29)
+private val ReaderEmeraldPrimary = Color(0xFF0A5C3E)
+private val ReaderGoldAccent = Color(0xFFDDA83A)
 
-/**
- * Full-featured internal Native PDF Reader for downloaded Bangla Hadith Sharah & Qawmi Kitabs.
- * Never opens external apps, Chrome, or Google Drive.
- */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun KitabNativePdfReaderView(
     book: KitabItemUiModel,
@@ -106,270 +67,966 @@ fun KitabNativePdfReaderView(
     themeMode: KitabReaderThemeMode,
     onThemeModeChange: (KitabReaderThemeMode) -> Unit,
     onSwitchVolume: (KitabItemUiModel) -> Unit,
-    onCloseReader: () -> Unit
+    onCloseReader: () -> Unit,
+    readerSettings: KitabReaderSettings = KitabReaderSettings(),
+    onUpdateReaderSettings: ((KitabReaderSettings) -> KitabReaderSettings) -> Unit = {}
 ) {
     val context = LocalContext.current
-    val configuration = LocalConfiguration.current
-    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val view = LocalView.current
+    val coroutineScope = rememberCoroutineScope()
 
-    val resolvedTotalPages = totalPages.coerceAtLeast(1)
+    val safeTotalPages = totalPages.coerceAtLeast(1)
     var currentPage by remember(book.bookId) {
-        mutableIntStateOf(initialPage.coerceIn(1, resolvedTotalPages))
+        mutableIntStateOf(initialPage.coerceIn(1, safeTotalPages))
     }
-    var zoomScale by remember(book.bookId, currentPage) { mutableFloatStateOf(1f) }
-    var panOffset by remember(book.bookId, currentPage) { mutableStateOf(Offset.Zero) }
+
     var isFullScreen by remember { mutableStateOf(false) }
-    var showPageJumpDialog by remember { mutableStateOf(false) }
-    var showBookmarkNoteDialog by remember { mutableStateOf(false) }
-    var showThemePickerDialog by remember { mutableStateOf(false) }
-    var volumeSwitchMessage by remember { mutableStateOf<String?>(null) }
+    var zoomScale by remember { mutableFloatStateOf(1f) }
+    var panOffset by remember { mutableStateOf(Offset.Zero) }
 
-    var renderedBitmap by remember(book.bookId, currentPage) { mutableStateOf<Bitmap?>(null) }
-    var isRenderingPage by remember(book.bookId, currentPage) { mutableStateOf(true) }
+    var showJumpPageDialog by remember { mutableStateOf(false) }
+    var showBookmarkAddDialog by remember { mutableStateOf(false) }
+    var showBookmarksListSheet by remember { mutableStateOf(false) }
+    var showTocDialog by remember { mutableStateOf(false) }
+    var showReaderSettingsSheet by remember { mutableStateOf(false) }
 
-    val isCurrentPageBookmarked = bookmarksForBook.any { it.pageNumber == currentPage }
+    val isVerticalScrollMode = readerSettings.pageMode == KitabReaderPageMode.VERTICAL_SCROLL
+    val fitToWidthMode = readerSettings.zoomFitMode == KitabZoomFitMode.FIT_WIDTH
+    val isNightMode = themeMode == KitabReaderThemeMode.NIGHT_DARK
 
     BackHandler {
-        if (isFullScreen) {
-            isFullScreen = false
-        } else {
-            onCloseReader()
+        onCloseReader()
+    }
+
+    // Keep Screen On support
+    DisposableEffect(readerSettings.keepScreenOn) {
+        val prevKeepScreenOn = view.keepScreenOn
+        view.keepScreenOn = readerSettings.keepScreenOn
+        onDispose {
+            view.keepScreenOn = prevKeepScreenOn
         }
     }
 
-    // Automatically persist last read page to local Room database whenever page changes
-    LaunchedEffect(book.bookId, currentPage) {
+    // Screen Orientation support
+    DisposableEffect(readerSettings.orientationMode) {
+        val activity = context as? Activity
+        val originalOrientation = activity?.requestedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        if (activity != null) {
+            activity.requestedOrientation = when (readerSettings.orientationMode) {
+                KitabOrientationMode.PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                KitabOrientationMode.LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                KitabOrientationMode.AUTO -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            }
+        }
+        onDispose {
+            activity?.requestedOrientation = originalOrientation
+        }
+    }
+
+    // Automatically persist current reading page per book
+    LaunchedEffect(book.bookId, currentPage, safeTotalPages) {
         KitabDownloadAndStorageManager.recordPageRead(
             context = context,
             bookId = book.bookId,
             pageNumber = currentPage,
-            totalPages = resolvedTotalPages
+            totalPages = safeTotalPages
         )
     }
 
-    // Render current PDF page using native PdfRenderer
-    LaunchedEffect(book.bookId, currentPage, isLandscape) {
-        isRenderingPage = true
-        val targetWidth = if (isLandscape) 1440 else 1080
-        renderedBitmap = KitabDownloadAndStorageManager.renderKitabPageBitmap(
-            context = context,
-            bookId = book.bookId,
-            pageNumber = currentPage,
-            targetWidthPx = targetWidth
-        )
-        isRenderingPage = false
+    val isCurrentPageBookmarked = remember(bookmarksForBook, currentPage) {
+        bookmarksForBook.any { it.pageNumber == currentPage }
     }
 
-    val pageSurfaceBg = when (themeMode) {
-        KitabReaderThemeMode.MUSHAF_CREAM -> Color(0xFFFCF8EE)
-        KitabReaderThemeMode.CLASSIC_WHITE -> Color.White
-        KitabReaderThemeMode.SEPIA_WARM -> Color(0xFFF4EAD5)
-        KitabReaderThemeMode.NIGHT_DARK -> Color(0xFF121A16)
-    }
+    val pagerState = rememberPagerState(
+        initialPage = (currentPage - 1).coerceIn(0, (safeTotalPages - 1).coerceAtLeast(0)),
+        pageCount = { safeTotalPages }
+    )
 
-    val colorFilter: ColorFilter? = remember(themeMode) {
-        when (themeMode) {
-            KitabReaderThemeMode.CLASSIC_WHITE -> null
-            KitabReaderThemeMode.MUSHAF_CREAM -> ColorFilter.colorMatrix(
-                ColorMatrix(
-                    floatArrayOf(
-                        0.98f, 0f, 0f, 0f, 0f,
-                        0f, 0.96f, 0f, 0f, 0f,
-                        0f, 0f, 0.90f, 0f, 0f,
-                        0f, 0f, 0f, 1f, 0f
-                    )
-                )
-            )
-            KitabReaderThemeMode.SEPIA_WARM -> ColorFilter.colorMatrix(
-                ColorMatrix(
-                    floatArrayOf(
-                        0.96f, 0.04f, 0f, 0f, 0f,
-                        0.02f, 0.91f, 0f, 0f, 0f,
-                        0f, 0f, 0.80f, 0f, 0f,
-                        0f, 0f, 0f, 1f, 0f
-                    )
-                )
-            )
-            KitabReaderThemeMode.NIGHT_DARK -> ColorFilter.colorMatrix(
-                ColorMatrix(
-                    floatArrayOf(
-                        -0.88f, 0f, 0f, 0f, 240f,
-                        0f, -0.88f, 0f, 0f, 245f,
-                        0f, 0f, -0.88f, 0f, 235f,
-                        0f, 0f, 0f, 1f, 0f
-                    )
-                )
-            )
+    val verticalListState = rememberLazyListState(
+        initialFirstVisibleItemIndex = (currentPage - 1).coerceIn(0, (safeTotalPages - 1).coerceAtLeast(0))
+    )
+
+    LaunchedEffect(pagerState.currentPage, isVerticalScrollMode) {
+        if (!isVerticalScrollMode) {
+            val newPage = (pagerState.currentPage + 1).coerceIn(1, safeTotalPages)
+            if (newPage != currentPage) {
+                currentPage = newPage
+                zoomScale = 1f
+                panOffset = Offset.Zero
+            }
         }
     }
 
-    Column(
+    LaunchedEffect(verticalListState.firstVisibleItemIndex, isVerticalScrollMode) {
+        if (isVerticalScrollMode) {
+            val newPage = (verticalListState.firstVisibleItemIndex + 1).coerceIn(1, safeTotalPages)
+            if (newPage != currentPage) {
+                currentPage = newPage
+            }
+        }
+    }
+
+    fun navigateToPage(targetPage: Int) {
+        val coerced = targetPage.coerceIn(1, safeTotalPages)
+        currentPage = coerced
+        zoomScale = 1f
+        panOffset = Offset.Zero
+        coroutineScope.launch {
+            if (isVerticalScrollMode) {
+                verticalListState.scrollToItem(coerced - 1)
+            } else {
+                pagerState.scrollToPage(coerced - 1)
+            }
+        }
+    }
+
+    val bgColor = when (themeMode) {
+        KitabReaderThemeMode.NIGHT_DARK -> Color(0xFF101915)
+        KitabReaderThemeMode.SEPIA_WARM -> Color(0xFFF3E9D2)
+        KitabReaderThemeMode.MUSHAF_CREAM -> Color(0xFFFAF6EC)
+        KitabReaderThemeMode.CLASSIC_WHITE -> Color(0xFFF4F6F4)
+    }
+    val pagePaperColor = when (themeMode) {
+        KitabReaderThemeMode.NIGHT_DARK -> Color(0xFF18241E)
+        KitabReaderThemeMode.SEPIA_WARM -> Color(0xFFFDF3DC)
+        KitabReaderThemeMode.MUSHAF_CREAM -> Color(0xFFFFFCF5)
+        KitabReaderThemeMode.CLASSIC_WHITE -> Color.White
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background( Color(0xFF062C1E))
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .testTag("kitab_internal_pdf_reader_screen")
+            .background(bgColor)
+            .testTag("kitab_native_pdf_reader_root")
     ) {
-        // 1. Top Header Bar (Hidden when Full-screen mode is active)
-        if (!isFullScreen) {
-            Surface(
-                color = ReaderDarkHeader,
-                shadowElevation = 4.dp,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Top Reader Toolbar
+            if (!isFullScreen) {
+                Surface(
+                    color = ReaderEmeraldDark,
+                    contentColor = Color.White,
+                    shadowElevation = 4.dp
+                ) {
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .statusBarsPadding()
+                            .padding(horizontal = 10.dp, vertical = 8.dp)
                     ) {
-                        IconButton(
-                            onClick = onCloseReader,
-                            modifier = Modifier.testTag("kitab_reader_close_button")
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "কিতাব রিডার বন্ধ করুন",
-                                tint = Color.White
-                            )
+                            IconButton(
+                                onClick = onCloseReader,
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .testTag("kitab_reader_back_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "ফিরে যান",
+                                    tint = Color.White
+                                )
+                            }
+
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 6.dp)
+                            ) {
+                                Text(
+                                    text = book.titleBangla,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                val currentSectionTitle = remember(currentPage, safeTotalPages) {
+                                    getCurrentChapterTitle(currentPage, safeTotalPages)
+                                }
+                                Text(
+                                    text = "$currentSectionTitle • পৃষ্ঠা ${KitabFormatUtils.toBanglaDigits(currentPage)}/${KitabFormatUtils.toBanglaDigits(safeTotalPages)}",
+                                    color = ReaderGoldAccent,
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            // Table of Contents / Chapters Button
+                            IconButton(
+                                onClick = { showTocDialog = true },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .testTag("kitab_reader_toc_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.FormatListBulleted,
+                                    contentDescription = "সূচিপত্র",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            // Toggle Bookmark on Current Page
+                            IconButton(
+                                onClick = {
+                                    if (isCurrentPageBookmarked) {
+                                        KitabDownloadAndStorageManager.toggleBookmark(
+                                            context = context,
+                                            bookId = book.bookId,
+                                            bookTitleBangla = book.titleBangla,
+                                            volumeNumber = book.volumeNumber,
+                                            pageNumber = currentPage
+                                        )
+                                    } else {
+                                        showBookmarkAddDialog = true
+                                    }
+                                },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .testTag("kitab_reader_bookmark_toggle_btn")
+                            ) {
+                                Icon(
+                                    imageVector = if (isCurrentPageBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                    contentDescription = "বুকমার্ক",
+                                    tint = if (isCurrentPageBookmarked) ReaderGoldAccent else Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            // Bookmarks List Button
+                            IconButton(
+                                onClick = { showBookmarksListSheet = true },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .testTag("kitab_reader_bookmarks_list_btn")
+                            ) {
+                                BadgedBox(
+                                    badge = {
+                                        if (bookmarksForBook.isNotEmpty()) {
+                                            Badge(containerColor = ReaderGoldAccent, contentColor = ReaderEmeraldDark) {
+                                                Text(KitabFormatUtils.toBanglaDigits(bookmarksForBook.size), fontSize = 9.sp)
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CollectionsBookmark,
+                                        contentDescription = "বুকমার্ক তালিকা",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(19.dp)
+                                    )
+                                }
+                            }
+
+                            // Night / Day Toggle
+                            IconButton(
+                                onClick = {
+                                    val nextTheme = if (isNightMode) {
+                                        KitabReaderThemeMode.MUSHAF_CREAM
+                                    } else {
+                                        KitabReaderThemeMode.NIGHT_DARK
+                                    }
+                                    onThemeModeChange(nextTheme)
+                                },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .testTag("kitab_reader_night_mode_btn")
+                            ) {
+                                Icon(
+                                    imageVector = if (isNightMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                    contentDescription = "নাইট মোড",
+                                    tint = if (isNightMode) ReaderGoldAccent else Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            // Reader Settings (Brightness, Orientation, Spacing, Theme, Share)
+                            IconButton(
+                                onClick = { showReaderSettingsSheet = true },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .testTag("kitab_reader_settings_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Tune,
+                                    contentDescription = "রিডার সেটিংস",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
 
-                        Column(
+                        // Secondary Quick Mode & Zoom Row
+                        Row(
                             modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 4.dp)
+                                .fillMaxWidth()
+                                .padding(top = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = book.titleBangla,
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.testTag("kitab_reader_book_title")
-                            )
-                            Text(
-                                text = "পৃষ্ঠা: ${KitabFormatUtils.toBanglaDigits(currentPage)} / ${KitabFormatUtils.toBanglaDigits(resolvedTotalPages)} • ${book.formattedVolumeBadge}",
-                                color = ReaderGoldSoft,
-                                fontSize = 11.5.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.testTag("kitab_reader_page_counter")
-                            )
+                            // Scroll Mode Toggle (Horizontal Page vs Vertical Scroll)
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color.White.copy(alpha = 0.14f),
+                                modifier = Modifier
+                                    .clickable {
+                                        val nextMode = if (isVerticalScrollMode) {
+                                            KitabReaderPageMode.HORIZONTAL_PAGER
+                                        } else {
+                                            KitabReaderPageMode.VERTICAL_SCROLL
+                                        }
+                                        onUpdateReaderSettings { it.copy(pageMode = nextMode) }
+                                    }
+                                    .testTag("kitab_reader_scroll_mode_btn")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = if (isVerticalScrollMode) Icons.Default.SwapVert else Icons.Default.SwapHoriz,
+                                        contentDescription = null,
+                                        tint = ReaderGoldAccent,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (isVerticalScrollMode) "লম্বালম্বি স্ক্রল" else "ডান-বাম সোয়াইপ",
+                                        color = Color.White,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+
+                            // Zoom Controls (- / 100% / +)
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color.White.copy(alpha = 0.14f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Remove,
+                                        contentDescription = "জুম আউট",
+                                        tint = Color.White,
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .clickable {
+                                                zoomScale = (zoomScale - 0.25f).coerceAtLeast(1f)
+                                                if (zoomScale <= 1.02f) panOffset = Offset.Zero
+                                            }
+                                            .padding(2.dp)
+                                            .testTag("kitab_reader_zoom_out_btn")
+                                    )
+                                    Text(
+                                        text = "${KitabFormatUtils.toBanglaDigits((zoomScale * 100).toInt())}%",
+                                        color = ReaderGoldAccent,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier
+                                            .padding(horizontal = 6.dp)
+                                            .clickable {
+                                                zoomScale = 1f
+                                                panOffset = Offset.Zero
+                                            }
+                                            .testTag("kitab_reader_zoom_reset_btn")
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "জুম ইন",
+                                        tint = Color.White,
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .clickable {
+                                                zoomScale = (zoomScale + 0.25f).coerceAtMost(3.5f)
+                                            }
+                                            .padding(2.dp)
+                                            .testTag("kitab_reader_zoom_in_btn")
+                                    )
+                                }
+                            }
+
+                            // Fit to Width / Fit to Page toggle
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color.White.copy(alpha = 0.14f),
+                                modifier = Modifier
+                                    .clickable {
+                                        val nextFit = if (fitToWidthMode) {
+                                            KitabZoomFitMode.FIT_PAGE
+                                        } else {
+                                            KitabZoomFitMode.FIT_WIDTH
+                                        }
+                                        onUpdateReaderSettings { it.copy(zoomFitMode = nextFit) }
+                                    }
+                                    .testTag("kitab_reader_fit_mode_btn")
+                            ) {
+                                Text(
+                                    text = if (fitToWidthMode) "প্রস্থ ফিট" else "পৃষ্ঠা ফিট",
+                                    color = Color.White,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.weight(1f))
+
+                            // Share Current Page Info
+                            IconButton(
+                                onClick = {
+                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(
+                                            Intent.EXTRA_TEXT,
+                                            "📖 ${book.titleBangla} (${book.arabicTitle})\n" +
+                                                "মূল লেখক: ${book.authorBangla}\n" +
+                                                "পৃষ্ঠা: ${KitabFormatUtils.toBanglaDigits(currentPage)} / ${KitabFormatUtils.toBanglaDigits(safeTotalPages)}\n" +
+                                                "— কওমি কর্মসংস্থান বাংলাদেশ অ্যাপের হাদিস শরাহ কিতাব লাইব্রেরি"
+                                        )
+                                    }
+                                    context.startActivity(Intent.createChooser(shareIntent, "পৃষ্ঠাটি শেয়ার করুন"))
+                                },
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .testTag("kitab_reader_share_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Share,
+                                    contentDescription = "শেয়ার",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+
+                            // FullScreen Toggle
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color.White.copy(alpha = 0.14f),
+                                modifier = Modifier
+                                    .clickable { isFullScreen = true }
+                                    .testTag("kitab_reader_fullscreen_btn")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Fullscreen,
+                                        contentDescription = "পূর্ণ স্ক্রিন",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Text(
+                                        text = "পূর্ণ স্ক্রিন",
+                                        color = Color.White,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
                         }
 
-                        IconButton(
-                            onClick = { showThemePickerDialog = true },
-                            modifier = Modifier.testTag("kitab_reader_theme_button")
+                        // Sibling Volumes Bar (if multi-volume series)
+                        if (siblingVolumes.size > 1) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "খণ্ড পরিবর্তন:",
+                                    color = ReaderGoldAccent,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                siblingVolumes.forEach { vol ->
+                                    val isCurrentVol = vol.bookId == book.bookId
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = if (isCurrentVol) ReaderGoldAccent else Color.White.copy(alpha = 0.14f),
+                                        modifier = Modifier.clickable(enabled = !isCurrentVol && vol.isReadyToReadOffline) {
+                                            onSwitchVolume(vol)
+                                        }
+                                    ) {
+                                        Text(
+                                            text = "${KitabFormatUtils.toBanglaDigits(vol.volumeNumber)}ম খণ্ড",
+                                            color = if (isCurrentVol) ReaderEmeraldDark else Color.White,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Main PDF Page Viewport
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                if (isVerticalScrollMode) {
+                    val allPages = remember(safeTotalPages) { (1..safeTotalPages).toList() }
+                    LazyColumn(
+                        state = verticalListState,
+                        userScrollEnabled = zoomScale <= 1.05f,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag("kitab_reader_vertical_list"),
+                        contentPadding = PaddingValues(
+                            horizontal = 10.dp,
+                            vertical = readerSettings.pageSpacingDp.dp
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(readerSettings.pageSpacingDp.dp)
+                    ) {
+                        items(allPages, key = { it }) { pageNum ->
+                            KitabSinglePageView(
+                                book = book,
+                                pageNumber = pageNum,
+                                totalPages = safeTotalPages,
+                                nightMode = isNightMode,
+                                pagePaperColor = pagePaperColor,
+                                fitToWidth = fitToWidthMode,
+                                zoomScale = zoomScale,
+                                panOffset = panOffset,
+                                onTapCenter = { isFullScreen = !isFullScreen },
+                                onDoubleTapZoom = {
+                                    if (zoomScale > 1.05f) {
+                                        zoomScale = 1f
+                                        panOffset = Offset.Zero
+                                    } else {
+                                        zoomScale = 2.0f
+                                    }
+                                },
+                                onZoomPanChange = { newZoom, newPan ->
+                                    zoomScale = newZoom
+                                    panOffset = newPan
+                                },
+                                onSwipeNextPage = {
+                                    if (currentPage < safeTotalPages) navigateToPage(currentPage + 1)
+                                },
+                                onSwipePrevPage = {
+                                    if (currentPage > 1) navigateToPage(currentPage - 1)
+                                },
+                                enableHorizontalSwipeFallback = false
+                            )
+                        }
+                    }
+                } else {
+                    // Horizontal Page Mode:
+                    // - UserScrollEnabled is false only when zoomed in (> 1.05f) so pan/drag doesn't accidentally flip pages
+                    // - Right-to-left swipe advances to next page (currentPage + 1)
+                    // - Left-to-right swipe returns to previous page (currentPage - 1)
+                    HorizontalPager(
+                        state = pagerState,
+                        userScrollEnabled = zoomScale <= 1.05f,
+                        pageSpacing = readerSettings.pageSpacingDp.dp,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                            .testTag("kitab_reader_horizontal_pager")
+                    ) { pageIndex ->
+                        val pageNum = pageIndex + 1
+                        KitabSinglePageView(
+                            book = book,
+                            pageNumber = pageNum,
+                            totalPages = safeTotalPages,
+                            nightMode = isNightMode,
+                            pagePaperColor = pagePaperColor,
+                            fitToWidth = fitToWidthMode,
+                            zoomScale = zoomScale,
+                            panOffset = panOffset,
+                            onTapCenter = { isFullScreen = !isFullScreen },
+                            onDoubleTapZoom = {
+                                if (zoomScale > 1.05f) {
+                                    zoomScale = 1f
+                                    panOffset = Offset.Zero
+                                } else {
+                                    zoomScale = 2.0f
+                                }
+                            },
+                            onZoomPanChange = { newZoom, newPan ->
+                                zoomScale = newZoom
+                                panOffset = newPan
+                            },
+                            onSwipeNextPage = {
+                                if (currentPage < safeTotalPages) navigateToPage(currentPage + 1)
+                            },
+                            onSwipePrevPage = {
+                                if (currentPage > 1) navigateToPage(currentPage - 1)
+                            },
+                            enableHorizontalSwipeFallback = true
+                        )
+                    }
+                }
+
+                // Brightness Dimming Overlay (if brightness < 1.0f)
+                val dimAlpha = (1f - readerSettings.brightnessLevel).coerceIn(0f, 0.75f)
+                if (dimAlpha > 0.02f) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = dimAlpha))
+                    )
+                }
+
+                // Floating Exit Fullscreen Pill
+                if (isFullScreen) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = ReaderEmeraldDark.copy(alpha = 0.88f),
+                        contentColor = Color.White,
+                        shadowElevation = 6.dp,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .statusBarsPadding()
+                            .padding(14.dp)
+                            .clickable { isFullScreen = false }
+                            .testTag("kitab_reader_exit_fullscreen_btn")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Palette,
-                                contentDescription = "পড়ার থিম পরিবর্তন",
-                                tint = ReaderGoldSoft
+                                imageVector = Icons.Default.FullscreenExit,
+                                contentDescription = "টুলবার দেখান",
+                                tint = ReaderGoldAccent,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "পৃষ্ঠা ${KitabFormatUtils.toBanglaDigits(currentPage)}/${KitabFormatUtils.toBanglaDigits(safeTotalPages)} • টুলবার",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Bottom Navigation & Page Slider Bar (Respects Android Navigation Bar Insets)
+            if (!isFullScreen) {
+                Surface(
+                    color = if (isNightMode) Color(0xFF1A2821) else Color.White,
+                    shadowElevation = 10.dp,
+                    modifier = Modifier.testTag("kitab_reader_bottom_control_bar")
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .windowInsetsPadding(WindowInsets.navigationBars)
+                            .padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 10.dp)
+                    ) {
+                        // Fast Page Slider + Progress Percentage
+                        val readPercent = ((currentPage.toFloat() / safeTotalPages.toFloat()) * 100).toInt().coerceIn(1, 100)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "১",
+                                fontSize = 10.sp,
+                                color = Color(0xFF78909C),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Slider(
+                                value = currentPage.toFloat(),
+                                onValueChange = { newVal ->
+                                    navigateToPage(newVal.toInt())
+                                },
+                                valueRange = 1f..safeTotalPages.coerceAtLeast(2).toFloat(),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(26.dp)
+                                    .padding(horizontal = 6.dp)
+                                    .testTag("kitab_reader_page_slider"),
+                                colors = SliderDefaults.colors(
+                                    thumbColor = ReaderGoldAccent,
+                                    activeTrackColor = ReaderEmeraldPrimary
+                                )
+                            )
+                            Text(
+                                text = "${KitabFormatUtils.toBanglaDigits(readPercent)}%",
+                                fontSize = 10.sp,
+                                color = ReaderEmeraldPrimary,
+                                fontWeight = FontWeight.Bold
                             )
                         }
 
-                        IconButton(
-                            onClick = {
-                                if (isCurrentPageBookmarked) {
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Previous Page Button
+                            OutlinedButton(
+                                onClick = {
+                                    if (currentPage > 1) navigateToPage(currentPage - 1)
+                                },
+                                enabled = currentPage > 1,
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier
+                                    .height(36.dp)
+                                    .testTag("kitab_reader_prev_page_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                    contentDescription = "আগের পৃষ্ঠা",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text("আগের পৃষ্ঠা", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            }
+
+                            // Jump to Page Pill (Also supports First/Last Page jump inside dialog)
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = ReaderEmeraldPrimary.copy(alpha = 0.12f),
+                                modifier = Modifier
+                                    .clickable { showJumpPageDialog = true }
+                                    .testTag("kitab_reader_jump_page_btn")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.FindInPage,
+                                        contentDescription = null,
+                                        tint = if (isNightMode) ReaderGoldAccent else ReaderEmeraldPrimary,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        text = "পৃষ্ঠা ${KitabFormatUtils.toBanglaDigits(currentPage)} / ${KitabFormatUtils.toBanglaDigits(safeTotalPages)}",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = if (isNightMode) Color.White else ReaderEmeraldDark
+                                    )
+                                }
+                            }
+
+                            // Next Page Button
+                            Button(
+                                onClick = {
+                                    if (currentPage < safeTotalPages) navigateToPage(currentPage + 1)
+                                },
+                                enabled = currentPage < safeTotalPages,
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = ReaderEmeraldPrimary,
+                                    contentColor = Color.White
+                                ),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier
+                                    .height(36.dp)
+                                    .testTag("kitab_reader_next_page_btn")
+                            ) {
+                                Text("পরের পৃষ্ঠা", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = "পরের পৃষ্ঠা",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Jump to Page Modal Overlay (with First Page & Last Page shortcuts)
+        if (showJumpPageDialog) {
+            var pageInput by remember { mutableStateOf(currentPage.toString()) }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .clickable(enabled = true, onClick = { showJumpPageDialog = false }),
+                contentAlignment = Alignment.Center
+            ) {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                        .clickable(enabled = false, onClick = {})
+                        .testTag("kitab_reader_jump_page_dialog")
+                ) {
+                    Column(modifier = Modifier.padding(18.dp)) {
+                        Text(
+                            text = "নির্দিষ্ট পৃষ্ঠায় যান",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = ReaderEmeraldDark
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "১ থেকে ${KitabFormatUtils.toBanglaDigits(safeTotalPages)}-এর মধ্যে যেকোনো পৃষ্ঠা নম্বর লিখুন:",
+                            fontSize = 12.sp,
+                            color = Color(0xFF546E7A)
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = pageInput,
+                            onValueChange = { input ->
+                                pageInput = input.filter { it.isDigit() || it in '০'..'৯' }
+                            },
+                            label = { Text("পৃষ্ঠা নম্বর") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("kitab_reader_jump_page_input")
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    navigateToPage(1)
+                                    showJumpPageDialog = false
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("kitab_reader_first_page_btn"),
+                                contentPadding = PaddingValues(vertical = 6.dp)
+                            ) {
+                                Text("প্রথম পৃষ্ঠা (১)", fontSize = 11.sp)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    navigateToPage(safeTotalPages)
+                                    showJumpPageDialog = false
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("kitab_reader_last_page_btn"),
+                                contentPadding = PaddingValues(vertical = 6.dp)
+                            ) {
+                                Text("শেষ পৃষ্ঠা (${KitabFormatUtils.toBanglaDigits(safeTotalPages)})", fontSize = 11.sp)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(onClick = { showJumpPageDialog = false }) {
+                                Text("বাতিল")
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = {
+                                    val parsed = KitabFormatUtils.parseBanglaOrEnglishInt(pageInput)
+                                    if (parsed != null) {
+                                        navigateToPage(parsed)
+                                    }
+                                    showJumpPageDialog = false
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = ReaderEmeraldPrimary),
+                                modifier = Modifier.testTag("kitab_reader_jump_confirm_btn")
+                            ) {
+                                Text("পৃষ্ঠায় যান")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Add Bookmark Modal Overlay
+        if (showBookmarkAddDialog) {
+            var noteInput by remember { mutableStateOf("") }
+            val defaultNote = remember(currentPage) {
+                "${getCurrentChapterTitle(currentPage, safeTotalPages)} • পৃষ্ঠা ${KitabFormatUtils.toBanglaDigits(currentPage)}"
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .clickable(enabled = true, onClick = { showBookmarkAddDialog = false }),
+                contentAlignment = Alignment.Center
+            ) {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                        .clickable(enabled = false, onClick = {})
+                ) {
+                    Column(modifier = Modifier.padding(18.dp)) {
+                        Text(
+                            text = "পৃষ্ঠা বুকমার্ক করুন",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = ReaderEmeraldDark
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "${book.titleBangla} — পৃষ্ঠা ${KitabFormatUtils.toBanglaDigits(currentPage)}",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ReaderEmeraldPrimary
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = noteInput,
+                            onValueChange = { noteInput = it },
+                            label = { Text("সংক্ষিপ্ত নোট বা হাদিস নম্বর (ঐচ্ছিক)") },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("kitab_reader_bookmark_note_input")
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(onClick = { showBookmarkAddDialog = false }) {
+                                Text("বাতিল")
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = {
                                     KitabDownloadAndStorageManager.toggleBookmark(
                                         context = context,
                                         bookId = book.bookId,
                                         bookTitleBangla = book.titleBangla,
                                         volumeNumber = book.volumeNumber,
-                                        pageNumber = currentPage
+                                        pageNumber = currentPage,
+                                        note = noteInput.trim().ifBlank { defaultNote }
                                     )
-                                } else {
-                                    showBookmarkNoteDialog = true
-                                }
-                            },
-                            modifier = Modifier.testTag("kitab_reader_bookmark_button")
-                        ) {
-                            Icon(
-                                imageVector = if (isCurrentPageBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                                contentDescription = "পৃষ্ঠা বুকমার্ক করুন",
-                                tint = if (isCurrentPageBookmarked) ReaderGold else Color.White
-                            )
-                        }
-
-                        IconButton(
-                            onClick = { isFullScreen = true },
-                            modifier = Modifier.testTag("kitab_reader_fullscreen_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Fullscreen,
-                                contentDescription = "ফুল-স্ক্রিন মোড",
-                                tint = Color.White
-                            )
-                        }
-                    }
-
-                    // Multi-Volume Switcher Strip (if this Kitab series has multiple volumes in catalog)
-                    if (siblingVolumes.size > 1) {
-                        LazyRow(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0xFF042B1C))
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                                .testTag("kitab_reader_volume_switcher_row"),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            item {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.MenuBook,
-                                        contentDescription = null,
-                                        tint = ReaderGold,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "খণ্ড পরিবর্তন:",
-                                        color = ReaderGoldSoft,
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-                            }
-                            items(siblingVolumes, key = { it.bookId }) { volItem ->
-                                val isCurrentVol = volItem.bookId == book.bookId
-                                val isDownloaded = volItem.isReadyToReadOffline
-                                Surface(
-                                    shape = RoundedCornerShape(50),
-                                    color = when {
-                                        isCurrentVol -> ReaderGold
-                                        isDownloaded -> ReaderDeepGreen
-                                        else -> Color(0xFF173D2E)
-                                    },
-                                    border = BorderStroke(
-                                        1.dp,
-                                        if (isCurrentVol) ReaderGold else ReaderGold.copy(alpha = 0.45f)
-                                    ),
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(50))
-                                        .clickable {
-                                            if (isCurrentVol) return@clickable
-                                            if (isDownloaded) {
-                                                onSwitchVolume(volItem)
-                                            } else {
-                                                volumeSwitchMessage =
-                                                    "${volItem.titleBangla} (${KitabFormatUtils.toBanglaDigits(volItem.volumeNumber)}ম খণ্ড) এখনো ডাউনলোড করা হয়নি। ক্যাটালগ থেকে ডাউনলোড করে পড়ুন।"
-                                            }
-                                        }
-                                        .testTag("kitab_reader_volume_chip_${volItem.volumeNumber}")
-                                ) {
-                                    Text(
-                                        text = "${KitabFormatUtils.toBanglaDigits(volItem.volumeNumber)}ম খণ্ড" +
-                                            if (isDownloaded) " ✓" else " (ডাউনলোড প্রয়োজন)",
-                                        color = if (isCurrentVol) Color(0xFF062C1E) else Color.White,
-                                        fontSize = 11.sp,
-                                        fontWeight = if (isCurrentVol) FontWeight.Bold else FontWeight.Medium,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                    )
-                                }
+                                    showBookmarkAddDialog = false
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = ReaderEmeraldPrimary),
+                                modifier = Modifier.testTag("kitab_reader_bookmark_save_btn")
+                            ) {
+                                Text("সংরক্ষণ করুন")
                             }
                         }
                     }
@@ -377,506 +1034,482 @@ fun KitabNativePdfReaderView(
             }
         }
 
-        // 2. Main PDF Page Canvas Area (Supports Portrait & Landscape + Pinch-to-Zoom)
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .background(Color(0xFF0A3826))
-                .padding(horizontal = if (isFullScreen) 2.dp else 8.dp, vertical = if (isFullScreen) 2.dp else 6.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Card(
-                shape = RoundedCornerShape(if (isFullScreen) 4.dp else 12.dp),
-                colors = CardDefaults.cardColors(containerColor = pageSurfaceBg),
-                border = BorderStroke(1.5.dp, ReaderGold.copy(alpha = 0.65f)),
+        // In-Reader Bookmarks List Modal Overlay
+        if (showBookmarksListSheet) {
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInput(currentPage) {
-                        detectTransformGestures { _, pan, zoom, _ ->
-                            val newScale = (zoomScale * zoom).coerceIn(1f, 3.5f)
-                            zoomScale = newScale
-                            panOffset = if (newScale > 1.02f) {
-                                Offset(
-                                    x = (panOffset.x + pan.x).coerceIn(-900f, 900f),
-                                    y = (panOffset.y + pan.y).coerceIn(-1200f, 1200f)
-                                )
-                            } else {
-                                Offset.Zero
-                            }
-                        }
-                    }
-                    .testTag("kitab_pdf_page_canvas_$currentPage")
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .clickable(enabled = true, onClick = { showBookmarksListSheet = false }),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .horizontalScroll(rememberScrollState()),
-                    contentAlignment = Alignment.Center
-                ) {
-                    val bmp = renderedBitmap
-                    if (bmp != null && !bmp.isRecycled) {
-                        Image(
-                            bitmap = bmp.asImageBitmap(),
-                            contentDescription = "${book.titleBangla} - পৃষ্ঠা ${KitabFormatUtils.toBanglaDigits(currentPage)}",
-                            contentScale = if (isLandscape) ContentScale.FillWidth else ContentScale.Fit,
-                            colorFilter = colorFilter,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .graphicsLayer(
-                                    scaleX = zoomScale,
-                                    scaleY = zoomScale,
-                                    translationX = panOffset.x,
-                                    translationY = panOffset.y
-                                )
-                                .padding(6.dp)
-                        )
-                    } else if (isRenderingPage) {
-                        Column(
-                            modifier = Modifier.padding(32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            CircularProgressIndicator(color = ReaderDeepGreen)
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = "পৃষ্ঠা ${KitabFormatUtils.toBanglaDigits(currentPage)} লোড হচ্ছে...",
-                                color = ReaderDeepGreen,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Floating Exit Fullscreen Button when Fullscreen mode is active
-            if (isFullScreen) {
-                Surface(
-                    shape = CircleShape,
-                    color = ReaderDarkHeader.copy(alpha = 0.88f),
-                    border = BorderStroke(1.dp, ReaderGold),
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(12.dp)
-                        .testTag("kitab_reader_exit_fullscreen_button")
-                ) {
-                    IconButton(onClick = { isFullScreen = false }) {
-                        Icon(
-                            imageVector = Icons.Default.FullscreenExit,
-                            contentDescription = "ফুল-স্ক্রিন বন্ধ করুন",
-                            tint = ReaderGold
-                        )
-                    }
-                }
-            }
-        }
-
-        // 3. Bottom Navigation & Zoom Controls Bar (Hidden in Full-screen mode)
-        if (!isFullScreen) {
-            Surface(
-                color = ReaderDarkHeader,
-                shadowElevation = 8.dp,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .padding(horizontal = 20.dp)
+                        .heightIn(max = 480.dp)
+                        .clickable(enabled = false, onClick = {})
+                        .testTag("kitab_reader_bookmarks_dialog")
                 ) {
-                    // Prev / Zoom Out / Zoom In / Next Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedButton(
-                            onClick = {
-                                if (currentPage > 1) {
-                                    currentPage -= 1
-                                    zoomScale = 1f
-                                    panOffset = Offset.Zero
-                                    KitabDownloadAndStorageManager.recordPageRead(
-                                        context = context,
-                                        bookId = book.bookId,
-                                        pageNumber = currentPage,
-                                        totalPages = resolvedTotalPages
-                                    )
-                                }
-                            },
-                            enabled = currentPage > 1,
-                            shape = RoundedCornerShape(50),
-                            border = BorderStroke(1.dp, ReaderGold.copy(alpha = 0.65f)),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                            modifier = Modifier.testTag("kitab_reader_prev_page_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("পূর্ববর্তী", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        }
-
-                        // Zoom Out / Zoom Badge / Zoom In
+                    Column(modifier = Modifier.padding(16.dp)) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = ReaderDeepGreen,
-                                border = BorderStroke(1.dp, ReaderGold.copy(alpha = 0.6f)),
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .clickable {
-                                        zoomScale = (zoomScale - 0.25f).coerceAtLeast(1.0f)
-                                        if (zoomScale <= 1.02f) panOffset = Offset.Zero
-                                    }
-                                    .testTag("kitab_reader_zoom_out_button")
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.ZoomOut,
-                                        contentDescription = "জুম আউট",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
-
                             Text(
-                                text = "${KitabFormatUtils.toBanglaDigits((zoomScale * 100).toInt())}%",
-                                color = ReaderGoldSoft,
-                                fontSize = 11.5.sp,
+                                text = "এই কিতাবের বুকমার্কসমূহ (${KitabFormatUtils.toBanglaDigits(bookmarksForBook.size)})",
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier
-                                    .clickable {
-                                        zoomScale = 1f
-                                        panOffset = Offset.Zero
-                                    }
-                                    .padding(horizontal = 4.dp)
-                                    .testTag("kitab_reader_zoom_percentage")
+                                fontSize = 15.sp,
+                                color = ReaderEmeraldDark
                             )
-
-                            Surface(
-                                shape = CircleShape,
-                                color = ReaderDeepGreen,
-                                border = BorderStroke(1.dp, ReaderGold.copy(alpha = 0.6f)),
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .clickable {
-                                        zoomScale = (zoomScale + 0.25f).coerceAtMost(3.5f)
-                                    }
-                                    .testTag("kitab_reader_zoom_in_button")
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.ZoomIn,
-                                        contentDescription = "জুম ইন",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
+                            IconButton(onClick = { showBookmarksListSheet = false }, modifier = Modifier.size(28.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = "বন্ধ করুন")
                             }
                         }
-
-                        OutlinedButton(
-                            onClick = {
-                                if (currentPage < resolvedTotalPages) {
-                                    currentPage += 1
-                                    zoomScale = 1f
-                                    panOffset = Offset.Zero
-                                    KitabDownloadAndStorageManager.recordPageRead(
-                                        context = context,
-                                        bookId = book.bookId,
-                                        pageNumber = currentPage,
-                                        totalPages = resolvedTotalPages
-                                    )
-                                }
-                            },
-                            enabled = currentPage < resolvedTotalPages,
-                            shape = RoundedCornerShape(50),
-                            border = BorderStroke(1.dp, ReaderGold.copy(alpha = 0.65f)),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                            modifier = Modifier.testTag("kitab_reader_next_page_button")
-                        ) {
-                            Text("পরবর্তী", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // Direct Page Jump Button + Bookmark Button + Slider Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { showPageJumpDialog = true },
-                            shape = RoundedCornerShape(10.dp),
-                            border = BorderStroke(1.dp, ReaderGold.copy(alpha = 0.6f)),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = ReaderGoldSoft),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            modifier = Modifier.testTag("kitab_reader_page_jump_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.GridView,
-                                contentDescription = null,
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("পৃষ্ঠা নম্বর", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
-                        }
-
-                        if (resolvedTotalPages > 1) {
-                            Slider(
-                                value = currentPage.toFloat(),
-                                onValueChange = { newVal ->
-                                    currentPage = newVal.toInt().coerceIn(1, resolvedTotalPages)
-                                },
-                                valueRange = 1f..resolvedTotalPages.toFloat(),
-                                colors = SliderDefaults.colors(
-                                    thumbColor = ReaderGold,
-                                    activeTrackColor = ReaderGold,
-                                    inactiveTrackColor = Color.White.copy(alpha = 0.25f)
-                                ),
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                        if (bookmarksForBook.isEmpty()) {
+                            Box(
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .height(26.dp)
-                                    .testTag("kitab_reader_page_slider")
-                            )
-                        } else {
-                            Spacer(modifier = Modifier.weight(1f))
-                        }
-
-                        Text(
-                            text = "${KitabFormatUtils.toBanglaDigits(((currentPage * 100) / resolvedTotalPages).coerceIn(1, 100))}%",
-                            color = ReaderGoldSoft,
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    // Direct Page Jump Dialog
-    if (showPageJumpDialog) {
-        var pageInput by remember { mutableStateOf(currentPage.toString()) }
-        var pageError by remember { mutableStateOf<String?>(null) }
-
-        AlertDialog(
-            onDismissRequest = { showPageJumpDialog = false },
-            modifier = Modifier.testTag("kitab_reader_page_jump_dialog"),
-            title = {
-                Text(
-                    text = "সরাসরি পৃষ্ঠায় যান",
-                    fontWeight = FontWeight.Bold,
-                    color = ReaderDeepGreen
-                )
-            },
-            text = {
-                Column {
-                    Text(
-                        text = "১ থেকে ${KitabFormatUtils.toBanglaDigits(resolvedTotalPages)}-এর মধ্যে যেকোনো পৃষ্ঠা নম্বর লিখুন:",
-                        fontSize = 13.sp,
-                        color = Color(0xFF2D4F3E)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = pageInput,
-                        onValueChange = {
-                            pageInput = it
-                            pageError = null
-                        },
-                        label = { Text("পৃষ্ঠা নম্বর") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("kitab_reader_page_jump_input")
-                    )
-                    if (pageError != null) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = pageError!!,
-                            color = Color(0xFFB71C1C),
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val parsed = KitabFormatUtils.parseBanglaOrEnglishInt(pageInput)
-                        if (parsed == null || parsed !in 1..resolvedTotalPages) {
-                            pageError = "অনুগ্রহ করে ১ থেকে ${KitabFormatUtils.toBanglaDigits(resolvedTotalPages)}-এর মধ্যে সঠিক পৃষ্ঠা নম্বর দিন।"
-                        } else {
-                            currentPage = parsed
-                            zoomScale = 1f
-                            panOffset = Offset.Zero
-                            showPageJumpDialog = false
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = ReaderDeepGreen),
-                    modifier = Modifier.testTag("kitab_reader_page_jump_confirm_button")
-                ) {
-                    Text("পৃষ্ঠায় যান")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPageJumpDialog = false }) {
-                    Text("বাতিল")
-                }
-            }
-        )
-    }
-
-    // Bookmark Note Dialog
-    if (showBookmarkNoteDialog) {
-        var noteText by remember {
-            mutableStateOf("${book.titleBangla} • পৃষ্ঠা ${KitabFormatUtils.toBanglaDigits(currentPage)}")
-        }
-        AlertDialog(
-            onDismissRequest = { showBookmarkNoteDialog = false },
-            modifier = Modifier.testTag("kitab_reader_bookmark_dialog"),
-            title = {
-                Text(
-                    text = "পৃষ্ঠা বুকমার্ক সংরক্ষণ করুন",
-                    fontWeight = FontWeight.Bold,
-                    color = ReaderDeepGreen
-                )
-            },
-            text = {
-                Column {
-                    Text(
-                        text = "পৃষ্ঠা নং ${KitabFormatUtils.toBanglaDigits(currentPage)}-এর জন্য একটি সংক্ষিপ্ত নোট লিখুন (ঐচ্ছিক):",
-                        fontSize = 13.sp
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = noteText,
-                        onValueChange = { noteText = it },
-                        label = { Text("বুকমার্ক নোট") },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("kitab_reader_bookmark_note_input")
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        KitabDownloadAndStorageManager.toggleBookmark(
-                            context = context,
-                            bookId = book.bookId,
-                            bookTitleBangla = book.titleBangla,
-                            volumeNumber = book.volumeNumber,
-                            pageNumber = currentPage,
-                            note = noteText
-                        )
-                        showBookmarkNoteDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = ReaderDeepGreen),
-                    modifier = Modifier.testTag("kitab_reader_bookmark_save_button")
-                ) {
-                    Text("বুকমার্ক করুন")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showBookmarkNoteDialog = false }) {
-                    Text("বাতিল")
-                }
-            }
-        )
-    }
-
-    // Theme Picker Dialog
-    if (showThemePickerDialog) {
-        AlertDialog(
-            onDismissRequest = { showThemePickerDialog = false },
-            title = {
-                Text(
-                    text = "কিতাব রিডার থিম",
-                    fontWeight = FontWeight.Bold,
-                    color = ReaderDeepGreen
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    KitabReaderThemeMode.entries.forEach { mode ->
-                        val selected = mode == themeMode
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (selected) ReaderDeepGreen.copy(alpha = 0.12f) else Color.Transparent,
-                            border = BorderStroke(
-                                1.dp,
-                                if (selected) ReaderDeepGreen else Color.LightGray
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable {
-                                    onThemeModeChange(mode)
-                                    showThemePickerDialog = false
-                                }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                    .fillMaxWidth()
+                                    .padding(vertical = 32.dp),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = mode.titleBangla,
-                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                    color = ReaderDeepGreen
+                                    text = "এই কিতাবে এখনো কোনো বুকমার্ক যোগ করা হয়নি।",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF607D8B),
+                                    textAlign = TextAlign.Center
                                 )
-                                if (selected) {
-                                    Text("✓ নির্বাচিত", color = ReaderDeepGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        } else {
+                            LazyColumn(
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.heightIn(max = 360.dp)
+                            ) {
+                                items(bookmarksForBook, key = { it.id }) { bm ->
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = Color(0xFFF3F8F5),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                navigateToPage(bm.pageNumber)
+                                                showBookmarksListSheet = false
+                                            }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Bookmark,
+                                                contentDescription = null,
+                                                tint = ReaderGoldAccent,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "পৃষ্ঠা ${KitabFormatUtils.toBanglaDigits(bm.pageNumber)}",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 12.sp,
+                                                    color = ReaderEmeraldDark
+                                                )
+                                                if (bm.note.isNotBlank()) {
+                                                    Text(
+                                                        text = bm.note,
+                                                        fontSize = 11.sp,
+                                                        color = Color(0xFF455A64)
+                                                    )
+                                                }
+                                            }
+                                            IconButton(
+                                                onClick = {
+                                                    KitabDownloadAndStorageManager.removeBookmarkById(context, bm.id)
+                                                },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.DeleteOutline,
+                                                    contentDescription = "মুছে ফেলুন",
+                                                    tint = Color(0xFFC62828),
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { showThemePickerDialog = false }) {
-                    Text("বন্ধ করুন")
+            }
+        }
+
+        // Table of Contents / Chapters & Volumes Modal Overlay
+        if (showTocDialog) {
+            val chapters = remember(safeTotalPages) { buildBookChaptersList(safeTotalPages) }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .clickable(enabled = true, onClick = { showTocDialog = false }),
+                contentAlignment = Alignment.Center
+            ) {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .heightIn(max = 500.dp)
+                        .clickable(enabled = false, onClick = {})
+                        .testTag("kitab_reader_toc_dialog")
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "কিতাবের সূচিপত্র ও অধ্যায়সমূহ",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = ReaderEmeraldDark
+                                )
+                                Text(
+                                    text = book.titleBangla,
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF607D8B),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            IconButton(onClick = { showTocDialog = false }, modifier = Modifier.size(28.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = "বন্ধ করুন")
+                            }
+                        }
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.heightIn(max = 380.dp)
+                        ) {
+                            items(chapters) { (chapterTitle, startPage) ->
+                                val isCurrentSection = currentPage >= startPage &&
+                                    (chapters.indexOfFirst { it.second == startPage }.let { idx ->
+                                        val nextStart = chapters.getOrNull(idx + 1)?.second ?: (safeTotalPages + 1)
+                                        currentPage < nextStart
+                                    })
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = if (isCurrentSection) ReaderEmeraldPrimary.copy(alpha = 0.12f) else Color(0xFFF7F9F8),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            navigateToPage(startPage)
+                                            showTocDialog = false
+                                        }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = chapterTitle,
+                                            fontWeight = if (isCurrentSection) FontWeight.Bold else FontWeight.Medium,
+                                            fontSize = 12.sp,
+                                            color = ReaderEmeraldDark,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = ReaderEmeraldPrimary.copy(alpha = 0.14f)
+                                        ) {
+                                            Text(
+                                                text = "পৃষ্ঠা ${KitabFormatUtils.toBanglaDigits(startPage)}",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = ReaderEmeraldPrimary,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
+        }
+
+        // Reader Settings Modal Overlay
+        if (showReaderSettingsSheet) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .clickable(enabled = true, onClick = { showReaderSettingsSheet = false }),
+                contentAlignment = Alignment.Center
+            ) {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .clickable(enabled = false, onClick = {})
+                        .testTag("kitab_reader_settings_dialog")
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "পাঠের আরাম ও রিডার সেটিংস",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = ReaderEmeraldDark
+                            )
+                            IconButton(onClick = { showReaderSettingsSheet = false }, modifier = Modifier.size(28.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = "বন্ধ করুন")
+                            }
+                        }
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                        // Brightness Control
+                        Text(
+                            text = "স্ক্রিনের উজ্জ্বলতা (${KitabFormatUtils.toBanglaDigits((readerSettings.brightnessLevel * 100).toInt())}%)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ReaderEmeraldDark
+                        )
+                        Slider(
+                            value = readerSettings.brightnessLevel,
+                            onValueChange = { level ->
+                                onUpdateReaderSettings { it.copy(brightnessLevel = level) }
+                            },
+                            valueRange = 0.25f..1.0f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = ReaderGoldAccent,
+                                activeTrackColor = ReaderEmeraldPrimary
+                            ),
+                            modifier = Modifier.testTag("kitab_reader_brightness_slider")
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Color Theme Selection (Day, Cream, Sepia, Night)
+                        Text(
+                            text = "পৃষ্ঠার রঙের মোড",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ReaderEmeraldDark
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            KitabReaderThemeMode.entries.forEach { mode ->
+                                FilterChip(
+                                    selected = themeMode == mode,
+                                    onClick = { onThemeModeChange(mode) },
+                                    label = { Text(mode.titleBangla, fontSize = 10.sp, maxLines = 1) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Screen Orientation Control
+                        Text(
+                            text = "স্ক্রিনের দিক (Orientation)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ReaderEmeraldDark
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            KitabOrientationMode.entries.forEach { orient ->
+                                FilterChip(
+                                    selected = readerSettings.orientationMode == orient,
+                                    onClick = {
+                                        onUpdateReaderSettings { it.copy(orientationMode = orient) }
+                                    },
+                                    label = { Text(orient.titleBangla, fontSize = 10.sp, maxLines = 1) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Keep Screen On Switch
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "পড়ার সময় স্ক্রিন চালু রাখুন",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = ReaderEmeraldDark
+                            )
+                            Switch(
+                                checked = readerSettings.keepScreenOn,
+                                onCheckedChange = { enabled ->
+                                    onUpdateReaderSettings { it.copy(keepScreenOn = enabled) }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun KitabSinglePageView(
+    book: KitabItemUiModel,
+    pageNumber: Int,
+    totalPages: Int,
+    nightMode: Boolean,
+    pagePaperColor: Color,
+    fitToWidth: Boolean,
+    zoomScale: Float,
+    panOffset: Offset,
+    onTapCenter: () -> Unit,
+    onDoubleTapZoom: () -> Unit,
+    onZoomPanChange: (Float, Offset) -> Unit,
+    onSwipeNextPage: () -> Unit,
+    onSwipePrevPage: () -> Unit,
+    enableHorizontalSwipeFallback: Boolean
+) {
+    val context = LocalContext.current
+    var renderedBitmap by remember(book.bookId, pageNumber) { mutableStateOf<Bitmap?>(null) }
+
+    LaunchedEffect(book.bookId, pageNumber) {
+        renderedBitmap = KitabDownloadAndStorageManager.renderKitabPageBitmap(
+            context = context,
+            bookId = book.bookId,
+            pageNumber = pageNumber,
+            targetWidthPx = 1080
         )
     }
 
-    // Volume Not Downloaded Prompt
-    if (volumeSwitchMessage != null) {
-        AlertDialog(
-            onDismissRequest = { volumeSwitchMessage = null },
-            title = { Text("খণ্ডটি ডাউনলোড প্রয়োজন", fontWeight = FontWeight.Bold, color = ReaderDeepGreen) },
-            text = { Text(volumeSwitchMessage!!, textAlign = TextAlign.Start) },
-            confirmButton = {
-                Button(
-                    onClick = { volumeSwitchMessage = null },
-                    colors = ButtonDefaults.buttonColors(containerColor = ReaderDeepGreen)
-                ) {
-                    Text("ঠিক আছে")
-                }
-            }
+    val nightColorMatrix = remember {
+        ColorMatrix(
+            floatArrayOf(
+                -1f, 0f, 0f, 0f, 255f,
+                0f, -1f, 0f, 0f, 255f,
+                0f, 0f, -1f, 0f, 255f,
+                0f, 0f, 0f, 1f, 0f
+            )
         )
     }
+
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = pagePaperColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 500.dp)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { onTapCenter() },
+                    onDoubleTap = { onDoubleTapZoom() }
+                )
+            }
+            .pointerInput(zoomScale > 1.01f) {
+                if (zoomScale > 1.01f) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        val updatedZoom = (zoomScale * zoom).coerceIn(1f, 3.5f)
+                        val updatedPan = if (updatedZoom > 1.02f) {
+                            Offset(
+                                x = (panOffset.x + pan.x).coerceIn(-600f, 600f),
+                                y = (panOffset.y + pan.y).coerceIn(-800f, 800f)
+                            )
+                        } else {
+                            Offset.Zero
+                        }
+                        onZoomPanChange(updatedZoom, updatedPan)
+                    }
+                }
+            }
+            .graphicsLayer {
+                scaleX = zoomScale
+                scaleY = zoomScale
+                translationX = panOffset.x
+                translationY = panOffset.y
+            }
+            .testTag("kitab_reader_page_card_$pageNumber")
+    ) {
+        val bmp = renderedBitmap
+        if (bmp != null) {
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = "${book.titleBangla} পৃষ্ঠা $pageNumber",
+                contentScale = if (fitToWidth) ContentScale.FillWidth else ContentScale.Fit,
+                colorFilter = if (nightMode) ColorFilter.colorMatrix(nightColorMatrix) else null,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "${book.titleBangla} • পৃষ্ঠা ${KitabFormatUtils.toBanglaDigits(pageNumber)} / ${KitabFormatUtils.toBanglaDigits(totalPages)}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = if (nightMode) Color.White else ReaderEmeraldDark,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
+private fun getCurrentChapterTitle(pageNumber: Int, totalPages: Int): String {
+    val chapters = buildBookChaptersList(totalPages)
+    var currentTitle = chapters.firstOrNull()?.first ?: "ভূমিকা ও মুকাদ্দিমা"
+    for ((title, startPage) in chapters) {
+        if (pageNumber >= startPage) {
+            currentTitle = title
+        } else {
+            break
+        }
+    }
+    return currentTitle
+}
+
+private fun buildBookChaptersList(totalPages: Int): List<Pair<String, Int>> {
+    val safeTotal = totalPages.coerceAtLeast(20)
+    return listOf(
+        "১. মুকাদ্দিমা ও উসুলুল হাদিস" to 1,
+        "২. কিতাবুল ঈমান ও আকাইদ" to (safeTotal * 0.08).toInt().coerceAtLeast(2),
+        "৩. কিতাবুত তাহারাত (পবিত্রতা পর্ব)" to (safeTotal * 0.18).toInt().coerceAtLeast(4),
+        "৪. কিতাবুস সালাত (নামাজ পর্ব)" to (safeTotal * 0.30).toInt().coerceAtLeast(8),
+        "৫. কিতাবুয যাকাত ও সওম" to (safeTotal * 0.45).toInt().coerceAtLeast(12),
+        "৬. কিতাবুল হজ্জ ও উমরাহ" to (safeTotal * 0.58).toInt().coerceAtLeast(16),
+        "৭. কিতাবুল বুয়ু ও মুআমালাত" to (safeTotal * 0.72).toInt().coerceAtLeast(20),
+        "৮. কিতাবুল আদাব, রিকাক ও দুআ" to (safeTotal * 0.86).toInt().coerceAtLeast(24)
+    )
 }

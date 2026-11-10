@@ -943,7 +943,7 @@ class ExampleRobolectricTest {
         composeTestRule.onNodeWithTag("admin_tab_settings_hub").performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithText("সেটিংস ও লগ").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("admin_settings_row_6").performClick()
+        composeTestRule.onNodeWithTag("admin_settings_row_5").performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithText("টেলিগ্রাম ইন্টিগ্রেশন").assertIsDisplayed()
         composeTestRule.onNodeWithText("@Q_kormosngsthan_Bangladesh").assertDoesNotExist()

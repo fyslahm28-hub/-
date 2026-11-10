@@ -20,14 +20,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
-import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.RandomAccessFile
 import java.net.HttpURLConnection
@@ -35,9 +33,6 @@ import java.net.URL
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 
-/**
- * Network response abstraction for streaming Kitab PDF files with HTTP Range (Pause/Resume) support.
- */
 data class KitabNetworkStreamResponse(
     val httpStatusCode: Int,
     val isPartialContent: Boolean,
@@ -50,9 +45,6 @@ interface KitabNetworkTransport {
     fun openStream(downloadUrl: String, rangeStartBytes: Long): KitabNetworkStreamResponse
 }
 
-/**
- * Production HTTP/HTTPS transport supporting Archive.org 302 redirects and HTTP 206 Range Resume.
- */
 object RealHttpRangeNetworkTransport : KitabNetworkTransport {
     override fun openStream(downloadUrl: String, rangeStartBytes: Long): KitabNetworkStreamResponse {
         var currentUrl = downloadUrl
@@ -120,21 +112,19 @@ data class KitabOpenReadResult(
     val errorMessageBangla: String = ""
 )
 
-/**
- * Manages the Bangla Hadith Sharah & Islamic Kitab Library:
- * - Online Catalog & Optional Throttled Firestore Sync (`/kitab_catalog`)
- * - Device-Private PDF Storage (`filesDir/qawmi_kitab_library_pdfs`) — Zero Storage Permissions
- * - One-Click Download Engine with Pause, Resume (HTTP Range), Cancel, and Progress (`%` & `MB`)
- * - Strict `%PDF-` header & `SHA-256` Checksum Verification before opening
- * - Native `PdfRenderer` Page Rendering with LRU Bitmap Cache
- */
 object KitabDownloadAndStorageManager {
 
     private const val PDF_DIR_NAME = "qawmi_kitab_library_pdfs"
     private const val PREFS_NAME = "qawmi_kitab_library_prefs"
     private const val KEY_LAST_FIRESTORE_CATALOG_SYNC = "last_firestore_catalog_sync_ms"
     private const val KEY_READER_THEME = "kitab_reader_theme_mode"
-    private const val FIRESTORE_SYNC_THROTTLE_MS = 12L * 60L * 60L * 1000L // 12 hours (৳0 quota-safe)
+    private const val KEY_READER_PAGE_MODE = "kitab_reader_page_mode"
+    private const val KEY_READER_ZOOM_FIT = "kitab_reader_zoom_fit"
+    private const val KEY_READER_ORIENTATION = "kitab_reader_orientation"
+    private const val KEY_READER_KEEP_SCREEN_ON = "kitab_reader_keep_screen_on"
+    private const val KEY_READER_BRIGHTNESS = "kitab_reader_brightness"
+    private const val KEY_READER_PAGE_SPACING = "kitab_reader_page_spacing_dp"
+    private const val FIRESTORE_SYNC_THROTTLE_MS = 12L * 60L * 60L * 1000L
 
     private var ioDispatcher: CoroutineDispatcher = Dispatchers.IO
     private var managerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -169,173 +159,103 @@ object KitabDownloadAndStorageManager {
     private val _readerThemeFlow = MutableStateFlow(KitabReaderThemeMode.MUSHAF_CREAM)
     val readerThemeFlow: StateFlow<KitabReaderThemeMode> = _readerThemeFlow.asStateFlow()
 
-    private var collectionJob: Job? = null
+    private val _readerSettingsFlow = MutableStateFlow(KitabReaderSettings())
+    val readerSettingsFlow: StateFlow<KitabReaderSettings> = _readerSettingsFlow.asStateFlow()
 
-    fun init(context: Context, forceReinit: Boolean = false) {
-        if (isInitialized && !forceReinit) return
+    fun setCustomStorageDirectoryForTesting(dir: File?) {
+        customStorageDirOverride = dir
+    }
+
+    fun getPdfStorageDirectory(context: Context): File {
+        customStorageDirOverride?.let { custom ->
+            if (!custom.exists()) custom.mkdirs()
+            return custom
+        }
+        val appContext = context.applicationContext ?: context
+        val dir = File(appContext.filesDir, PDF_DIR_NAME)
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
+    fun getFinalPdfFile(context: Context, bookId: String): File {
+        return File(getPdfStorageDirectory(context), "$bookId.pdf")
+    }
+
+    fun getPartialPdfFile(context: Context, bookId: String): File {
+        return File(getPdfStorageDirectory(context), "$bookId.pdf.part")
+    }
+
+    fun init(context: Context, allowRemoteFirestoreSync: Boolean = true) {
         val appContext = context.applicationContext ?: context
         val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val savedThemeId = prefs.getString(KEY_READER_THEME, KitabReaderThemeMode.MUSHAF_CREAM.id)
         _readerThemeFlow.value = KitabReaderThemeMode.entries.firstOrNull { it.id == savedThemeId }
             ?: KitabReaderThemeMode.MUSHAF_CREAM
+        _readerSettingsFlow.value = loadReaderSettingsFromPrefs(prefs)
 
-        isInitialized = true
-
-        // Immediately populate in-memory fallback list so UI is never blank while Room initializes
         if (_catalogItemsFlow.value.isEmpty()) {
             _catalogItemsFlow.value = KitabVerifiedCatalogData.defaultCatalogEntities.map { meta ->
-                mergeMetadataWithLocalState(meta, null)
+                combineEntityAndState(meta, null, appContext)
             }
         }
 
-        collectionJob?.cancel()
-        collectionJob = managerScope.launch(ioDispatcher) {
-            val dao = KitabLibraryDatabase.getInstance(appContext).kitabLibraryDao()
-            // 1. Seed verified default catalog into Room SQLite
-            dao.upsertCatalogItems(KitabVerifiedCatalogData.defaultCatalogEntities)
-
-            // 2. Reconcile local states with actual files in device-private storage
-            reconcileDiskStateWithDatabaseInternal(appContext, dao)
-
-            // 3. Observe combined Catalog Metadata + Device-Local State
-            launch {
-                combine(
-                    dao.observeAllApprovedCatalog(),
-                    dao.observeAllLocalStates()
-                ) { metadataList, localStates ->
-                    val stateMap = localStates.associateBy { it.bookId }
-                    metadataList.map { meta ->
-                        mergeMetadataWithLocalState(meta, stateMap[meta.bookId])
-                    }
-                }.collect { mergedList ->
-                    _catalogItemsFlow.value = mergedList
+        managerScope.launch(ioDispatcher) {
+            initAndAwaitSync(appContext, customStorageDirOverride)
+            if (allowRemoteFirestoreSync && isDeviceOnline(appContext)) {
+                val lastSync = prefs.getLong(KEY_LAST_FIRESTORE_CATALOG_SYNC, 0L)
+                val now = System.currentTimeMillis()
+                if (now - lastSync >= FIRESTORE_SYNC_THROTTLE_MS) {
+                    syncRemoteFirestoreCatalogIfAvailable(appContext)
+                    prefs.edit().putLong(KEY_LAST_FIRESTORE_CATALOG_SYNC, now).apply()
                 }
             }
-
-            // 4. Observe Bookmarks
-            launch {
-                dao.observeAllBookmarks().collect { entities ->
-                    _bookmarksFlow.value = entities.map { entity ->
-                        KitabBookmarkModel(
-                            id = entity.id,
-                            bookId = entity.bookId,
-                            bookTitleBangla = entity.bookTitleBangla,
-                            volumeNumber = entity.volumeNumber,
-                            pageNumber = entity.pageNumber,
-                            note = entity.note,
-                            createdAtMillis = entity.createdAtMillis
-                        )
-                    }
-                }
-            }
-
-            // 5. Throttled Firestore `/kitab_catalog` sync (at most once per 12h)
-            syncApprovedCatalogFromFirestoreIfDue(appContext, force = false)
         }
     }
 
-    /**
-     * Synchronous initialization helper for deterministic JVM/Robolectric tests.
-     */
-    suspend fun initAndAwaitSync(context: Context, customStorageDir: File? = null) {
-        val appContext = context.applicationContext ?: context
-        if (customStorageDir != null) {
-            customStorageDirOverride = customStorageDir
+    suspend fun initAndAwaitSync(context: Context, customDir: File? = null) = withContext(ioDispatcher) {
+        if (customDir != null) {
+            customStorageDirOverride = customDir
         }
+        val appContext = context.applicationContext ?: context
+        val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val savedThemeId = prefs.getString(KEY_READER_THEME, KitabReaderThemeMode.MUSHAF_CREAM.id)
+        _readerThemeFlow.value = KitabReaderThemeMode.entries.firstOrNull { it.id == savedThemeId }
+            ?: KitabReaderThemeMode.MUSHAF_CREAM
+        _readerSettingsFlow.value = loadReaderSettingsFromPrefs(prefs)
+
         val dao = KitabLibraryDatabase.getInstance(appContext).kitabLibraryDao()
-        dao.upsertCatalogItems(KitabVerifiedCatalogData.defaultCatalogEntities)
-        reconcileDiskStateWithDatabaseInternal(appContext, dao)
+        val existingCatalog = dao.getAllApprovedCatalogOnce()
+        if (existingCatalog.isEmpty()) {
+            dao.upsertCatalogItems(KitabVerifiedCatalogData.defaultCatalogEntities)
+        } else {
+            val existingIds = existingCatalog.map { it.bookId }.toSet()
+            val missingDefaults = KitabVerifiedCatalogData.defaultCatalogEntities.filter { it.bookId !in existingIds }
+            if (missingDefaults.isNotEmpty()) {
+                dao.upsertCatalogItems(missingDefaults)
+            }
+        }
+
+        reconcileLocalDiskStateWithDatabase(appContext, dao)
         refreshSnapshotFromDao(dao)
         isInitialized = true
     }
 
-    fun setCustomStorageDirectoryForTesting(dir: File?) {
-        customStorageDirOverride = dir
-        pageBitmapCache.evictAll()
-    }
+    private suspend fun reconcileLocalDiskStateWithDatabase(context: Context, dao: KitabLibraryDao) {
+        val allCatalog = dao.getAllApprovedCatalogOnce()
+        val localStatesMap = dao.getAllLocalStatesOnce().associateBy { it.bookId }
 
-    fun getPdfStorageDirectory(context: Context): File {
-        val customDir = customStorageDirOverride
-        if (customDir != null) {
-            if (!customDir.exists()) customDir.mkdirs()
-            return customDir
-        }
-        val appContext = context.applicationContext ?: context
-        val dir = File(appContext.filesDir, PDF_DIR_NAME)
-        if (!dir.exists()) {
-            dir.mkdirs()
-        }
-        return dir
-    }
-
-    fun getFinalPdfFile(context: Context, bookId: String): File {
-        val safeId = sanitizeFileName(bookId)
-        return File(getPdfStorageDirectory(context), "$safeId.pdf")
-    }
-
-    fun getPartialPdfFile(context: Context, bookId: String): File {
-        val safeId = sanitizeFileName(bookId)
-        return File(getPdfStorageDirectory(context), "$safeId.pdf.part")
-    }
-
-    private fun sanitizeFileName(bookId: String): String {
-        return bookId.replace(Regex("[^a-zA-Z0-9_\\-]"), "_")
-    }
-
-    fun isDeviceOnline(context: Context): Boolean {
-        isNetworkConnectedOverride?.let { return it }
-        return runCatching {
-            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-                ?: return true
-            val network = cm.activeNetwork ?: return false
-            val caps = cm.getNetworkCapabilities(network) ?: return false
-            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-        }.getOrDefault(true)
-    }
-
-    fun setReaderThemeMode(context: Context, themeMode: KitabReaderThemeMode) {
-        _readerThemeFlow.value = themeMode
-        val appContext = context.applicationContext ?: context
-        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_READER_THEME, themeMode.id)
-            .apply()
-    }
-
-    private suspend fun reconcileDiskStateWithDatabaseInternal(
-        context: Context,
-        dao: KitabLibraryDao
-    ) {
-        val catalog = dao.getAllApprovedCatalogOnce()
-        val existingStates = dao.getAllLocalStatesOnce().associateBy { it.bookId }
-
-        for (meta in catalog) {
+        for (meta in allCatalog) {
             val finalFile = getFinalPdfFile(context, meta.bookId)
             val partFile = getPartialPdfFile(context, meta.bookId)
-            val currentState = existingStates[meta.bookId]
+            val prevState = localStatesMap[meta.bookId]
 
-            if (!meta.isOpenLicenseVerified || meta.downloadUrl.isBlank()) {
-                // Reference-only book (no open license)
-                if (currentState == null || currentState.downloadStatus != KitabDownloadStatus.REFERENCE_ONLY_NO_LICENSE.name) {
-                    dao.upsertLocalState(
-                        KitabLocalStateEntity(
-                            bookId = meta.bookId,
-                            downloadStatus = KitabDownloadStatus.REFERENCE_ONLY_NO_LICENSE.name,
-                            totalBytes = meta.fileSizeBytes
-                        )
-                    )
-                }
-                continue
-            }
-
-            if (finalFile.exists() && finalFile.length() > 0L) {
-                val hasValidHeader = hasValidPdfHeader(finalFile)
-                val sizeMatches = meta.fileSizeBytes <= 0L || finalFile.length() == meta.fileSizeBytes
-                if (hasValidHeader && sizeMatches) {
-                    val pageCount = if ((currentState?.totalPageCount ?: 0) > 0) {
-                        currentState!!.totalPageCount
+            if (finalFile.exists() && finalFile.length() > 0L && hasValidPdfHeader(finalFile)) {
+                val matchesSize = meta.fileSizeBytes <= 0L || finalFile.length() == meta.fileSizeBytes
+                if (matchesSize) {
+                    val pageCount = if ((prevState?.totalPageCount ?: 0) > 0) {
+                        prevState!!.totalPageCount
                     } else {
-                        inspectPdfPageCount(finalFile)
+                        inspectPdfPageCount(finalFile).coerceAtLeast(1)
                     }
                     dao.upsertLocalState(
                         KitabLocalStateEntity(
@@ -343,20 +263,18 @@ object KitabDownloadAndStorageManager {
                             downloadStatus = KitabDownloadStatus.DOWNLOADED_VERIFIED.name,
                             localFilePath = finalFile.absolutePath,
                             downloadedBytes = finalFile.length(),
-                            totalBytes = meta.fileSizeBytes,
+                            totalBytes = meta.fileSizeBytes.coerceAtLeast(finalFile.length()),
                             sha256Verified = true,
                             verifiedSha256Hex = meta.sha256Checksum,
-                            downloadedAtMillis = currentState?.downloadedAtMillis?.takeIf { it > 0L }
-                                ?: finalFile.lastModified().takeIf { it > 0L }
-                                ?: System.currentTimeMillis(),
-                            lastReadPage = (currentState?.lastReadPage ?: 1).coerceAtLeast(1),
+                            downloadedAtMillis = prevState?.downloadedAtMillis?.takeIf { it > 0L }
+                                ?: finalFile.lastModified(),
+                            lastReadPage = (prevState?.lastReadPage ?: 1).coerceIn(1, pageCount),
                             totalPageCount = pageCount,
-                            lastReadTimestampMillis = currentState?.lastReadTimestampMillis ?: 0L,
+                            lastReadTimestampMillis = prevState?.lastReadTimestampMillis ?: 0L,
                             errorMessageBangla = ""
                         )
                     )
                 } else {
-                    // Corrupted final file on disk -> quarantine/remove
                     runCatching { finalFile.delete() }
                     dao.upsertLocalState(
                         KitabLocalStateEntity(
@@ -366,79 +284,89 @@ object KitabDownloadAndStorageManager {
                             downloadedBytes = 0L,
                             totalBytes = meta.fileSizeBytes,
                             sha256Verified = false,
-                            errorMessageBangla = "সংরক্ষিত PDF ফাইলটি ক্ষতিগ্রস্ত বা অসম্পূর্ণ হওয়ায় বাতিল করা হয়েছে। পুনরায় ডাউনলোড করুন।"
+                            errorMessageBangla = "অসম্পূর্ণ বা ক্ষতিগ্রস্ত ফাইল শনাক্ত হওয়ায় মুছে ফেলা হয়েছে।"
                         )
                     )
                 }
             } else if (partFile.exists() && partFile.length() > 0L) {
+                val partLen = partFile.length()
                 dao.upsertLocalState(
                     KitabLocalStateEntity(
                         bookId = meta.bookId,
                         downloadStatus = KitabDownloadStatus.PAUSED.name,
                         localFilePath = "",
-                        downloadedBytes = partFile.length(),
+                        downloadedBytes = partLen,
                         totalBytes = meta.fileSizeBytes,
                         sha256Verified = false,
-                        lastReadPage = currentState?.lastReadPage ?: 1,
-                        totalPageCount = currentState?.totalPageCount ?: 0,
-                        errorMessageBangla = ""
+                        lastReadPage = prevState?.lastReadPage ?: 1,
+                        totalPageCount = prevState?.totalPageCount ?: 0,
+                        errorMessageBangla = "ডাউনলোড বিরতি দেওয়া হয়েছে (${KitabFormatUtils.formatSizeMbBangla(partLen)} সংরক্ষিত)"
                     )
                 )
-            } else if (currentState != null && currentState.downloadStatus == KitabDownloadStatus.DOWNLOADED_VERIFIED.name) {
-                // State said downloaded, but file was missing from current storage directory
-                dao.upsertLocalState(
-                    currentState.copy(
-                        downloadStatus = KitabDownloadStatus.NOT_DOWNLOADED.name,
-                        localFilePath = "",
-                        downloadedBytes = 0L,
-                        sha256Verified = false
+            } else {
+                val defaultStatus = if (meta.isOpenLicenseVerified) {
+                    KitabDownloadStatus.NOT_DOWNLOADED
+                } else {
+                    KitabDownloadStatus.REFERENCE_ONLY_NO_LICENSE
+                }
+                if (prevState != null && prevState.downloadStatus != defaultStatus.name &&
+                    prevState.downloadStatus != KitabDownloadStatus.FAILED_CORRUPTED.name
+                ) {
+                    dao.upsertLocalState(
+                        prevState.copy(
+                            downloadStatus = defaultStatus.name,
+                            localFilePath = "",
+                            downloadedBytes = 0L,
+                            sha256Verified = false,
+                            errorMessageBangla = ""
+                        )
                     )
-                )
+                }
             }
         }
     }
 
     suspend fun refreshSnapshotFromDao(dao: KitabLibraryDao) {
-        val metadataList = dao.getAllApprovedCatalogOnce()
-        val stateMap = dao.getAllLocalStatesOnce().associateBy { it.bookId }
-        _catalogItemsFlow.value = metadataList.map { meta ->
-            mergeMetadataWithLocalState(meta, stateMap[meta.bookId])
+        val catalogEntities = dao.getAllApprovedCatalogOnce()
+        val statesByBook = dao.getAllLocalStatesOnce().associateBy { it.bookId }
+        val bookmarksEntities = dao.getAllBookmarksOnce()
+
+        _catalogItemsFlow.value = catalogEntities.map { meta ->
+            val state = statesByBook[meta.bookId]
+            combineEntityAndState(meta, state, null)
         }
-        val allBookmarks = mutableListOf<KitabBookmarkModel>()
-        for (meta in metadataList) {
-            val bms = dao.getBookmarksForBookOnce(meta.bookId)
-            for (entity in bms) {
-                allBookmarks.add(
-                    KitabBookmarkModel(
-                        id = entity.id,
-                        bookId = entity.bookId,
-                        bookTitleBangla = entity.bookTitleBangla,
-                        volumeNumber = entity.volumeNumber,
-                        pageNumber = entity.pageNumber,
-                        note = entity.note,
-                        createdAtMillis = entity.createdAtMillis
-                    )
-                )
-            }
+
+        _bookmarksFlow.value = bookmarksEntities.map { entity ->
+            KitabBookmarkModel(
+                id = entity.id,
+                bookId = entity.bookId,
+                bookTitleBangla = entity.bookTitleBangla,
+                volumeNumber = entity.volumeNumber,
+                pageNumber = entity.pageNumber,
+                note = entity.note,
+                createdAtMillis = entity.createdAtMillis
+            )
         }
-        _bookmarksFlow.value = allBookmarks.sortedByDescending { it.createdAtMillis }
     }
 
-    private fun mergeMetadataWithLocalState(
+    private fun combineEntityAndState(
         meta: KitabMetadataEntity,
-        local: KitabLocalStateEntity?
+        state: KitabLocalStateEntity?,
+        context: Context?
     ): KitabItemUiModel {
-        val defaultStatus = if (!meta.isOpenLicenseVerified || meta.downloadUrl.isBlank()) {
-            KitabDownloadStatus.REFERENCE_ONLY_NO_LICENSE
-        } else {
-            KitabDownloadStatus.NOT_DOWNLOADED
+        val resolvedStatus = when {
+            !meta.isOpenLicenseVerified -> KitabDownloadStatus.REFERENCE_ONLY_NO_LICENSE
+            state == null -> KitabDownloadStatus.NOT_DOWNLOADED
+            else -> runCatching { KitabDownloadStatus.valueOf(state.downloadStatus) }
+                .getOrDefault(KitabDownloadStatus.NOT_DOWNLOADED)
         }
-        val resolvedStatus = if (local != null) {
-            runCatching { KitabDownloadStatus.valueOf(local.downloadStatus) }.getOrDefault(defaultStatus)
-        } else {
-            defaultStatus
+        val localPath = state?.localFilePath.orEmpty().ifBlank {
+            if (context != null && resolvedStatus == KitabDownloadStatus.DOWNLOADED_VERIFIED) {
+                getFinalPdfFile(context, meta.bookId).absolutePath
+            } else {
+                ""
+            }
         }
-
         return KitabItemUiModel(
             bookId = meta.bookId,
             seriesId = meta.seriesId,
@@ -462,47 +390,107 @@ object KitabDownloadAndStorageManager {
             coverPrimaryHex = meta.coverPrimaryHex,
             coverAccentHex = meta.coverAccentHex,
             downloadStatus = resolvedStatus,
-            downloadedBytes = local?.downloadedBytes ?: 0L,
-            localFilePath = local?.localFilePath ?: "",
-            sha256Verified = local?.sha256Verified ?: false,
-            downloadedAtMillis = local?.downloadedAtMillis ?: 0L,
-            lastReadPage = (local?.lastReadPage ?: 1).coerceAtLeast(1),
-            totalPageCount = local?.totalPageCount ?: 0,
-            errorMessageBangla = local?.errorMessageBangla ?: ""
+            downloadedBytes = state?.downloadedBytes ?: 0L,
+            localFilePath = localPath,
+            sha256Verified = state?.sha256Verified ?: false,
+            downloadedAtMillis = state?.downloadedAtMillis ?: 0L,
+            lastReadPage = (state?.lastReadPage ?: 1).coerceAtLeast(1),
+            totalPageCount = state?.totalPageCount ?: 0,
+            errorMessageBangla = state?.errorMessageBangla.orEmpty()
         )
     }
 
-    /**
-     * Starts or resumes downloading a Kitab PDF into app-private storage (`filesDir/qawmi_kitab_library_pdfs`).
-     */
+    fun isDeviceOnline(context: Context): Boolean {
+        isNetworkConnectedOverride?.let { return it }
+        return runCatching {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                ?: return@runCatching true
+            val network = cm.activeNetwork ?: return@runCatching false
+            val caps = cm.getNetworkCapabilities(network) ?: return@runCatching false
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        }.getOrDefault(true)
+    }
+
+    fun hasValidPdfHeader(file: File): Boolean {
+        if (!file.exists() || file.length() < 8L) return false
+        return runCatching {
+            FileInputStream(file).use { fis ->
+                val header = ByteArray(8)
+                val read = fis.read(header)
+                if (read < 5) return@use false
+                val str = String(header, 0, read, Charsets.US_ASCII)
+                str.startsWith("%PDF-")
+            }
+        }.getOrDefault(false)
+    }
+
+    fun computeSha256Hex(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        FileInputStream(file).use { fis ->
+            val buffer = ByteArray(16 * 1024)
+            while (true) {
+                val read = fis.read(buffer)
+                if (read <= 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    fun inspectPdfPageCount(pdfFile: File): Int {
+        if (!pdfFile.exists() || !hasValidPdfHeader(pdfFile)) return 0
+        val nativeCount = runCatching {
+            ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
+                PdfRenderer(pfd).use { renderer ->
+                    renderer.pageCount
+                }
+            }
+        }.getOrDefault(0)
+        if (nativeCount > 0) return nativeCount
+
+        return runCatching {
+            val sampleSize = pdfFile.length().coerceAtMost(512 * 1024L).toInt()
+            val bytes = ByteArray(sampleSize)
+            FileInputStream(pdfFile).use { it.read(bytes) }
+            val content = String(bytes, Charsets.ISO_8859_1)
+            val regex = Regex("/Type\\s*/Page\\b")
+            regex.findAll(content).count().coerceAtLeast(1)
+        }.getOrDefault(1)
+    }
+
+    fun buildValidTestPdfBytes(
+        title: String,
+        pageCount: Int = 6,
+        minTargetSizeBytes: Int = 24 * 1024
+    ): ByteArray {
+        val safePages = pageCount.coerceIn(1, 50)
+        val sb = StringBuilder()
+        sb.append("%PDF-1.4\n")
+        sb.append("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
+        val kidsRefs = (0 until safePages).joinToString(" ") { "${3 + it} 0 R" }
+        sb.append("2 0 obj\n<< /Type /Pages /Kids [ $kidsRefs ] /Count $safePages >>\nendobj\n")
+        for (i in 0 until safePages) {
+            val objId = 3 + i
+            sb.append("$objId 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] >>\nendobj\n")
+        }
+        sb.append("% Kitab: $title\n")
+        while (sb.length < minTargetSizeBytes) {
+            sb.append("% PADDING_LINE_FOR_HTTP_RANGE_AND_SHA256_VERIFICATION_0123456789ABCDEF\n")
+        }
+        sb.append("%%EOF\n")
+        return sb.toString().toByteArray(Charsets.UTF_8)
+    }
+
     fun startOrResumeDownload(context: Context, bookId: String) {
         val appContext = context.applicationContext ?: context
         if (activeDownloadJobs[bookId]?.isActive == true) return
-
         pausedFlags[bookId] = false
         cancelledFlags[bookId] = false
 
         val job = managerScope.launch(ioDispatcher) {
-            executeDownloadInternal(appContext, bookId)
+            executeDownloadInternal(appContext, bookId, pauseAfterBytes = -1L)
         }
         activeDownloadJobs[bookId] = job
-    }
-
-    /**
-     * Synchronous suspend version of `startOrResumeDownload` for deterministic testing and sequential workflows.
-     */
-    suspend fun downloadBookSynchronously(
-        context: Context,
-        bookId: String,
-        pauseAfterBytes: Long = -1L
-    ): KitabItemUiModel? = withContext(ioDispatcher) {
-        val appContext = context.applicationContext ?: context
-        pausedFlags[bookId] = false
-        cancelledFlags[bookId] = false
-        executeDownloadInternal(appContext, bookId, pauseAfterBytes = pauseAfterBytes)
-        val dao = KitabLibraryDatabase.getInstance(appContext).kitabLibraryDao()
-        refreshSnapshotFromDao(dao)
-        _catalogItemsFlow.value.firstOrNull { it.bookId == bookId }
     }
 
     fun pauseDownload(context: Context, bookId: String) {
@@ -511,21 +499,20 @@ object KitabDownloadAndStorageManager {
         val appContext = context.applicationContext ?: context
         managerScope.launch(ioDispatcher) {
             val dao = KitabLibraryDatabase.getInstance(appContext).kitabLibraryDao()
-            val meta = dao.getCatalogItemById(bookId) ?: return@launch
             val partFile = getPartialPdfFile(appContext, bookId)
-            val currentBytes = if (partFile.exists()) partFile.length() else 0L
-            val existing = dao.getLocalStateById(bookId)
+            val meta = dao.getCatalogItemById(bookId)
+            val prevState = dao.getLocalStateById(bookId)
+            val savedBytes = if (partFile.exists()) partFile.length() else (prevState?.downloadedBytes ?: 0L)
             dao.upsertLocalState(
                 KitabLocalStateEntity(
                     bookId = bookId,
                     downloadStatus = KitabDownloadStatus.PAUSED.name,
-                    localFilePath = "",
-                    downloadedBytes = currentBytes,
-                    totalBytes = meta.fileSizeBytes,
+                    downloadedBytes = savedBytes,
+                    totalBytes = meta?.fileSizeBytes ?: (prevState?.totalBytes ?: 0L),
                     sha256Verified = false,
-                    lastReadPage = existing?.lastReadPage ?: 1,
-                    totalPageCount = existing?.totalPageCount ?: 0,
-                    errorMessageBangla = "ডাউনলোড বিরতি দেওয়া হয়েছে (${KitabFormatUtils.formatSizeMbBangla(currentBytes)} সংরক্ষিত)"
+                    lastReadPage = prevState?.lastReadPage ?: 1,
+                    totalPageCount = prevState?.totalPageCount ?: 0,
+                    errorMessageBangla = "ডাউনলোড বিরতি দেওয়া হয়েছে (${KitabFormatUtils.formatSizeMbBangla(savedBytes)} সংরক্ষিত)"
                 )
             )
             refreshSnapshotFromDao(dao)
@@ -534,32 +521,29 @@ object KitabDownloadAndStorageManager {
 
     fun cancelDownload(context: Context, bookId: String) {
         cancelledFlags[bookId] = true
-        pausedFlags[bookId] = false
+        pausedFlags.remove(bookId)
         activeDownloadJobs[bookId]?.cancel()
         val appContext = context.applicationContext ?: context
         managerScope.launch(ioDispatcher) {
-            cancelDownloadInternal(appContext, bookId)
+            val dao = KitabLibraryDatabase.getInstance(appContext).kitabLibraryDao()
+            val partFile = getPartialPdfFile(appContext, bookId)
+            runCatching { if (partFile.exists()) partFile.delete() }
+            val meta = dao.getCatalogItemById(bookId)
+            dao.upsertLocalState(
+                KitabLocalStateEntity(
+                    bookId = bookId,
+                    downloadStatus = KitabDownloadStatus.NOT_DOWNLOADED.name,
+                    localFilePath = "",
+                    downloadedBytes = 0L,
+                    totalBytes = meta?.fileSizeBytes ?: 0L,
+                    sha256Verified = false,
+                    errorMessageBangla = ""
+                )
+            )
+            refreshSnapshotFromDao(dao)
         }
     }
 
-    suspend fun cancelDownloadSynchronously(context: Context, bookId: String) = withContext(ioDispatcher) {
-        cancelledFlags[bookId] = true
-        pausedFlags[bookId] = false
-        activeDownloadJobs[bookId]?.cancel()
-        cancelDownloadInternal(context.applicationContext ?: context, bookId)
-    }
-
-    private suspend fun cancelDownloadInternal(appContext: Context, bookId: String) {
-        val dao = KitabLibraryDatabase.getInstance(appContext).kitabLibraryDao()
-        val partFile = getPartialPdfFile(appContext, bookId)
-        runCatching { if (partFile.exists()) partFile.delete() }
-        dao.deleteLocalStateById(bookId)
-        refreshSnapshotFromDao(dao)
-    }
-
-    /**
-     * Deletes only the local PDF file for `bookId` while keeping the catalog entry and other downloaded books intact.
-     */
     fun deleteDownloadedBook(context: Context, bookId: String, onComplete: () -> Unit = {}) {
         val appContext = context.applicationContext ?: context
         managerScope.launch(ioDispatcher) {
@@ -572,107 +556,101 @@ object KitabDownloadAndStorageManager {
 
     suspend fun deleteDownloadedBookSynchronously(context: Context, bookId: String) = withContext(ioDispatcher) {
         val appContext = context.applicationContext ?: context
-        activeDownloadJobs[bookId]?.cancel()
+        cancelledFlags[bookId] = true
+        pausedFlags.remove(bookId)
+        activeDownloadJobs.remove(bookId)?.cancel()
+
         val finalFile = getFinalPdfFile(appContext, bookId)
         val partFile = getPartialPdfFile(appContext, bookId)
         runCatching { if (finalFile.exists()) finalFile.delete() }
         runCatching { if (partFile.exists()) partFile.delete() }
 
-        // Evict cached bitmaps for this book only
-        evictBitmapsForBook(bookId)
-
         val dao = KitabLibraryDatabase.getInstance(appContext).kitabLibraryDao()
-        dao.deleteLocalStateById(bookId)
-        refreshSnapshotFromDao(dao)
-    }
-
-    private fun evictBitmapsForBook(bookId: String) {
-        val snapshot = pageBitmapCache.snapshot()
-        for (key in snapshot.keys) {
-            if (key.startsWith("$bookId:")) {
-                pageBitmapCache.remove(key)
-            }
-        }
-    }
-
-    private suspend fun executeDownloadInternal(
-        appContext: Context,
-        bookId: String,
-        pauseAfterBytes: Long = -1L
-    ) {
-        val dao = KitabLibraryDatabase.getInstance(appContext).kitabLibraryDao()
-        val meta = dao.getCatalogItemById(bookId) ?: return
-
-        if (!meta.isOpenLicenseVerified || !meta.isAdminApproved || meta.downloadUrl.isBlank()) {
-            dao.upsertLocalState(
-                KitabLocalStateEntity(
-                    bookId = bookId,
-                    downloadStatus = KitabDownloadStatus.REFERENCE_ONLY_NO_LICENSE.name,
-                    totalBytes = meta.fileSizeBytes,
-                    errorMessageBangla = "এই কিতাবটির উন্মুক্ত ডাউনলোড লাইসেন্স নেই; শুধুমাত্র পরিচিতি প্রদর্শিত হচ্ছে।"
-                )
-            )
-            refreshSnapshotFromDao(dao)
-            return
-        }
-
-        // Check if already downloaded & verified on disk
-        val finalFile = getFinalPdfFile(appContext, bookId)
-        if (finalFile.exists() && finalFile.length() == meta.fileSizeBytes && hasValidPdfHeader(finalFile)) {
-            val sha = computeSha256Hex(finalFile)
-            if (sha.equals(meta.sha256Checksum, ignoreCase = true)) {
-                val pages = inspectPdfPageCount(finalFile)
-                val prev = dao.getLocalStateById(bookId)
-                dao.upsertLocalState(
-                    KitabLocalStateEntity(
-                        bookId = bookId,
-                        downloadStatus = KitabDownloadStatus.DOWNLOADED_VERIFIED.name,
-                        localFilePath = finalFile.absolutePath,
-                        downloadedBytes = finalFile.length(),
-                        totalBytes = meta.fileSizeBytes,
-                        sha256Verified = true,
-                        verifiedSha256Hex = sha,
-                        downloadedAtMillis = prev?.downloadedAtMillis?.takeIf { it > 0L } ?: System.currentTimeMillis(),
-                        lastReadPage = (prev?.lastReadPage ?: 1).coerceAtLeast(1),
-                        totalPageCount = pages,
-                        errorMessageBangla = ""
-                    )
-                )
-                refreshSnapshotFromDao(dao)
-                return
-            }
-        }
-
-        val partFile = getPartialPdfFile(appContext, bookId)
-        val existingBytes = if (partFile.exists()) partFile.length() else 0L
-
-        if (!isDeviceOnline(appContext)) {
-            val statusWhenOffline = if (existingBytes > 0L) {
-                KitabDownloadStatus.PAUSED.name
-            } else {
-                KitabDownloadStatus.NOT_DOWNLOADED.name
-            }
-            dao.upsertLocalState(
-                KitabLocalStateEntity(
-                    bookId = bookId,
-                    downloadStatus = statusWhenOffline,
-                    downloadedBytes = existingBytes,
-                    totalBytes = meta.fileSizeBytes,
-                    sha256Verified = false,
-                    errorMessageBangla = "ইন্টারনেট সংযোগ নেই। কিতাবটি ডাউনলোড করতে ইন্টারনেট সংযোগ চালু করুন।"
-                )
-            )
-            refreshSnapshotFromDao(dao)
-            return
-        }
-
-        // Mark as DOWNLOADING
+        val meta = dao.getCatalogItemById(bookId)
         val prevState = dao.getLocalStateById(bookId)
         dao.upsertLocalState(
             KitabLocalStateEntity(
                 bookId = bookId,
+                downloadStatus = KitabDownloadStatus.NOT_DOWNLOADED.name,
+                localFilePath = "",
+                downloadedBytes = 0L,
+                totalBytes = meta?.fileSizeBytes ?: 0L,
+                sha256Verified = false,
+                lastReadPage = prevState?.lastReadPage ?: 1,
+                totalPageCount = prevState?.totalPageCount ?: 0,
+                errorMessageBangla = ""
+            )
+        )
+        refreshSnapshotFromDao(dao)
+    }
+
+    suspend fun downloadBookSynchronously(
+        context: Context,
+        bookId: String,
+        pauseAfterBytes: Long = -1L
+    ): KitabItemUiModel? = withContext(ioDispatcher) {
+        val appContext = context.applicationContext ?: context
+        pausedFlags[bookId] = false
+        cancelledFlags[bookId] = false
+        executeDownloadInternal(appContext, bookId, pauseAfterBytes)
+        val dao = KitabLibraryDatabase.getInstance(appContext).kitabLibraryDao()
+        refreshSnapshotFromDao(dao)
+        _catalogItemsFlow.value.firstOrNull { it.bookId == bookId }
+    }
+
+    private suspend fun executeDownloadInternal(
+        context: Context,
+        bookId: String,
+        pauseAfterBytes: Long
+    ) {
+        val dao = KitabLibraryDatabase.getInstance(context).kitabLibraryDao()
+        val meta = dao.getCatalogItemById(bookId) ?: return
+        val prevState = dao.getLocalStateById(bookId)
+
+        if (!meta.isOpenLicenseVerified || !meta.isAdminApproved || !meta.downloadUrl.startsWith("https://")) {
+            dao.upsertLocalState(
+                KitabLocalStateEntity(
+                    bookId = bookId,
+                    downloadStatus = KitabDownloadStatus.REFERENCE_ONLY_NO_LICENSE.name,
+                    errorMessageBangla = "এই কিতাবটির ডিজিটাল ডাউনলোড লাইসেন্স অনুমোদিত নয়।"
+                )
+            )
+            refreshSnapshotFromDao(dao)
+            return
+        }
+
+        if (!isDeviceOnline(context)) {
+            val partFile = getPartialPdfFile(context, bookId)
+            val savedBytes = if (partFile.exists()) partFile.length() else 0L
+            dao.upsertLocalState(
+                KitabLocalStateEntity(
+                    bookId = bookId,
+                    downloadStatus = if (savedBytes > 0L) KitabDownloadStatus.PAUSED.name else KitabDownloadStatus.FAILED_CORRUPTED.name,
+                    downloadedBytes = savedBytes,
+                    totalBytes = meta.fileSizeBytes,
+                    sha256Verified = false,
+                    lastReadPage = prevState?.lastReadPage ?: 1,
+                    totalPageCount = prevState?.totalPageCount ?: 0,
+                    errorMessageBangla = "ইন্টারনেট সংযোগ নেই। অনলাইনে যুক্ত হয়ে ডাউনলোড করুন।"
+                )
+            )
+            refreshSnapshotFromDao(dao)
+            return
+        }
+
+        val finalFile = getFinalPdfFile(context, bookId)
+        val partFile = getPartialPdfFile(context, bookId)
+        var resumeOffset = if (partFile.exists()) partFile.length() else 0L
+        if (meta.fileSizeBytes > 0L && resumeOffset > meta.fileSizeBytes) {
+            runCatching { partFile.delete() }
+            resumeOffset = 0L
+        }
+
+        dao.upsertLocalState(
+            KitabLocalStateEntity(
+                bookId = bookId,
                 downloadStatus = KitabDownloadStatus.DOWNLOADING.name,
-                downloadedBytes = existingBytes,
+                downloadedBytes = resumeOffset,
                 totalBytes = meta.fileSizeBytes,
                 sha256Verified = false,
                 lastReadPage = prevState?.lastReadPage ?: 1,
@@ -684,19 +662,18 @@ object KitabDownloadAndStorageManager {
 
         var response: KitabNetworkStreamResponse? = null
         try {
-            response = networkTransport.openStream(meta.downloadUrl, existingBytes)
-            val resumeOffset = if (existingBytes > 0L && response.isPartialContent) {
-                existingBytes
-            } else {
-                // Server returned 200 full stream; restart part file from byte 0
-                if (partFile.exists()) partFile.delete()
-                0L
+            response = networkTransport.openStream(meta.downloadUrl, resumeOffset)
+            if (resumeOffset > 0L && !response.isPartialContent) {
+                runCatching { partFile.delete() }
+                resumeOffset = 0L
             }
 
-            val totalExpectedBytes = when {
-                meta.fileSizeBytes > 0L -> meta.fileSizeBytes
-                response.contentLengthBytes > 0L -> resumeOffset + response.contentLengthBytes
-                else -> 0L
+            val totalExpectedBytes = if (meta.fileSizeBytes > 0L) {
+                meta.fileSizeBytes
+            } else if (response.contentLengthBytes > 0L) {
+                resumeOffset + response.contentLengthBytes
+            } else {
+                0L
             }
 
             RandomAccessFile(partFile, "rw").use { raf ->
@@ -757,7 +734,6 @@ object KitabDownloadAndStorageManager {
                 }
             }
 
-            // Transition to VERIFYING_CHECKSUM
             dao.upsertLocalState(
                 KitabLocalStateEntity(
                     bookId = bookId,
@@ -772,56 +748,51 @@ object KitabDownloadAndStorageManager {
             )
             refreshSnapshotFromDao(dao)
 
-            // Verify 1: File exists & non-empty
             if (!partFile.exists() || partFile.length() <= 0L) {
                 markCorruptedAndDeletePart(
                     dao = dao,
                     partFile = partFile,
                     bookId = bookId,
                     totalBytes = meta.fileSizeBytes,
-                    reasonBangla = "ডাউনলোডকৃত ফাইলটি খালি বা পাওয়া যায়নি। পুনরায় চেষ্টা করুন।"
+                    reasonBangla = "ডাউনলোডকৃত ফাইলটি খালি বা অসম্পূর্ণ। পুনরায় চেষ্টা করুন।"
                 )
                 return
             }
 
-            // Verify 2: Exact file size check
             if (meta.fileSizeBytes > 0L && partFile.length() != meta.fileSizeBytes) {
                 markCorruptedAndDeletePart(
                     dao = dao,
                     partFile = partFile,
                     bookId = bookId,
                     totalBytes = meta.fileSizeBytes,
-                    reasonBangla = "ডাউনলোড অসম্পূর্ণ (${partFile.length()} / ${meta.fileSizeBytes} বাইট)। ফাইলটি বাতিল করা হয়েছে।"
+                    reasonBangla = "ফাইলের আকার মিলেনি (${partFile.length()} / ${meta.fileSizeBytes} bytes)।"
                 )
                 return
             }
 
-            // Verify 3: `%PDF-` magic header check
             if (!hasValidPdfHeader(partFile)) {
                 markCorruptedAndDeletePart(
                     dao = dao,
                     partFile = partFile,
                     bookId = bookId,
                     totalBytes = meta.fileSizeBytes,
-                    reasonBangla = "ডাউনলোডকৃত ফাইলটি বৈধ PDF নয় (%PDF হেডার অনুপস্থিত)। নিরাপত্তার স্বার্থে ব্লক করা হয়েছে।"
+                    reasonBangla = "ডাউনলোডকৃত ফাইলটি বৈধ PDF নয় (%PDF- হেডার অনুপস্থিত)।"
                 )
                 return
             }
 
-            // Verify 4: SHA-256 cryptographic checksum check
             val actualSha256 = computeSha256Hex(partFile)
-            if (!actualSha256.equals(meta.sha256Checksum, ignoreCase = true)) {
+            if (meta.sha256Checksum.isNotBlank() && !actualSha256.equals(meta.sha256Checksum, ignoreCase = true)) {
                 markCorruptedAndDeletePart(
                     dao = dao,
                     partFile = partFile,
                     bookId = bookId,
                     totalBytes = meta.fileSizeBytes,
-                    reasonBangla = "ডাউনলোডকৃত PDF ফাইলটির SHA-256 Checksum মেলেনি (ক্ষতিগ্রস্ত ফাইল)। নিরাপত্তার স্বার্থে ওপেন ব্লক করা হয়েছে।"
+                    reasonBangla = "SHA-256 Checksum যাচাই ব্যর্থ হয়েছে (ফাইলটি পরিবর্তিত বা ক্ষতিগ্রস্ত)।"
                 )
                 return
             }
 
-            // Atomically move verified `.pdf.part` -> `.pdf`
             if (finalFile.exists()) {
                 finalFile.delete()
             }
@@ -831,7 +802,9 @@ object KitabDownloadAndStorageManager {
                 partFile.delete()
             }
 
-            val pageCount = inspectPdfPageCount(finalFile)
+            val pageCount = inspectPdfPageCount(finalFile).coerceAtLeast(1)
+            val initialLastPage = (prevState?.lastReadPage ?: 1).coerceIn(1, pageCount)
+
             dao.upsertLocalState(
                 KitabLocalStateEntity(
                     bookId = bookId,
@@ -842,7 +815,7 @@ object KitabDownloadAndStorageManager {
                     sha256Verified = true,
                     verifiedSha256Hex = actualSha256,
                     downloadedAtMillis = System.currentTimeMillis(),
-                    lastReadPage = (prevState?.lastReadPage ?: 1).coerceAtLeast(1),
+                    lastReadPage = initialLastPage,
                     totalPageCount = pageCount,
                     lastReadTimestampMillis = prevState?.lastReadTimestampMillis ?: System.currentTimeMillis(),
                     errorMessageBangla = ""
@@ -852,7 +825,17 @@ object KitabDownloadAndStorageManager {
         } catch (ce: CancellationException) {
             if (cancelledFlags[bookId] == true) {
                 runCatching { if (partFile.exists()) partFile.delete() }
-                dao.deleteLocalStateById(bookId)
+                dao.upsertLocalState(
+                    KitabLocalStateEntity(
+                        bookId = bookId,
+                        downloadStatus = KitabDownloadStatus.NOT_DOWNLOADED.name,
+                        localFilePath = "",
+                        downloadedBytes = 0L,
+                        totalBytes = meta.fileSizeBytes,
+                        sha256Verified = false,
+                        errorMessageBangla = ""
+                    )
+                )
             } else {
                 val savedBytes = if (partFile.exists()) partFile.length() else 0L
                 dao.upsertLocalState(
@@ -871,7 +854,6 @@ object KitabDownloadAndStorageManager {
             refreshSnapshotFromDao(dao)
         } catch (e: Exception) {
             val savedBytes = if (partFile.exists()) partFile.length() else 0L
-            // Network drop mid-download preserves partial file as PAUSED so user can resume without losing progress!
             val nextStatus = if (savedBytes > 0L) {
                 KitabDownloadStatus.PAUSED.name
             } else {
@@ -923,12 +905,6 @@ object KitabDownloadAndStorageManager {
         refreshSnapshotFromDao(dao)
     }
 
-    /**
-     * Validates whether a Kitab is downloaded, intact, and verified on THIS device before opening the Internal PDF Reader.
-     * Enforces:
-     * - Un-downloaded books cannot open (and if offline, returns a clear offline prompt).
-     * - Corrupted or modified PDF files on disk are blocked and flagged.
-     */
     suspend fun verifyAndPrepareBookForInternalReader(
         context: Context,
         bookId: String
@@ -956,7 +932,6 @@ object KitabDownloadAndStorageManager {
             )
         }
 
-        // Verify `%PDF-` header & file size integrity before opening
         if (!hasValidPdfHeader(finalFile) || (meta.fileSizeBytes > 0L && finalFile.length() != meta.fileSizeBytes)) {
             runCatching { finalFile.delete() }
             dao.upsertLocalState(
@@ -990,9 +965,6 @@ object KitabDownloadAndStorageManager {
         )
     }
 
-    /**
-     * Fast synchronous verification for already-verified books on disk so the Internal PDF Reader opens on the same UI frame.
-     */
     fun verifyReadyBookOnDiskFast(context: Context, book: KitabItemUiModel): KitabOpenReadResult? {
         if (!book.isReadyToReadOffline) return null
         val appContext = context.applicationContext ?: context
@@ -1013,9 +985,6 @@ object KitabDownloadAndStorageManager {
         )
     }
 
-    /**
-     * Updates the user's last read page in memory immediately and persists to local Room database (0 Firestore writes).
-     */
     fun recordPageRead(context: Context, bookId: String, pageNumber: Int, totalPages: Int) {
         val safePage = pageNumber.coerceAtLeast(1)
         _catalogItemsFlow.value = _catalogItemsFlow.value.map { item ->
@@ -1043,12 +1012,28 @@ object KitabDownloadAndStorageManager {
         val appContext = context.applicationContext ?: context
         val dao = KitabLibraryDatabase.getInstance(appContext).kitabLibraryDao()
         val safePage = pageNumber.coerceAtLeast(1)
-        dao.updateLastReadPage(
-            bookId = bookId,
-            pageNumber = safePage,
-            totalPages = totalPages,
-            timestampMillis = System.currentTimeMillis()
-        )
+        val existing = dao.getLocalStateById(bookId)
+        val now = System.currentTimeMillis()
+        if (existing != null) {
+            dao.updateLastReadPage(
+                bookId = bookId,
+                pageNumber = safePage,
+                totalPages = totalPages,
+                timestampMillis = now
+            )
+        } else {
+            val meta = dao.getCatalogItemById(bookId)
+            dao.upsertLocalState(
+                KitabLocalStateEntity(
+                    bookId = bookId,
+                    downloadStatus = KitabDownloadStatus.NOT_DOWNLOADED.name,
+                    totalBytes = meta?.fileSizeBytes ?: 0L,
+                    lastReadPage = safePage,
+                    totalPageCount = totalPages.coerceAtLeast(1),
+                    lastReadTimestampMillis = now
+                )
+            )
+        }
         refreshSnapshotFromDao(dao)
     }
 
@@ -1060,6 +1045,23 @@ object KitabDownloadAndStorageManager {
         pageNumber: Int,
         note: String = "গুরুত্বপূর্ণ পৃষ্ঠা"
     ) {
+        val currentList = _bookmarksFlow.value
+        val existingInMemory = currentList.firstOrNull { it.bookId == bookId && it.pageNumber == pageNumber }
+        _bookmarksFlow.value = if (existingInMemory != null) {
+            currentList.filterNot { it.bookId == bookId && it.pageNumber == pageNumber }
+        } else {
+            listOf(
+                KitabBookmarkModel(
+                    id = System.nanoTime(),
+                    bookId = bookId,
+                    bookTitleBangla = bookTitleBangla,
+                    volumeNumber = volumeNumber,
+                    pageNumber = pageNumber,
+                    note = note.ifBlank { "গুরুত্বপূর্ণ পৃষ্ঠা" },
+                    createdAtMillis = System.currentTimeMillis()
+                )
+            ) + currentList
+        }
         val appContext = context.applicationContext ?: context
         managerScope.launch(ioDispatcher) {
             toggleBookmarkSynchronously(appContext, bookId, bookTitleBangla, volumeNumber, pageNumber, note)
@@ -1095,6 +1097,7 @@ object KitabDownloadAndStorageManager {
     }
 
     fun removeBookmarkById(context: Context, bookmarkId: Long) {
+        _bookmarksFlow.value = _bookmarksFlow.value.filterNot { it.id == bookmarkId }
         val appContext = context.applicationContext ?: context
         managerScope.launch(ioDispatcher) {
             val dao = KitabLibraryDatabase.getInstance(appContext).kitabLibraryDao()
@@ -1103,9 +1106,6 @@ object KitabDownloadAndStorageManager {
         }
     }
 
-    /**
-     * Renders a single page from the verified local Kitab PDF using Android's native `PdfRenderer`.
-     */
     suspend fun renderKitabPageBitmap(
         context: Context,
         bookId: String,
@@ -1160,232 +1160,177 @@ object KitabDownloadAndStorageManager {
         val height = (width * 1.42f).toInt()
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        canvas.drawColor(Color.rgb(252, 249, 240))
-
+        canvas.drawColor(Color.parseColor("#FCF8EE"))
         val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(7, 78, 53)
+            color = Color.parseColor("#074E35")
             style = Paint.Style.STROKE
             strokeWidth = 6f
         }
         canvas.drawRect(24f, 24f, width - 24f, height - 24f, borderPaint)
-
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(17, 56, 40)
+            color = Color.parseColor("#074E35")
             textSize = 36f
             textAlign = Paint.Align.CENTER
         }
-        val item = _catalogItemsFlow.value.firstOrNull { it.bookId == bookId }
-        canvas.drawText(item?.titleBangla ?: bookId, width / 2f, height * 0.35f, textPaint)
         canvas.drawText(
-            "পৃষ্ঠা নং ${KitabFormatUtils.toBanglaDigits(pageNumber)}",
+            "কিতাব পৃষ্ঠা ${KitabFormatUtils.toBanglaDigits(pageNumber)}",
             width / 2f,
-            height * 0.48f,
+            height / 2f,
             textPaint
         )
         return bitmap
     }
 
-    fun inspectPdfPageCount(pdfFile: File): Int {
-        if (!pdfFile.exists() || !hasValidPdfHeader(pdfFile)) return 0
-        val nativeCount = runCatching {
-            ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
-                PdfRenderer(pfd).use { renderer ->
-                    renderer.pageCount
-                }
-            }
-        }.getOrDefault(0)
-        if (nativeCount > 0) return nativeCount
-
-        // Fallback regex scan for `/Type /Page` in minimal synthetic test PDFs under JVM Robolectric
-        return runCatching {
-            val maxScanBytes = pdfFile.length().coerceAtMost(256 * 1024L).toInt()
-            val bytes = ByteArray(maxScanBytes)
-            FileInputStream(pdfFile).use { fis -> fis.read(bytes) }
-            val content = String(bytes, Charsets.ISO_8859_1)
-            val matches = Regex("/Type\\s*/Page\\b").findAll(content).count()
-            matches.coerceAtLeast(1)
-        }.getOrDefault(1)
+    fun setReaderThemeMode(context: Context, themeMode: KitabReaderThemeMode) {
+        _readerThemeFlow.value = themeMode
+        val appContext = context.applicationContext ?: context
+        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_READER_THEME, themeMode.id)
+            .apply()
     }
 
-    fun hasValidPdfHeader(file: File): Boolean {
-        if (!file.exists() || file.length() < 5L) return false
-        return runCatching {
-            val header = ByteArray(5)
-            FileInputStream(file).use { fis ->
-                val read = fis.read(header)
-                if (read < 5) return false
-            }
-            val headerStr = String(header, Charsets.US_ASCII)
-            headerStr == "%PDF-"
-        }.getOrDefault(false)
+    fun updateReaderSettings(
+        context: Context,
+        transform: (KitabReaderSettings) -> KitabReaderSettings
+    ) {
+        val updated = transform(_readerSettingsFlow.value)
+        _readerSettingsFlow.value = updated
+        val appContext = context.applicationContext ?: context
+        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_READER_PAGE_MODE, updated.pageMode.id)
+            .putString(KEY_READER_ZOOM_FIT, updated.zoomFitMode.id)
+            .putString(KEY_READER_ORIENTATION, updated.orientationMode.id)
+            .putBoolean(KEY_READER_KEEP_SCREEN_ON, updated.keepScreenOn)
+            .putFloat(KEY_READER_BRIGHTNESS, updated.brightnessLevel)
+            .putInt(KEY_READER_PAGE_SPACING, updated.pageSpacingDp)
+            .apply()
     }
 
-    fun computeSha256Hex(file: File): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        val buffer = ByteArray(16 * 1024)
-        FileInputStream(file).use { fis ->
-            while (true) {
-                val read = fis.read(buffer)
-                if (read <= 0) break
-                digest.update(buffer, 0, read)
-            }
-        }
-        return digest.digest().joinToString("") { "%02x".format(it) }
+    private fun loadReaderSettingsFromPrefs(prefs: android.content.SharedPreferences): KitabReaderSettings {
+        val pageModeId = prefs.getString(KEY_READER_PAGE_MODE, KitabReaderPageMode.HORIZONTAL_PAGER.id)
+        val zoomFitId = prefs.getString(KEY_READER_ZOOM_FIT, KitabZoomFitMode.FIT_PAGE.id)
+        val orientationId = prefs.getString(KEY_READER_ORIENTATION, KitabOrientationMode.AUTO.id)
+        return KitabReaderSettings(
+            pageMode = KitabReaderPageMode.entries.firstOrNull { it.id == pageModeId }
+                ?: KitabReaderPageMode.HORIZONTAL_PAGER,
+            zoomFitMode = KitabZoomFitMode.entries.firstOrNull { it.id == zoomFitId }
+                ?: KitabZoomFitMode.FIT_PAGE,
+            orientationMode = KitabOrientationMode.entries.firstOrNull { it.id == orientationId }
+                ?: KitabOrientationMode.AUTO,
+            keepScreenOn = prefs.getBoolean(KEY_READER_KEEP_SCREEN_ON, true),
+            brightnessLevel = prefs.getFloat(KEY_READER_BRIGHTNESS, 1.0f).coerceIn(0.25f, 1.0f),
+            pageSpacingDp = prefs.getInt(KEY_READER_PAGE_SPACING, 8).coerceIn(0, 24)
+        )
     }
 
-    /**
-     * Generates a valid minimal multi-page PDF byte array for deterministic unit/Robolectric tests,
-     * with `%PDF-1.4` header, valid page objects, and exact SHA-256 calculation.
-     */
-    fun buildValidTestPdfBytes(title: String, pageCount: Int = 5, minTargetSizeBytes: Int = 4096): ByteArray {
-        val sb = StringBuilder()
-        sb.append("%PDF-1.4\n")
-        sb.append("1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n")
-        val kids = (1..pageCount).joinToString(" ") { "${it + 2} 0 R" }
-        sb.append("2 0 obj << /Type /Pages /Kids [$kids] /Count $pageCount >> endobj\n")
-        for (i in 1..pageCount) {
-            val objNum = i + 2
-            sb.append(
-                "$objNum 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << >> >> endobj\n"
-            )
-        }
-        sb.append("% Kitab: $title\n")
-        while (sb.length < minTargetSizeBytes - 12) {
-            sb.append("% PADDING_LINE_FOR_KITAB_PDF_VERIFICATION_1234567890\n")
-        }
-        sb.append("%%EOF\n")
-        return sb.toString().toByteArray(Charsets.ISO_8859_1)
-    }
-
-    /**
-     * Optional throttled read from Firestore `/kitab_catalog` (at most once every 12 hours)
-     * so Admin-published Kitab metadata appears automatically without consuming Firestore quota.
-     */
-    private fun syncApprovedCatalogFromFirestoreIfDue(context: Context, force: Boolean) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val lastSync = prefs.getLong(KEY_LAST_FIRESTORE_CATALOG_SYNC, 0L)
-        val now = System.currentTimeMillis()
-        if (!force && (now - lastSync) < FIRESTORE_SYNC_THROTTLE_MS) return
-
-        runCatching {
-            val db = FirebaseFirestore.getInstance()
-            db.collection("kitab_catalog")
-                .whereEqualTo("isAdminApproved", true)
-                .limit(60)
-                .get()
-                .addOnSuccessListener { snapshot ->
-                    prefs.edit().putLong(KEY_LAST_FIRESTORE_CATALOG_SYNC, now).apply()
-                    if (snapshot == null || snapshot.isEmpty) return@addOnSuccessListener
-                    val remoteItems = snapshot.documents.mapNotNull { doc ->
-                        val bookId = doc.getString("bookId")?.takeIf { it.isNotBlank() } ?: doc.id
-                        val title = doc.getString("titleBangla")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                        val author = doc.getString("authorBangla")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                        val publisher = doc.getString("publisherBangla")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                        val categoryId = doc.getString("categoryId") ?: KitabCategory.QAWMI_TEXTBOOK_SHARAH.id
-                        val sha256 = doc.getString("sha256Checksum") ?: ""
-                        val downloadUrl = doc.getString("downloadUrl") ?: ""
-                        val isOpenLicense = doc.getBoolean("isOpenLicenseVerified") ?: false
-                        val isApproved = doc.getBoolean("isAdminApproved") ?: false
-                        if (!isApproved) return@mapNotNull null
-                        KitabMetadataEntity(
-                            bookId = bookId,
-                            seriesId = doc.getString("seriesId") ?: bookId,
-                            titleBangla = title,
-                            arabicTitle = doc.getString("arabicTitle") ?: "",
-                            authorBangla = author,
-                            translatorOrCompilerBangla = doc.getString("translatorOrCompilerBangla") ?: author,
-                            publisherBangla = publisher,
-                            categoryId = categoryId,
-                            volumeNumber = (doc.getLong("volumeNumber") ?: 1L).toInt().coerceAtLeast(1),
-                            totalVolumes = (doc.getLong("totalVolumes") ?: 1L).toInt().coerceAtLeast(1),
-                            fileSizeBytes = (doc.getLong("fileSizeBytes") ?: 0L).coerceAtLeast(0L),
-                            languageBangla = doc.getString("languageBangla") ?: "বাংলা ও আরবি",
-                            shortDescriptionBangla = doc.getString("shortDescriptionBangla") ?: "",
-                            marhalaBangla = doc.getString("marhalaBangla") ?: "দাওরায়ে হাদিস ও উচ্চতর মারহালা",
-                            downloadUrl = downloadUrl,
-                            sha256Checksum = sha256,
-                            isOpenLicenseVerified = isOpenLicense,
-                            isAdminApproved = true,
-                            licenseNoteBangla = doc.getString("licenseNoteBangla") ?: "অ্যাডমিন অনুমোদিত ক্যাটালগ",
-                            coverPrimaryHex = doc.getLong("coverPrimaryHex") ?: 0xFF074E35,
-                            coverAccentHex = doc.getLong("coverAccentHex") ?: 0xFFDDA83A
-                        )
-                    }
-                    if (remoteItems.isNotEmpty()) {
-                        managerScope.launch(ioDispatcher) {
-                            val dao = KitabLibraryDatabase.getInstance(context).kitabLibraryDao()
-                            dao.upsertCatalogItems(remoteItems)
-                            reconcileDiskStateWithDatabaseInternal(context, dao)
-                            refreshSnapshotFromDao(dao)
-                        }
-                    }
-                }
-        }
-    }
-
-    /**
-     * Admin-only helper to publish a verified open-license Kitab into the catalog (local Room + Firestore `/kitab_catalog`).
-     */
     fun publishApprovedKitabAsAdmin(
         context: Context,
         entity: KitabMetadataEntity,
         onResult: (Boolean, String) -> Unit
     ) {
-        val appContext = context.applicationContext ?: context
         if (entity.titleBangla.isBlank() || entity.authorBangla.isBlank() || entity.publisherBangla.isBlank()) {
             onResult(false, "কিতাবের নাম, লেখক ও প্রকাশনীর নাম আবশ্যক।")
             return
         }
-        if (entity.isOpenLicenseVerified) {
-            if (!entity.downloadUrl.startsWith("https://") || entity.sha256Checksum.length != 64 || entity.fileSizeBytes <= 0L) {
-                onResult(
-                    false,
-                    "ডাউনলোডযোগ্য কিতাবের জন্য বৈধ HTTPS লিংক, ফাইলের আকার এবং ৬৪ অক্ষরের SHA-256 Checksum আবশ্যক।"
-                )
-                return
-            }
+        if (entity.isOpenLicenseVerified &&
+            (!entity.downloadUrl.startsWith("https://") || entity.fileSizeBytes <= 0L || entity.sha256Checksum.length != 64)
+        ) {
+            onResult(false, "ডাউনলোডযোগ্য কিতাবের জন্য বৈধ HTTPS লিংক, ফাইলের আকার এবং ৬৪ অক্ষরের SHA-256 Checksum আবশ্যক।")
+            return
         }
 
+        val appContext = context.applicationContext ?: context
         managerScope.launch(ioDispatcher) {
             val dao = KitabLibraryDatabase.getInstance(appContext).kitabLibraryDao()
-            val approvedEntity = entity.copy(isAdminApproved = true)
-            dao.upsertCatalogItem(approvedEntity)
-            reconcileDiskStateWithDatabaseInternal(appContext, dao)
+            dao.upsertCatalogItem(entity.copy(isAdminApproved = true))
             refreshSnapshotFromDao(dao)
 
             runCatching {
-                val payload = mapOf(
-                    "bookId" to approvedEntity.bookId,
-                    "seriesId" to approvedEntity.seriesId,
-                    "titleBangla" to approvedEntity.titleBangla,
-                    "arabicTitle" to approvedEntity.arabicTitle,
-                    "authorBangla" to approvedEntity.authorBangla,
-                    "translatorOrCompilerBangla" to approvedEntity.translatorOrCompilerBangla,
-                    "publisherBangla" to approvedEntity.publisherBangla,
-                    "categoryId" to approvedEntity.categoryId,
-                    "volumeNumber" to approvedEntity.volumeNumber,
-                    "totalVolumes" to approvedEntity.totalVolumes,
-                    "fileSizeBytes" to approvedEntity.fileSizeBytes,
-                    "languageBangla" to approvedEntity.languageBangla,
-                    "shortDescriptionBangla" to approvedEntity.shortDescriptionBangla,
-                    "marhalaBangla" to approvedEntity.marhalaBangla,
-                    "downloadUrl" to approvedEntity.downloadUrl,
-                    "sha256Checksum" to approvedEntity.sha256Checksum,
-                    "isOpenLicenseVerified" to approvedEntity.isOpenLicenseVerified,
-                    "isAdminApproved" to true,
-                    "licenseNoteBangla" to approvedEntity.licenseNoteBangla,
-                    "coverPrimaryHex" to approvedEntity.coverPrimaryHex,
-                    "coverAccentHex" to approvedEntity.coverAccentHex
-                )
                 FirebaseFirestore.getInstance()
                     .collection("kitab_catalog")
-                    .document(approvedEntity.bookId)
-                    .set(payload)
+                    .document(entity.bookId)
+                    .set(
+                        mapOf(
+                            "bookId" to entity.bookId,
+                            "seriesId" to entity.seriesId,
+                            "titleBangla" to entity.titleBangla,
+                            "arabicTitle" to entity.arabicTitle,
+                            "authorBangla" to entity.authorBangla,
+                            "translatorOrCompilerBangla" to entity.translatorOrCompilerBangla,
+                            "publisherBangla" to entity.publisherBangla,
+                            "categoryId" to entity.categoryId,
+                            "volumeNumber" to entity.volumeNumber,
+                            "totalVolumes" to entity.totalVolumes,
+                            "fileSizeBytes" to entity.fileSizeBytes,
+                            "languageBangla" to entity.languageBangla,
+                            "shortDescriptionBangla" to entity.shortDescriptionBangla,
+                            "marhalaBangla" to entity.marhalaBangla,
+                            "downloadUrl" to entity.downloadUrl,
+                            "sha256Checksum" to entity.sha256Checksum,
+                            "isOpenLicenseVerified" to entity.isOpenLicenseVerified,
+                            "isAdminApproved" to true,
+                            "licenseNoteBangla" to entity.licenseNoteBangla,
+                            "coverPrimaryHex" to entity.coverPrimaryHex,
+                            "coverAccentHex" to entity.coverAccentHex,
+                            "updatedAtMillis" to System.currentTimeMillis()
+                        )
+                    )
             }
-
             withContext(Dispatchers.Main) {
-                onResult(true, "আলহামদুলিল্লাহ, কিতাবটি সফলভাবে ক্যাটালগে যুক্ত হয়েছে।")
+                onResult(true, "আলহামদুলিল্লাহ, কিতাবটি ক্যাটালগে সফলভাবে যুক্ত হয়েছে।")
             }
+        }
+    }
+
+    private fun syncRemoteFirestoreCatalogIfAvailable(context: Context) {
+        runCatching {
+            FirebaseFirestore.getInstance()
+                .collection("kitab_catalog")
+                .whereEqualTo("isAdminApproved", true)
+                .limit(50)
+                .get()
+                .addOnSuccessListener { snapshot ->
+                    if (snapshot == null || snapshot.isEmpty) return@addOnSuccessListener
+                    managerScope.launch(ioDispatcher) {
+                        val dao = KitabLibraryDatabase.getInstance(context).kitabLibraryDao()
+                        val remoteItems = snapshot.documents.mapNotNull { doc ->
+                            val bookId = doc.getString("bookId")?.takeIf { it.isNotBlank() } ?: doc.id
+                            val titleBangla = doc.getString("titleBangla")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                            val authorBangla = doc.getString("authorBangla").orEmpty()
+                            val publisherBangla = doc.getString("publisherBangla").orEmpty()
+                            KitabMetadataEntity(
+                                bookId = bookId,
+                                seriesId = doc.getString("seriesId").orEmpty().ifBlank { "series_$bookId" },
+                                titleBangla = titleBangla,
+                                arabicTitle = doc.getString("arabicTitle").orEmpty(),
+                                authorBangla = authorBangla,
+                                translatorOrCompilerBangla = doc.getString("translatorOrCompilerBangla").orEmpty(),
+                                publisherBangla = publisherBangla,
+                                categoryId = doc.getString("categoryId").orEmpty().ifBlank { KitabCategory.QAWMI_TEXTBOOK_SHARAH.id },
+                                volumeNumber = (doc.getLong("volumeNumber") ?: 1L).toInt().coerceAtLeast(1),
+                                totalVolumes = (doc.getLong("totalVolumes") ?: 1L).toInt().coerceAtLeast(1),
+                                fileSizeBytes = (doc.getLong("fileSizeBytes") ?: 0L).coerceAtLeast(0L),
+                                languageBangla = doc.getString("languageBangla").orEmpty().ifBlank { "বাংলা ও আরবি" },
+                                shortDescriptionBangla = doc.getString("shortDescriptionBangla").orEmpty(),
+                                marhalaBangla = doc.getString("marhalaBangla").orEmpty().ifBlank { "দাওরায়ে হাদিস" },
+                                downloadUrl = doc.getString("downloadUrl").orEmpty(),
+                                sha256Checksum = doc.getString("sha256Checksum").orEmpty(),
+                                isOpenLicenseVerified = doc.getBoolean("isOpenLicenseVerified") ?: false,
+                                isAdminApproved = doc.getBoolean("isAdminApproved") ?: true,
+                                licenseNoteBangla = doc.getString("licenseNoteBangla").orEmpty(),
+                                coverPrimaryHex = doc.getLong("coverPrimaryHex") ?: 0xFF074E35L,
+                                coverAccentHex = doc.getLong("coverAccentHex") ?: 0xFFDDA83AL,
+                                updatedAtMillis = doc.getLong("updatedAtMillis") ?: System.currentTimeMillis()
+                            )
+                        }
+                        if (remoteItems.isNotEmpty()) {
+                            dao.upsertCatalogItems(remoteItems)
+                            refreshSnapshotFromDao(dao)
+                        }
+                    }
+                }
         }
     }
 }

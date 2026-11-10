@@ -1,29 +1,37 @@
 package com.example.ui.kitab
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -32,6 +40,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
@@ -47,244 +56,342 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-internal val KitabGreenPrimary = Color(0xFF074E35)
-internal val KitabGreenDark = Color(0xFF053B27)
-internal val KitabGoldAccent = Color(0xFFDDA83A)
-internal val KitabGoldLight = Color(0xFFF6E7C1)
-internal val KitabCreamBg = Color(0xFFF6F9F6)
-internal val KitabCardBorder = Color(0xFFD5E4DC)
+val KitabGreenPrimary = Color(0xFF074E35)
+val KitabGreenDark = Color(0xFF053826)
+val KitabGoldAccent = Color(0xFFDDA83A)
+val KitabGoldLight = Color(0xFFF6E7BD)
+val KitabCreamBg = Color(0xFFF6F9F6)
+val KitabWarmCreamSurface = Color(0xFFFAF7F0)
+val KitabCardBorder = Color(0xFFCDE2D6)
 
+/**
+ * Compact Book Cover Thumbnail (`48.dp x 68.dp` by default) with ornate Islamic gold frame,
+ * volume number badge, and Arabic/Bangla title emblem.
+ */
+@Composable
+fun KitabCoverThumbnail(
+    book: KitabItemUiModel,
+    width: Dp = 48.dp,
+    height: Dp = 68.dp
+) {
+    val coverPrimary = Color(book.coverPrimaryHex)
+    val coverAccent = Color(book.coverAccentHex)
+
+    Box(
+        modifier = Modifier
+            .width(width)
+            .height(height)
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        coverPrimary,
+                        KitabGreenDark
+                    )
+                )
+            )
+            .border(1.2.dp, coverAccent, RoundedCornerShape(8.dp))
+            .testTag("kitab_cover_thumbnail_${book.bookId}"),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val inset = 3.5.dp.toPx()
+            drawRect(
+                color = coverAccent.copy(alpha = 0.42f),
+                topLeft = Offset(inset, inset),
+                size = androidx.compose.ui.geometry.Size(
+                    width = size.width - inset * 2,
+                    height = size.height - inset * 2
+                ),
+                style = Stroke(width = 0.8.dp.toPx())
+            )
+            drawCircle(
+                color = coverAccent.copy(alpha = 0.16f),
+                radius = size.minDimension * 0.28f,
+                center = center
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 3.dp, vertical = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "খণ্ড ${KitabFormatUtils.toBanglaDigits(book.volumeNumber)}",
+                color = coverAccent,
+                fontSize = 7.5.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+
+            Text(
+                text = book.category.shortBadgeBangla,
+                color = Color.White,
+                fontSize = 8.sp,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = TextAlign.Center,
+                lineHeight = 9.5.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = coverAccent.copy(alpha = 0.22f)
+            ) {
+                Text(
+                    text = "PDF",
+                    color = coverAccent,
+                    fontSize = 6.8.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Compact Hadith Kitab Card designed for 2-column mobile grid & 3–4 column tablet/landscape grid.
+ * Zero excess whitespace, authentic database metadata, cover thumbnail, bookmark button, and download progress/actions.
+ */
 @Composable
 fun KitabCatalogBookCard(
     book: KitabItemUiModel,
+    isBookmarked: Boolean = false,
+    onBookmarkToggleClick: () -> Unit = {},
     onDownloadOrResumeClick: () -> Unit,
     onPauseClick: () -> Unit,
     onCancelClick: () -> Unit,
     onReadClick: () -> Unit,
-    onDeleteDownloadClick: () -> Unit
+    onDeleteDownloadClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         border = BorderStroke(
-            width = if (book.isReadyToReadOffline) 1.5.dp else 1.dp,
-            color = if (book.isReadyToReadOffline) KitabGreenPrimary.copy(alpha = 0.55f) else KitabCardBorder
+            width = if (book.isReadyToReadOffline) 1.3.dp else 1.dp,
+            color = if (book.isReadyToReadOffline) KitabGoldAccent else KitabCardBorder
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .testTag("kitab_catalog_card_${book.bookId}")
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp)
+                .padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // Top Row: Cover Image + Core Metadata (Title, Author, Translator, Publisher, Volumes, Size, Language)
+            // 1. Top Row: Category Pill + Marhala + Bookmark Action Icon
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = KitabGreenPrimary.copy(alpha = 0.10f),
+                    border = BorderStroke(0.7.dp, KitabGreenPrimary.copy(alpha = 0.25f)),
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Text(
+                        text = book.category.shortBadgeBangla,
+                        color = KitabGreenPrimary,
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                Surface(
+                    shape = CircleShape,
+                    color = if (isBookmarked) KitabGoldLight else KitabWarmCreamSurface,
+                    border = BorderStroke(
+                        0.8.dp,
+                        if (isBookmarked) KitabGoldAccent else KitabCardBorder
+                    ),
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .clickable { onBookmarkToggleClick() }
+                        .testTag("kitab_card_bookmark_btn_${book.bookId}")
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                            contentDescription = "কিতাব বুকমার্ক করুন",
+                            tint = if (isBookmarked) KitabGreenPrimary else Color(0xFF60786D),
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
+            }
+
+            // 2. Book Cover Thumbnail + Title, Arabic Title, Author & Publisher
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Top
             ) {
-                KitabCoverThumbnail(book = book)
+                KitabCoverThumbnail(
+                    book = book,
+                    width = 48.dp,
+                    height = 68.dp
+                )
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = KitabGreenPrimary.copy(alpha = 0.10f)
-                        ) {
-                            Text(
-                                text = book.category.shortBadgeBangla,
-                                color = KitabGreenPrimary,
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
-                            )
-                        }
-                        if (book.isReadyToReadOffline) {
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = Color(0xFFE1F5EA)
-                            ) {
-                                Text(
-                                    text = "✓ অফলাইনে প্রস্তুত",
-                                    color = KitabGreenPrimary,
-                                    fontSize = 10.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    // 1. কিতাবের নাম
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
                     Text(
                         text = book.titleBangla,
                         color = KitabGreenDark,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 15.5.sp,
-                        lineHeight = 20.sp
+                        fontSize = 12.5.sp,
+                        lineHeight = 15.5.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
 
                     if (book.arabicTitle.isNotBlank()) {
                         Text(
                             text = book.arabicTitle,
-                            color = Color(0xFF7B601E),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
+                            color = Color(0xFF8A691B),
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    // 2. লেখকের নাম
                     Text(
-                        text = "লেখক: ${book.authorBangla}",
+                        text = book.authorBangla,
                         color = Color(0xFF284338),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
 
-                    // 3. অনুবাদক বা সংকলকের নাম
                     Text(
-                        text = "অনুবাদক/সংকলক: ${book.translatorOrCompilerBangla}",
-                        color = Color(0xFF3E594E),
-                        fontSize = 11.5.sp
-                    )
-
-                    // 4. প্রকাশনীর নাম
-                    Text(
-                        text = "প্রকাশনী: ${book.publisherBangla}",
-                        color = Color(0xFF3E594E),
-                        fontSize = 11.5.sp
+                        text = book.publisherBangla,
+                        color = Color(0xFF526B60),
+                        fontSize = 9.5.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Metadata Pills Row: 6. মোট খণ্ড সংখ্যা | 7. PDF ফাইলের আকার (MB) | 8. ভাষা
+            // 3. Compact Cream Metadata Strip (Volume • File Size MB)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFFF3F8F5), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                    .background(KitabWarmCreamSurface, RoundedCornerShape(7.dp))
+                    .border(0.6.dp, Color(0xFFE6DEC8), RoundedCornerShape(7.dp))
+                    .padding(horizontal = 7.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "খণ্ড: ${book.formattedVolumeBadge}",
+                    text = if (book.totalVolumes > 1) {
+                        "${KitabFormatUtils.toBanglaDigits(book.volumeNumber)}ম/${KitabFormatUtils.toBanglaDigits(book.totalVolumes)} খণ্ড"
+                    } else {
+                        "এক খণ্ডে সমাপ্ত"
+                    },
                     color = KitabGreenDark,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold
+                    fontSize = 9.8.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
                 )
+
                 if (book.fileSizeBytes > 0L) {
                     Text(
-                        text = "আকার: ${book.formattedFileSizeMb}",
+                        text = book.formattedFileSizeMb,
                         color = KitabGreenPrimary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 9.8.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
                     )
                 }
-                Text(
-                    text = "ভাষা: ${book.languageBangla}",
-                    color = Color(0xFF3E594E),
-                    fontSize = 11.sp
-                )
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // 9. সংক্ষিপ্ত পরিচিতি
-            Text(
-                text = book.shortDescriptionBangla,
-                color = Color(0xFF374E44),
-                fontSize = 12.2.sp,
-                lineHeight = 17.sp
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // 10. ডাউনলোডের অবস্থা (Download Status Row)
+            // 4. Compact Status & Reading Progress Line
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val statusIcon = when (book.downloadStatus) {
-                        KitabDownloadStatus.DOWNLOADED_VERIFIED -> Icons.Default.CheckCircle
-                        KitabDownloadStatus.FAILED_CORRUPTED -> Icons.Default.ErrorOutline
-                        KitabDownloadStatus.REFERENCE_ONLY_NO_LICENSE -> Icons.Default.Lock
-                        else -> Icons.Default.Info
-                    }
-                    val statusColor = when (book.downloadStatus) {
-                        KitabDownloadStatus.DOWNLOADED_VERIFIED -> KitabGreenPrimary
-                        KitabDownloadStatus.FAILED_CORRUPTED -> Color(0xFFB71C1C)
-                        KitabDownloadStatus.REFERENCE_ONLY_NO_LICENSE -> Color(0xFF795548)
-                        else -> Color(0xFF0D5C40)
-                    }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
                     Icon(
-                        imageVector = statusIcon,
+                        imageVector = if (book.isReadyToReadOffline) Icons.Default.CheckCircle else Icons.Default.CloudDownload,
                         contentDescription = null,
-                        tint = statusColor,
-                        modifier = Modifier.size(15.dp)
+                        tint = if (book.isReadyToReadOffline) KitabGreenPrimary else Color(0xFF6B7F75),
+                        modifier = Modifier.size(12.dp)
                     )
-                    Spacer(modifier = Modifier.width(5.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "অবস্থা: ${book.downloadStatus.labelBangla}",
-                        color = statusColor,
-                        fontSize = 11.5.sp,
+                        text = book.downloadStatus.labelBangla,
+                        color = if (book.isReadyToReadOffline) KitabGreenPrimary else Color(0xFF42594E),
+                        fontSize = 9.8.sp,
                         fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.testTag("kitab_status_label_${book.bookId}")
                     )
                 }
 
                 if (book.isReadyToReadOffline && book.totalPageCount > 0) {
                     Text(
-                        text = "শেষ পড়া পৃষ্ঠা: ${KitabFormatUtils.toBanglaDigits(book.lastReadPage)}/${KitabFormatUtils.toBanglaDigits(book.totalPageCount)}",
-                        color = KitabGreenPrimary,
-                        fontSize = 11.sp,
+                        text = "পৃষ্ঠা ${KitabFormatUtils.toBanglaDigits(book.lastReadPage)}/${KitabFormatUtils.toBanglaDigits(book.totalPageCount)}",
+                        color = KitabGreenDark,
+                        fontSize = 9.5.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
             }
 
             if (book.errorMessageBangla.isNotBlank()) {
-                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = book.errorMessageBangla,
-                    color = if (book.downloadStatus == KitabDownloadStatus.FAILED_CORRUPTED) {
-                        Color(0xFFB71C1C)
-                    } else {
-                        Color(0xFF8D5B0A)
-                    },
-                    fontSize = 11.5.sp,
+                    color = if (book.downloadStatus == KitabDownloadStatus.PAUSED) Color(0xFF9A6700) else Color(0xFFB71C1C),
+                    fontSize = 9.5.sp,
                     fontWeight = FontWeight.Medium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.testTag("kitab_error_message_${book.bookId}")
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Action Controls based on Download Status
+            // 5. Action Buttons / Progress Bar Area
             when (book.downloadStatus) {
                 KitabDownloadStatus.DOWNLOADING,
                 KitabDownloadStatus.PAUSED,
@@ -292,8 +399,9 @@ fun KitabCatalogBookCard(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Color(0xFFF1F7F4), RoundedCornerShape(10.dp))
-                            .padding(10.dp)
+                            .background(Color(0xFFF1F7F3), RoundedCornerShape(8.dp))
+                            .padding(7.dp),
+                        verticalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -301,76 +409,73 @@ fun KitabCatalogBookCard(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = if (book.downloadStatus == KitabDownloadStatus.VERIFYING_CHECKSUM) {
-                                    "SHA-256 নিরাপত্তা যাচাই হচ্ছে..."
-                                } else {
-                                    "ডাউনলোড অগ্রগতি: ${KitabFormatUtils.toBanglaDigits(book.progressPercent)}%"
-                                },
-                                color = KitabGreenPrimary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
+                                text = "${KitabFormatUtils.toBanglaDigits(book.progressPercent)}%",
+                                color = KitabGreenDark,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.testTag("kitab_progress_percent_${book.bookId}")
                             )
                             Text(
-                                text = "${book.formattedDownloadedMb} / ${book.formattedFileSizeMb}",
-                                color = KitabGreenDark,
-                                fontSize = 11.5.sp,
+                                text = "${book.formattedDownloadedMb}/${book.formattedFileSizeMb}",
+                                color = KitabGreenPrimary,
+                                fontSize = 9.5.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.testTag("kitab_progress_text_${book.bookId}")
+                                maxLines = 1,
+                                modifier = Modifier.testTag("kitab_progress_mb_${book.bookId}")
                             )
                         }
-
-                        Spacer(modifier = Modifier.height(6.dp))
 
                         LinearProgressIndicator(
                             progress = { book.progressFraction },
                             color = KitabGreenPrimary,
-                            trackColor = Color(0xFFD2E5DB),
+                            trackColor = Color(0xFFD5E6DC),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(7.dp)
+                                .height(5.dp)
                                 .clip(RoundedCornerShape(50))
-                                .testTag("kitab_progress_bar_${book.bookId}")
                         )
-
-                        Spacer(modifier = Modifier.height(8.dp))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             if (book.downloadStatus == KitabDownloadStatus.DOWNLOADING) {
                                 OutlinedButton(
                                     onClick = onPauseClick,
                                     shape = RoundedCornerShape(50),
                                     border = BorderStroke(1.dp, KitabGreenPrimary),
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                                     modifier = Modifier
                                         .weight(1f)
+                                        .height(30.dp)
                                         .testTag("kitab_pause_btn_${book.bookId}")
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Pause,
                                         contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(13.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("বিরতি (Pause)", fontSize = 12.sp)
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Text("বিরতি", fontSize = 10.sp, maxLines = 1)
                                 }
                             } else if (book.downloadStatus == KitabDownloadStatus.PAUSED) {
                                 Button(
                                     onClick = onDownloadOrResumeClick,
                                     shape = RoundedCornerShape(50),
                                     colors = ButtonDefaults.buttonColors(containerColor = KitabGreenPrimary),
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                                     modifier = Modifier
                                         .weight(1f)
+                                        .height(30.dp)
                                         .testTag("kitab_resume_btn_${book.bookId}")
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.PlayArrow,
                                         contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(13.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("পুনরায় শুরু (Resume)", fontSize = 12.sp)
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Text("চালু", fontSize = 10.sp, maxLines = 1)
                                 }
                             }
 
@@ -379,17 +484,19 @@ fun KitabCatalogBookCard(
                                 shape = RoundedCornerShape(50),
                                 border = BorderStroke(1.dp, Color(0xFFB71C1C)),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFB71C1C)),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                                 modifier = Modifier
                                     .weight(1f)
+                                    .height(30.dp)
                                     .testTag("kitab_cancel_btn_${book.bookId}")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(13.dp)
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("বাতিল (Cancel)", fontSize = 12.sp)
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text("বাতিল", fontSize = 10.sp, maxLines = 1)
                             }
                         }
                     }
@@ -398,7 +505,7 @@ fun KitabCatalogBookCard(
                 KitabDownloadStatus.DOWNLOADED_VERIFIED -> {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Button(
@@ -408,70 +515,75 @@ fun KitabCatalogBookCard(
                                 containerColor = KitabGoldAccent,
                                 contentColor = KitabGreenDark
                             ),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                             modifier = Modifier
                                 .weight(1f)
-                                .height(46.dp)
+                                .height(34.dp)
                                 .testTag("kitab_read_btn_${book.bookId}")
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.MenuBook,
                                 contentDescription = null,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(14.dp)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (book.lastReadPage > 1) {
-                                    "পড়ুন (পৃষ্ঠা ${KitabFormatUtils.toBanglaDigits(book.lastReadPage)} থেকে)"
-                                } else {
-                                    "পড়ুন (অফলাইন PDF রিডার)"
-                                },
+                                text = "পড়ুন",
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 13.5.sp
+                                fontSize = 11.5.sp,
+                                maxLines = 1
                             )
                         }
 
-                        OutlinedButton(
-                            onClick = onDeleteDownloadClick,
-                            shape = RoundedCornerShape(50),
-                            border = BorderStroke(1.dp, Color(0xFFB71C1C).copy(alpha = 0.6f)),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFB71C1C)),
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFFFFEBEE),
+                            border = BorderStroke(0.8.dp, Color(0xFFEF9A9A)),
                             modifier = Modifier
-                                .height(46.dp)
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .clickable { onDeleteDownloadClick() }
                                 .testTag("kitab_delete_btn_${book.bookId}")
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.DeleteOutline,
-                                contentDescription = "ডাউনলোড মুছুন",
-                                modifier = Modifier.size(18.dp)
-                            )
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.DeleteOutline,
+                                    contentDescription = "ডাউনলোড মুছে ফেলুন",
+                                    tint = Color(0xFFC62828),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                         }
                     }
                 }
 
                 KitabDownloadStatus.REFERENCE_ONLY_NO_LICENSE -> {
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(8.dp),
                         color = Color(0xFFFFF8E7),
-                        border = BorderStroke(1.dp, Color(0xFFE0C380)),
+                        border = BorderStroke(0.8.dp, Color(0xFFE0C380)),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("kitab_reference_only_badge_${book.bookId}")
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Lock,
                                 contentDescription = null,
                                 tint = Color(0xFF8D5B0A),
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(13.dp)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(5.dp))
                             Text(
-                                text = book.licenseNoteBangla,
+                                text = "প্রকাশকের কপিরাইট সংরক্ষিত",
                                 color = Color(0xFF6D4505),
-                                fontSize = 11.5.sp
+                                fontSize = 9.8.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -486,25 +598,29 @@ fun KitabCatalogBookCard(
                             containerColor = KitabGreenPrimary,
                             contentColor = Color.White
                         ),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(46.dp)
+                            .height(34.dp)
                             .testTag("kitab_download_btn_${book.bookId}")
                     ) {
                         Icon(
                             imageVector = Icons.Default.CloudDownload,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                            tint = KitabGoldLight,
+                            modifier = Modifier.size(14.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
                         Text(
                             text = if (book.downloadStatus == KitabDownloadStatus.FAILED_CORRUPTED) {
-                                "পুনরায় ডাউনলোড করুন (${book.formattedFileSizeMb})"
+                                "পুনরায় ডাউনলোড"
                             } else {
-                                "ডাউনলোড করুন (${book.formattedFileSizeMb})"
+                                "ডাউনলোড (${book.formattedFileSizeMb})"
                             },
                             fontWeight = FontWeight.Bold,
-                            fontSize = 13.5.sp
+                            fontSize = 10.8.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -513,91 +629,129 @@ fun KitabCatalogBookCard(
     }
 }
 
+/**
+ * Compact My Books (`আমার কিতাব`) card designed for responsive 2–4 column grid layout.
+ */
 @Composable
 fun KitabDownloadedMyBookCard(
     book: KitabItemUiModel,
+    isBookmarked: Boolean = false,
+    onBookmarkToggleClick: () -> Unit = {},
     onReadClick: () -> Unit,
-    onDeleteDownloadClick: () -> Unit
+    onDeleteDownloadClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(1.5.dp, KitabGreenPrimary.copy(alpha = 0.5f)),
+        border = BorderStroke(1.2.dp, KitabGreenPrimary.copy(alpha = 0.45f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .testTag("kitab_my_books_card_${book.bookId}")
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp)
+                .padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CloudDone,
+                        contentDescription = null,
+                        tint = KitabGreenPrimary,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "অফলাইনে প্রস্তুত",
+                        color = KitabGreenPrimary,
+                        fontSize = 9.8.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
+                }
+
+                Surface(
+                    shape = CircleShape,
+                    color = if (isBookmarked) KitabGoldLight else KitabWarmCreamSurface,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .clickable { onBookmarkToggleClick() }
+                        .testTag("kitab_card_bookmark_btn_${book.bookId}")
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                            contentDescription = "বুকমার্ক",
+                            tint = if (isBookmarked) KitabGreenPrimary else Color(0xFF6B7F75),
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Top
             ) {
-                KitabCoverThumbnail(book = book)
+                KitabCoverThumbnail(
+                    book = book,
+                    width = 48.dp,
+                    height = 68.dp
+                )
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.CloudDone,
-                            contentDescription = null,
-                            tint = KitabGreenPrimary,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "অফলাইনে সংরক্ষিত • ইন্টারনেট ছাড়াই পাঠযোগ্য",
-                            color = KitabGreenPrimary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
                     Text(
                         text = book.titleBangla,
                         color = KitabGreenDark,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 15.5.sp
+                        fontSize = 12.5.sp,
+                        lineHeight = 15.5.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
 
                     Text(
-                        text = "লেখক: ${book.authorBangla}",
+                        text = book.authorBangla,
                         color = Color(0xFF3E594E),
-                        fontSize = 12.sp
+                        fontSize = 10.5.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
 
-                    Spacer(modifier = Modifier.height(4.dp))
-
                     Text(
-                        text = "ফাইলের আকার: ${book.formattedFileSizeMb} • ${book.formattedVolumeBadge}",
+                        text = "${book.formattedFileSizeMb} • ${book.formattedVolumeBadge}",
                         color = KitabGreenDark,
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-
-                    Text(
-                        text = "ডাউনলোডের তারিখ: ${KitabFormatUtils.formatDateBangla(book.downloadedAtMillis)}",
-                        color = Color(0xFF4A6358),
-                        fontSize = 11.sp
+                        fontSize = 9.8.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Reading Progress & Last Read Page Bar
+            // Compact Reading Progress Strip
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFFF1F7F4), RoundedCornerShape(10.dp))
-                    .padding(10.dp)
+                    .background(KitabWarmCreamSurface, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 8.dp, vertical = 5.dp)
             ) {
                 val safeTotalPages = book.totalPageCount.coerceAtLeast(1)
                 Row(
@@ -606,159 +760,89 @@ fun KitabDownloadedMyBookCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "শেষ পড়া পৃষ্ঠা: ${KitabFormatUtils.toBanglaDigits(book.lastReadPage)} / ${KitabFormatUtils.toBanglaDigits(safeTotalPages)}",
+                        text = "পৃষ্ঠা: ${KitabFormatUtils.toBanglaDigits(book.lastReadPage)} / ${KitabFormatUtils.toBanglaDigits(safeTotalPages)}",
                         color = KitabGreenDark,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.testTag("kitab_my_books_last_page_${book.bookId}")
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "অগ্রগতি: ${KitabFormatUtils.toBanglaDigits(book.readingProgressPercent)}%",
+                        text = "${KitabFormatUtils.toBanglaDigits(book.readingProgressPercent)}%",
                         color = KitabGreenPrimary,
-                        fontSize = 12.sp,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 LinearProgressIndicator(
                     progress = { book.readingProgressFraction.coerceIn(0.02f, 1f) },
-                    color = KitabGoldAccent,
-                    trackColor = Color(0xFFD5E4DC),
+                    color = KitabGreenPrimary,
+                    trackColor = Color(0xFFD8E6DE),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(6.dp)
+                        .height(4.dp)
                         .clip(RoundedCornerShape(50))
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Button(
                     onClick = onReadClick,
                     shape = RoundedCornerShape(50),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = KitabGoldAccent,
-                        contentColor = KitabGreenDark
+                        containerColor = KitabGreenPrimary,
+                        contentColor = Color.White
                     ),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                     modifier = Modifier
                         .weight(1f)
-                        .height(44.dp)
+                        .height(34.dp)
                         .testTag("kitab_my_books_read_btn_${book.bookId}")
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.MenuBook,
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "পড়া চালিয়ে যান",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
-                    )
-                }
-
-                OutlinedButton(
-                    onClick = onDeleteDownloadClick,
-                    shape = RoundedCornerShape(50),
-                    border = BorderStroke(1.dp, Color(0xFFB71C1C)),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFB71C1C)),
-                    modifier = Modifier
-                        .height(44.dp)
-                        .testTag("kitab_my_books_delete_btn_${book.bookId}")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.DeleteOutline,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
+                        tint = KitabGoldLight,
+                        modifier = Modifier.size(14.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("ডাউনলোড মুছুন", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text("পড়ুন", fontWeight = FontWeight.Bold, fontSize = 11.2.sp, maxLines = 1)
                 }
-            }
-        }
-    }
-}
 
-@Composable
-fun KitabCoverThumbnail(book: KitabItemUiModel) {
-    val primaryColor = Color(book.coverPrimaryHex)
-    val accentColor = Color(book.coverAccentHex)
-
-    Box(
-        modifier = Modifier
-            .width(74.dp)
-            .height(106.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(primaryColor, primaryColor.copy(alpha = 0.88f))
-                )
-            )
-            .border(1.5.dp, accentColor, RoundedCornerShape(8.dp))
-            .padding(5.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .border(0.8.dp, accentColor.copy(alpha = 0.55f), RoundedCornerShape(5.dp))
-                .padding(4.dp)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.SpaceBetween,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "۞",
-                    color = accentColor,
-                    fontSize = 10.sp
-                )
-                Text(
-                    text = book.arabicTitle.ifBlank { "الحديث" },
-                    color = accentColor,
-                    fontSize = 9.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = book.titleBangla.substringBefore("—").trim(),
-                    color = Color.White,
-                    fontSize = 8.5.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 10.sp
-                )
                 Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = accentColor.copy(alpha = 0.22f)
+                    shape = CircleShape,
+                    color = Color(0xFFFFEBEE),
+                    border = BorderStroke(0.8.dp, Color(0xFFEF9A9A)),
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .clickable { onDeleteDownloadClick() }
+                        .testTag("kitab_my_books_delete_btn_${book.bookId}")
                 ) {
-                    Text(
-                        text = "${KitabFormatUtils.toBanglaDigits(book.volumeNumber)}ম খণ্ড",
-                        color = accentColor,
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                    )
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = "কিতাব মুছুন",
+                            tint = Color(0xFFB71C1C),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+/**
+ * Admin Kitab Approval & Publishing Modal.
+ */
 @Composable
 fun AdminPublishKitabDialog(
     onDismiss: () -> Unit,
-    onPublished: (String) -> Unit
+    onPublishedMessage: (String) -> Unit
 ) {
     val context = LocalContext.current
     var titleBangla by remember { mutableStateOf("") }
@@ -766,24 +850,35 @@ fun AdminPublishKitabDialog(
     var authorBangla by remember { mutableStateOf("") }
     var translatorBangla by remember { mutableStateOf("") }
     var publisherBangla by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf(KitabCategory.BUKHARI_SHARAH) }
+    var volumeNumberStr by remember { mutableStateOf("1") }
+    var totalVolumesStr by remember { mutableStateOf("1") }
+    var fileSizeBytesStr by remember { mutableStateOf("") }
     var downloadUrl by remember { mutableStateOf("") }
-    var sha256Checksum by remember { mutableStateOf("") }
-    var fileSizeMbInput by remember { mutableStateOf("10") }
-    var descriptionBangla by remember { mutableStateOf("") }
+    var sha256Hex by remember { mutableStateOf("") }
+    var shortDesc by remember { mutableStateOf("") }
+    var isOpenLicense by remember { mutableStateOf(true) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = Modifier.testTag("kitab_admin_publish_dialog"),
         title = {
             Text(
-                text = "নতুন অনুমোদিত কিতাব যুক্ত করুন (অ্যাডমিন)",
+                text = "নতুন হাদিস শরাহ কিতাব অনুমোদন (অ্যাডমিন)",
                 fontWeight = FontWeight.Bold,
                 color = KitabGreenPrimary,
-                fontSize = 15.sp
+                fontSize = 16.sp
             )
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 OutlinedTextField(
                     value = titleBangla,
                     onValueChange = { titleBangla = it },
@@ -794,14 +889,14 @@ fun AdminPublishKitabDialog(
                 OutlinedTextField(
                     value = arabicTitle,
                     onValueChange = { arabicTitle = it },
-                    label = { Text("আরবি নাম (ঐচ্ছিক)") },
+                    label = { Text("আরবি শিরোনাম") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = authorBangla,
                     onValueChange = { authorBangla = it },
-                    label = { Text("লেখকের নাম") },
+                    label = { Text("মূল লেখক / মুহাদ্দিস") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -819,63 +914,106 @@ fun AdminPublishKitabDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = volumeNumberStr,
+                        onValueChange = { volumeNumberStr = it },
+                        label = { Text("খণ্ড নং") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = totalVolumesStr,
+                        onValueChange = { totalVolumesStr = it },
+                        label = { Text("মোট খণ্ড") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                OutlinedTextField(
+                    value = fileSizeBytesStr,
+                    onValueChange = { fileSizeBytesStr = it },
+                    label = { Text("ফাইলের আকার (Bytes)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
                 OutlinedTextField(
                     value = downloadUrl,
                     onValueChange = { downloadUrl = it },
-                    label = { Text("সরাসরি PDF লিংক (https://...)") },
+                    label = { Text("সরাসরি PDF Download URL (HTTPS)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
-                    value = sha256Checksum,
-                    onValueChange = { sha256Checksum = it },
-                    label = { Text("SHA-256 Checksum (৬৪ অক্ষর)") },
+                    value = sha256Hex,
+                    onValueChange = { sha256Hex = it },
+                    label = { Text("SHA-256 Checksum (64 hex chars)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
-                    value = descriptionBangla,
-                    onValueChange = { descriptionBangla = it },
+                    value = shortDesc,
+                    onValueChange = { shortDesc = it },
                     label = { Text("সংক্ষিপ্ত পরিচিতি") },
                     modifier = Modifier.fillMaxWidth()
                 )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = isOpenLicense,
+                        onCheckedChange = { isOpenLicense = it }
+                    )
+                    Text(
+                        text = "ওপেন-অ্যাক্সেস / প্রকাশকের বৈধ ডিজিটাল অনুমতি যাচাইকৃত",
+                        fontSize = 12.sp
+                    )
+                }
                 if (errorMsg != null) {
-                    Text(text = errorMsg!!, color = Color(0xFFB71C1C), fontSize = 12.sp)
+                    Text(
+                        text = errorMsg!!,
+                        color = Color(0xFFB71C1C),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    val sizeMb = fileSizeMbInput.toDoubleOrNull() ?: 10.0
-                    val bytes = (sizeMb * 1024 * 1024).toLong()
-                    val generatedId = "admin_kitab_" + System.currentTimeMillis()
+                    val vol = KitabFormatUtils.parseBanglaOrEnglishInt(volumeNumberStr) ?: 1
+                    val totalVol = KitabFormatUtils.parseBanglaOrEnglishInt(totalVolumesStr) ?: 1
+                    val sizeBytes = fileSizeBytesStr.trim().toLongOrNull() ?: 0L
+                    val generatedId = "custom_${System.currentTimeMillis()}"
                     val entity = KitabMetadataEntity(
                         bookId = generatedId,
-                        seriesId = generatedId,
+                        seriesId = "series_$generatedId",
                         titleBangla = titleBangla.trim(),
                         arabicTitle = arabicTitle.trim(),
                         authorBangla = authorBangla.trim(),
                         translatorOrCompilerBangla = translatorBangla.trim().ifBlank { authorBangla.trim() },
                         publisherBangla = publisherBangla.trim(),
-                        categoryId = KitabCategory.QAWMI_TEXTBOOK_SHARAH.id,
-                        volumeNumber = 1,
-                        totalVolumes = 1,
-                        fileSizeBytes = bytes,
+                        categoryId = selectedCategory.id,
+                        volumeNumber = vol,
+                        totalVolumes = totalVol.coerceAtLeast(vol),
+                        fileSizeBytes = sizeBytes,
                         languageBangla = "বাংলা ও আরবি",
-                        shortDescriptionBangla = descriptionBangla.trim().ifBlank { "অ্যাডমিন কর্তৃক সংযোজিত কিতাব।" },
-                        marhalaBangla = "দাওরায়ে হাদিস ও উচ্চতর মারহালা",
+                        shortDescriptionBangla = shortDesc.trim().ifBlank { "প্রামাণ্য বাংলা হাদিস শরাহ।" },
+                        marhalaBangla = "দাওরায়ে হাদিস (তাকমীল)",
                         downloadUrl = downloadUrl.trim(),
-                        sha256Checksum = sha256Checksum.trim(),
-                        isOpenLicenseVerified = downloadUrl.trim().startsWith("https://") && sha256Checksum.trim().length == 64,
+                        sha256Checksum = sha256Hex.trim().lowercase(),
+                        isOpenLicenseVerified = isOpenLicense,
                         isAdminApproved = true,
-                        licenseNoteBangla = "অ্যাডমিন অনুমোদিত ও যাচাইকৃত সংস্করণ",
+                        licenseNoteBangla = if (isOpenLicense) "অ্যাডমিন ভেরিফায়েড ওপেন-অ্যাক্সেস সংস্করণ" else "শুধু গ্রন্থ-তথ্য",
                         coverPrimaryHex = 0xFF074E35,
                         coverAccentHex = 0xFFDDA83A
                     )
                     KitabDownloadAndStorageManager.publishApprovedKitabAsAdmin(context, entity) { ok, msg ->
                         if (ok) {
-                            onPublished(msg)
+                            onPublishedMessage(msg)
+                            onDismiss()
                         } else {
                             errorMsg = msg
                         }
@@ -883,7 +1021,7 @@ fun AdminPublishKitabDialog(
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = KitabGreenPrimary)
             ) {
-                Text("প্রকাশ করুন")
+                Text("অনুমোদন ও প্রকাশ করুন")
             }
         },
         dismissButton = {

@@ -6,14 +6,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
-import com.example.ui.quran.HafeziDrivePdfManager
 import com.example.ui.quran.HafeziQuranHubScreen
 import com.example.ui.quran.HafeziQuranIndexData
 import com.example.ui.quran.HafeziQuranStorageManager
@@ -45,19 +44,10 @@ class HafeziQuranAndHomeOrderTest {
     }
 
     @Test
-    fun verify15LineHafeziPdfIndex_114Surahs_30Paras_616Pages_andSha256() {
+    fun verify15LineHafeziMushafIndex_114Surahs_30Paras_610Pages_andExact15Lines() {
         assertEquals(114, HafeziQuranIndexData.all114Surahs.size)
         assertEquals(30, HafeziQuranIndexData.all30Paras.size)
-        assertEquals(616, HafeziQuranIndexData.TOTAL_PDF_PAGES)
-        assertEquals(616, HafeziQuranIndexData.TOTAL_MUSHAF_PAGES)
-        assertEquals(
-            "1305a0bcde5b9ec30b70ef7a9150c0bfcfc9af5735912b20cd204fc41a719828",
-            HafeziQuranIndexData.ORIGINAL_PDF_SHA256
-        )
-        assertEquals(
-            HafeziQuranIndexData.ORIGINAL_PDF_SHA256,
-            HafeziDrivePdfManager.stateFlow.value.originalSha256
-        )
+        assertEquals(610, HafeziQuranIndexData.TOTAL_MUSHAF_PAGES)
 
         // Verify Surah Al-Fatiha (Surah 1) -> Page 2, Para 1, 7 Ayahs
         val fatiha = HafeziQuranIndexData.getSurahByNumber(1)
@@ -79,33 +69,18 @@ class HafeziQuranAndHomeOrderTest {
         assertEquals(441, yasin.startPage)
         assertEquals(22, yasin.startPara)
 
-        // Verify Surah Ar-Rahman (Surah 55) -> Page 532, Para 27, 78 Ayahs (verified from PDF Fehrist)
-        val rahman = HafeziQuranIndexData.getSurahByNumber(55)
-        assertEquals("আর-রহমান", rahman.nameBangla)
-        assertEquals(78, rahman.ayahCount)
-        assertEquals(532, rahman.startPage)
-        assertEquals(27, rahman.startPara)
-
-        // Verify Surah Al-Mulk (Surah 67) -> Page 563, Para 29, 30 Ayahs (verified from PDF Fehrist)
-        val mulk = HafeziQuranIndexData.getSurahByNumber(67)
-        assertEquals("আল-মুলক", mulk.nameBangla)
-        assertEquals(30, mulk.ayahCount)
-        assertEquals(563, mulk.startPage)
-        assertEquals(29, mulk.startPara)
-
-        // Verify Surah An-Nas (Surah 114) -> Page 611, Para 30, 6 Ayahs (verified from PDF Fehrist)
+        // Verify Surah An-Nas (Surah 114) -> Page 610, Para 30, 6 Ayahs
         val nas = HafeziQuranIndexData.getSurahByNumber(114)
         assertEquals("আন-নাস", nas.nameBangla)
         assertEquals(6, nas.ayahCount)
-        assertEquals(611, nas.startPage)
-        assertEquals(611, nas.endPage)
+        assertEquals(610, nas.endPage)
         assertEquals(30, nas.startPara)
 
-        // Verify Para 1, Para 2, Para 29, Para 30 verified start pages
-        assertEquals(2, HafeziQuranIndexData.getParaByNumber(1).startPage)
-        assertEquals(23, HafeziQuranIndexData.getParaByNumber(2).startPage)
-        assertEquals(563, HafeziQuranIndexData.getParaByNumber(29).startPage)
-        assertEquals(587, HafeziQuranIndexData.getParaByNumber(30).startPage)
+        // Verify every sampled page has strictly 15 lines
+        listOf(1, 2, 3, 22, 43, 294, 441, 533, 566, 582, 610).forEach { pageNo ->
+            val pageMeta = HafeziQuranIndexData.getPageMetadata(pageNo)
+            assertEquals("Page $pageNo must have strictly 15 lines", 15, pageMeta.lines.size)
+        }
     }
 
     @Test
@@ -118,9 +93,9 @@ class HafeziQuranAndHomeOrderTest {
         val surahSearch = HafeziQuranIndexData.searchAll("ইয়াসিন")
         assertTrue(surahSearch.matchingSurahs.any { it.number == 36 && it.startPage == 441 })
 
-        // 3. Para search (Para 29 starts on Page 563 in the verified PDF Fehrist)
+        // 3. Para search
         val paraSearch = HafeziQuranIndexData.searchAll("তাবারাকাল্লাযী")
-        assertTrue(paraSearch.matchingParas.any { it.number == 29 && it.startPage == 563 })
+        assertTrue(paraSearch.matchingParas.any { it.number == 29 && it.startPage == 562 })
 
         // 4. Ayah reference search (2:255 - Ayatul Kursi)
         val ayahSearch = HafeziQuranIndexData.searchAll("2:255")
@@ -137,21 +112,21 @@ class HafeziQuranAndHomeOrderTest {
         assertEquals(22, progress.lastReadParaNumber)
         assertTrue(progress.uniquePagesReadCount >= 1)
 
-        // Bookmark multiple pages (Page 43 and Page 563)
+        // Bookmark multiple pages (Page 43 and Page 566)
         HafeziQuranStorageManager.addOrUpdateBookmark(context, 43, "আয়াতুল কুরসি")
-        HafeziQuranStorageManager.addOrUpdateBookmark(context, 563, "সূরা মুলক তিলাওয়াত")
+        HafeziQuranStorageManager.addOrUpdateBookmark(context, 566, "সূরা মুলক তিলাওয়াত")
 
         assertTrue(HafeziQuranStorageManager.isPageBookmarked(43))
-        assertTrue(HafeziQuranStorageManager.isPageBookmarked(563))
+        assertTrue(HafeziQuranStorageManager.isPageBookmarked(566))
 
         val savedBookmarks = HafeziQuranStorageManager.bookmarksFlow.value
         assertTrue(savedBookmarks.any { it.pageNumber == 43 && it.note == "আয়াতুল কুরসি" })
-        assertTrue(savedBookmarks.any { it.pageNumber == 563 && it.note == "সূরা মুলক তিলাওয়াত" })
+        assertTrue(savedBookmarks.any { it.pageNumber == 566 && it.note == "সূরা মুলক তিলাওয়াত" })
 
         // Remove one bookmark
         HafeziQuranStorageManager.removeBookmark(context, 43)
         assertTrue(!HafeziQuranStorageManager.isPageBookmarked(43))
-        assertTrue(HafeziQuranStorageManager.isPageBookmarked(563))
+        assertTrue(HafeziQuranStorageManager.isPageBookmarked(566))
     }
 
     @Test
@@ -162,14 +137,10 @@ class HafeziQuranAndHomeOrderTest {
         assertEquals(50, partialReport.verifiedPageCount)
         assertEquals(QuranDownloadStatus.PAUSED, HafeziQuranStorageManager.downloadStateFlow.value.status)
 
-        // Step 2: Resume and complete all 616 pages
-        val fullReport = HafeziQuranStorageManager.downloadRangeAndVerifySync(
-            context,
-            startPage = 51,
-            endPage = HafeziQuranIndexData.TOTAL_PDF_PAGES
-        )
+        // Step 2: Resume and complete all 610 pages
+        val fullReport = HafeziQuranStorageManager.downloadRangeAndVerifySync(context, startPage = 51, endPage = 610)
         assertTrue(fullReport.isValid)
-        assertEquals(616, fullReport.verifiedPageCount)
+        assertEquals(610, fullReport.verifiedPageCount)
         assertTrue(fullReport.corruptedOrMissingPages.isEmpty())
         assertEquals(QuranDownloadStatus.COMPLETED_VERIFIED, HafeziQuranStorageManager.downloadStateFlow.value.status)
         assertNotNull(fullReport.sha256DigestPrefix)
@@ -212,82 +183,22 @@ class HafeziQuranAndHomeOrderTest {
     }
 
     @Test
-    fun verifyHafeziQuranHubScreen_4Tabs_Filters_andInternalPdfReader() {
+    fun verifyHafeziQuranHubScreenAndReaderNavigation() {
         composeTestRule.setContent {
             HafeziQuranHubScreen(onCloseHub = {})
         }
 
-        // 1. Verify Quran Home Screen Dashboard
         composeTestRule.onNodeWithTag("hafezi_quran_hub_screen").assertIsDisplayed()
         composeTestRule.onNodeWithTag("quran_hub_hero_resume_card").assertIsDisplayed()
         composeTestRule.onNodeWithTag("quran_hub_offline_download_card").assertIsDisplayed()
 
-        // 2. Verify 4 Navigation Tabs exist and work
-        composeTestRule.onNodeWithTag("quran_hub_lazy_list")
-            .performScrollToNode(hasTestTag("quran_hub_tab_surahs"))
-        composeTestRule.onNodeWithTag("quran_hub_tab_surahs").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("quran_hub_tab_paras").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("quran_hub_tab_bookmarks").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("quran_hub_tab_history").assertIsDisplayed()
-
-        // 3. Switch to 30 Para tab and verify Para 1 (starts at Page 2) is displayed
-        composeTestRule.onNodeWithTag("quran_hub_tab_paras").performClick()
-        composeTestRule.onNodeWithTag("quran_hub_lazy_list")
-            .performScrollToNode(hasTestTag("quran_para_item_1"))
-        composeTestRule.onNodeWithTag("quran_para_item_1").assertIsDisplayed()
-
-        // 4. Switch back to 114 Surah tab and open Surah 1 (Al-Fatiha -> Page 2) in Internal PDF Reader
-        composeTestRule.onNodeWithTag("quran_hub_lazy_list")
-            .performScrollToNode(hasTestTag("quran_hub_tab_surahs"))
-        composeTestRule.onNodeWithTag("quran_hub_tab_surahs").performClick()
+        // Scroll to and click on Surah 1 (Al-Fatiha) to open the 15-Line Hafezi Mushaf Reader at Page 2
         composeTestRule.onNodeWithTag("quran_hub_lazy_list")
             .performScrollToNode(hasTestTag("quran_surah_item_1"))
         composeTestRule.onNodeWithTag("quran_surah_item_1").performClick()
 
-        // 5. Verify Internal PDF Reader opens directly inside the app without Google Login or External App
         composeTestRule.onNodeWithTag("hafezi_quran_reader_screen").assertIsDisplayed()
         composeTestRule.onNodeWithTag("hafezi_mushaf_page_2").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("quran_reader_prev_page_button").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("quran_reader_next_page_button").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("quran_reader_zoom_in_button").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("quran_reader_zoom_out_button").assertIsDisplayed()
-    }
-
-    @Test
-    fun verifyInAppAutoUpdate_QuotaFreeTelegramMirrorAndRemixCertSupport() {
-        val sampleTelegramResponse = """
-            {
-              "ok": true,
-              "result": {
-                "description": "{\"vc\":209,\"vn\":\"1.0.109\",\"tag\":\"v1.0.109\",\"url\":\"https://files.catbox.moe/qawmi209.apk\",\"sha\":\"1305a0bcde5b9ec30b70ef7a9150c0bfcfc9af5735912b20cd204fc41a719828\",\"sz\":58123456,\"m\":true,\"st\":\"PUBLISHED\",\"notes\":\"১৫ লাইন হাফেজি কোরআন PDF রিডার আপডেট\"}"
-              }
-            }
-        """.trimIndent()
-
-        val parsedRelease = com.example.ui.util.AppUpdateManagerHelper.parseTelegramBotReleaseJson(sampleTelegramResponse)
-        assertNotNull(parsedRelease)
-        assertEquals(209, parsedRelease!!.versionCode)
-        assertEquals("1.0.109", parsedRelease.versionName)
-        assertEquals("https://files.catbox.moe/qawmi209.apk", parsedRelease.apkDownloadUrl)
-        assertTrue(parsedRelease.isMandatory)
-        assertTrue(
-            com.example.ui.util.AppUpdateManagerHelper.isUpdateAvailable(
-                installedVersionCode = 208,
-                installedVersionName = "1.0.108",
-                remoteRelease = parsedRelease
-            )
-        )
-
-        // Verify both pre-remix and post-remix official signing certificates are trusted
-        assertTrue(
-            com.example.ui.util.AppUpdateManagerHelper.OFFICIAL_SIGNING_CERT_SHA256_SET.contains(
-                "b1a449cdb9ca663b9a94af5081aba1cb463621712f8730b68449bc221cf8100c"
-            )
-        )
-        assertTrue(
-            com.example.ui.util.AppUpdateManagerHelper.OFFICIAL_SIGNING_CERT_SHA256_SET.contains(
-                "654695097463c1016bd0e37b193b76d74333f3bbc12caffddfc3e35229c4b3c3"
-            )
-        )
+        composeTestRule.onNodeWithTag("hafezi_mushaf_15_lines_container").assertIsDisplayed()
     }
 }

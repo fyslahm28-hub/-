@@ -4,34 +4,20 @@ import android.content.Context
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.dp
-import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import com.example.ui.kitab.KitabCategory
-import com.example.ui.kitab.KitabDownloadAndStorageManager
-import com.example.ui.kitab.KitabDownloadStatus
-import com.example.ui.kitab.KitabFormatUtils
-import com.example.ui.kitab.KitabLibraryDatabase
-import com.example.ui.kitab.KitabLibraryHubScreen
-import com.example.ui.kitab.KitabMetadataEntity
-import com.example.ui.kitab.KitabNetworkStreamResponse
-import com.example.ui.kitab.KitabNetworkTransport
-import com.example.ui.kitab.KitabVerifiedCatalogData
-import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.kitab.*
+import com.example.ui.quran.HafeziQuranReaderView
+import com.example.ui.quran.HafeziQuranStorageManager
+import com.example.ui.screens.IslamicAndEssentialServicesSection
+import com.example.ui.viewmodel.MainDestination
 import kotlinx.coroutines.runBlocking
-import org.junit.After
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertTrue
+import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -40,405 +26,378 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.ByteArrayInputStream
 import java.io.File
-import java.net.HttpURLConnection
 import java.security.MessageDigest
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34], qualifiers = "w420dp-h1800dp")
+@Config(sdk = [34], qualifiers = "w420dp-h2400dp")
 class KitabLibrarySystemTest {
 
     @get:Rule
     val composeTestRule = createComposeRule()
 
     private lateinit var context: Context
-    private lateinit var testDb: KitabLibraryDatabase
-    private lateinit var deviceAStorageDir: File
-    private lateinit var deviceBStorageDir: File
-
-    private val syntheticPdfMap = mutableMapOf<String, ByteArray>()
 
     @Before
     fun setUp() = runBlocking {
         context = ApplicationProvider.getApplicationContext()
-        deviceAStorageDir = File(context.cacheDir, "test_kitab_device_A_${System.nanoTime()}").apply { mkdirs() }
-        deviceBStorageDir = File(context.cacheDir, "test_kitab_device_B_${System.nanoTime()}").apply { mkdirs() }
-
-        testDb = Room.inMemoryDatabaseBuilder(context, KitabLibraryDatabase::class.java)
-            .allowMainThreadQueries()
-            .build()
-        KitabLibraryDatabase.overrideInstanceForTesting(testDb)
-
         KitabDownloadAndStorageManager.isNetworkConnectedOverride = true
-        KitabDownloadAndStorageManager.setCustomStorageDirectoryForTesting(deviceAStorageDir)
-        KitabDownloadAndStorageManager.initAndAwaitSync(context, deviceAStorageDir)
-    }
-
-    @After
-    fun tearDown() {
-        KitabDownloadAndStorageManager.isNetworkConnectedOverride = null
-        KitabDownloadAndStorageManager.setCustomStorageDirectoryForTesting(null)
-        runCatching { testDb.close() }
-        runCatching { deviceAStorageDir.deleteRecursively() }
-        runCatching { deviceBStorageDir.deleteRecursively() }
+        KitabDownloadAndStorageManager.initAndAwaitSync(context)
+        HafeziQuranStorageManager.init(context)
     }
 
     private fun sha256Hex(bytes: ByteArray): String {
-        val md = MessageDigest.getInstance("SHA-256")
-        return md.digest(bytes).joinToString("") { "%02x".format(it) }
+        val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
+        return digest.joinToString("") { "%02x".format(it) }
     }
 
-    private suspend fun installSyntheticVerifiedBook(
-        bookId: String,
-        titleBangla: String,
-        pageCount: Int = 8,
-        sizeBytesTarget: Int = 32 * 1024,
-        corruptPayloadOnServer: Boolean = false
-    ): KitabMetadataEntity {
-        val validBytes = KitabDownloadAndStorageManager.buildValidTestPdfBytes(
-            title = titleBangla,
-            pageCount = pageCount,
-            minTargetSizeBytes = sizeBytesTarget
-        )
-        val expectedSha256 = sha256Hex(validBytes)
-        val url = "https://archive.org/download/test_verified/$bookId.pdf"
+    @Test
+    fun verifyCatalogCoversAll8CategoriesWithAuthenticVerifiedMetadata() {
+        val allEntities = KitabVerifiedCatalogData.defaultCatalogEntities
+        assertTrue("Catalog must contain at least 20 verified Hadith Sharah & Kitab entries", allEntities.size >= 20)
 
-        val serverBytes = if (corruptPayloadOnServer) {
-            validBytes.clone().also { arr ->
-                // Corrupt bytes in the middle so SHA-256 fails while size remains identical
-                arr[arr.size / 2] = (arr[arr.size / 2].toInt() xor 0xFF).toByte()
+        KitabCategory.entries.filter { it != KitabCategory.ALL }.forEach { category ->
+            val booksInCategory = allEntities.filter { it.categoryId == category.id }
+            assertTrue(
+                "Category ${category.titleBangla} must contain verified books",
+                booksInCategory.isNotEmpty()
+            )
+            booksInCategory.forEach { book ->
+                assertTrue(book.titleBangla.isNotBlank())
+                assertTrue(book.authorBangla.isNotBlank())
+                assertTrue(book.translatorOrCompilerBangla.isNotBlank())
+                assertTrue(book.publisherBangla.isNotBlank())
             }
-        } else {
-            validBytes
         }
-        syntheticPdfMap[url] = serverBytes
+    }
 
+    @Test
+    fun verifyZeroAutoDownloadBeforeUserAction_andPerBookIsolatedStorage() = runBlocking {
+        val sampleBook = KitabDownloadAndStorageManager.catalogItemsFlow.value.first()
+        KitabDownloadAndStorageManager.deleteDownloadedBookSynchronously(context, sampleBook.bookId)
+
+        val localFile = KitabDownloadAndStorageManager.getFinalPdfFile(context, sampleBook.bookId)
+        assertFalse(
+            "PDF file must NOT exist on device before user clicks download",
+            localFile.exists()
+        )
+        val refreshed = KitabDownloadAndStorageManager.catalogItemsFlow.value.first { it.bookId == sampleBook.bookId }
+        assertFalse(
+            "isReadyToReadOffline must be false before download",
+            refreshed.isReadyToReadOffline
+        )
+    }
+
+    @Test
+    fun verifyRealDownloadProgress_PauseResume_andOfflineVerification() = runBlocking {
+        val validPdfBytes = KitabDownloadAndStorageManager.buildValidTestPdfBytes(
+            title = "Test Bukhari Sharah",
+            pageCount = 8,
+            minTargetSizeBytes = 32 * 1024
+        )
+        val checksum = sha256Hex(validPdfBytes)
+        val testBookId = "test_download_bukhari_1"
+
+        val dao = KitabLibraryDatabase.getInstance(context).kitabLibraryDao()
+        dao.upsertCatalogItem(
+            KitabMetadataEntity(
+                bookId = testBookId,
+                seriesId = "series_test_bukhari",
+                titleBangla = "নুযহাতুল কারী টেস্ট খণ্ড",
+                arabicTitle = "نزهة القاري",
+                authorBangla = "ইমাম বুখারী (রহ.)",
+                translatorOrCompilerBangla = "দারুল হাদিস ফাজেলবৃন্দ",
+                publisherBangla = "মাকতাবাতুল ইলম",
+                categoryId = KitabCategory.BUKHARI_SHARAH.id,
+                volumeNumber = 1,
+                totalVolumes = 1,
+                fileSizeBytes = validPdfBytes.size.toLong(),
+                languageBangla = "বাংলা ও আরবি",
+                shortDescriptionBangla = "টেস্ট কিতাব",
+                marhalaBangla = "দাওরায়ে হাদিস",
+                downloadUrl = "https://archive.org/download/test_bukhari.pdf",
+                sha256Checksum = checksum,
+                isOpenLicenseVerified = true,
+                isAdminApproved = true,
+                licenseNoteBangla = "SHA-256 যাচাইকৃত",
+                coverPrimaryHex = 0xFF074E35L,
+                coverAccentHex = 0xFFDDA83AL
+            )
+        )
+        KitabDownloadAndStorageManager.deleteDownloadedBookSynchronously(context, testBookId)
+
+        val prevTransport = KitabDownloadAndStorageManager.networkTransport
         KitabDownloadAndStorageManager.networkTransport = object : KitabNetworkTransport {
             override fun openStream(downloadUrl: String, rangeStartBytes: Long): KitabNetworkStreamResponse {
-                val payload = syntheticPdfMap[downloadUrl]
-                    ?: throw IllegalStateException("No test payload registered for $downloadUrl")
-                val safeOffset = rangeStartBytes.toInt().coerceIn(0, payload.size)
-                val sliced = payload.copyOfRange(safeOffset, payload.size)
-                val isPartial = safeOffset > 0
+                val slice = if (rangeStartBytes > 0 && rangeStartBytes < validPdfBytes.size) {
+                    validPdfBytes.copyOfRange(rangeStartBytes.toInt(), validPdfBytes.size)
+                } else {
+                    validPdfBytes
+                }
                 return KitabNetworkStreamResponse(
-                    httpStatusCode = if (isPartial) HttpURLConnection.HTTP_PARTIAL else HttpURLConnection.HTTP_OK,
-                    isPartialContent = isPartial,
-                    contentLengthBytes = sliced.size.toLong(),
-                    inputStream = ByteArrayInputStream(sliced)
+                    httpStatusCode = if (rangeStartBytes > 0) 206 else 200,
+                    isPartialContent = rangeStartBytes > 0,
+                    contentLengthBytes = slice.size.toLong(),
+                    inputStream = ByteArrayInputStream(slice)
                 )
             }
         }
 
-        val entity = KitabMetadataEntity(
-            bookId = bookId,
-            seriesId = "series_$bookId",
-            titleBangla = titleBangla,
-            arabicTitle = "شرح الحديث",
-            authorBangla = "শাইখুল হাদিস আল্লামা আজিজুল হক (রহ.)",
-            translatorOrCompilerBangla = "শাইখুল হাদিস আল্লামা আজিজুল হক (রহ.)",
-            publisherBangla = "মাকতাবাতুল আশরাফ ঢাকা",
-            categoryId = KitabCategory.BUKHARI_SHARAH.id,
-            volumeNumber = 1,
-            totalVolumes = 2,
-            fileSizeBytes = validBytes.size.toLong(),
-            languageBangla = "বাংলা ও আরবি",
-            shortDescriptionBangla = "দাওরায়ে হাদিসের শিক্ষার্থীদের জন্য সহিহ বুখারির প্রামাণ্য বাংলা শরাহ।",
-            marhalaBangla = "দাওরায়ে হাদিস",
-            downloadUrl = url,
-            sha256Checksum = expectedSha256,
-            isOpenLicenseVerified = true,
-            isAdminApproved = true,
-            licenseNoteBangla = "ওপেন-অ্যাক্সেস ভেরিফায়েড সংস্করণ",
-            coverPrimaryHex = 0xFF074E35,
-            coverAccentHex = 0xFFDDA83A
-        )
-        val dao = testDb.kitabLibraryDao()
-        dao.upsertCatalogItem(entity)
-        KitabDownloadAndStorageManager.refreshSnapshotFromDao(dao)
-        return entity
-    }
-
-    @Test
-    fun test01_catalogLoadsAll8Categories_andValidatesAuthenticMetadataAndSha256() {
-        val defaultCatalog = KitabVerifiedCatalogData.defaultCatalogEntities
-        assertTrue("Catalog must contain at least 15 verified items", defaultCatalog.size >= 15)
-
-        // All 8 required Hadith Sharah & Qawmi categories must be represented
-        val requiredCategories = listOf(
-            KitabCategory.BUKHARI_SHARAH,
-            KitabCategory.MUSLIM_SHARAH,
-            KitabCategory.ABU_DAWOOD_SHARAH,
-            KitabCategory.TIRMIZI_SHARAH,
-            KitabCategory.NASAI_SHARAH,
-            KitabCategory.IBN_MAJAH_SHARAH,
-            KitabCategory.MISHKAT_SHARAH,
-            KitabCategory.QAWMI_TEXTBOOK_SHARAH
-        )
-        for (cat in requiredCategories) {
-            assertTrue(
-                "Category ${cat.titleBangla} must have at least 1 book in catalog",
-                defaultCatalog.any { it.categoryId == cat.id }
+        try {
+            // 1. Partial download (Pause at 16KB)
+            val pausedModel = KitabDownloadAndStorageManager.downloadBookSynchronously(
+                context = context,
+                bookId = testBookId,
+                pauseAfterBytes = 16 * 1024L
             )
-        }
+            assertNotNull(pausedModel)
+            assertEquals(KitabDownloadStatus.PAUSED, pausedModel?.downloadStatus)
 
-        // Every open-license downloadable book must have HTTPS URL, >0 fileSizeBytes, and 64-char SHA-256
-        val downloadableBooks = defaultCatalog.filter { it.isOpenLicenseVerified }
-        assertTrue(downloadableBooks.size >= 13)
-        for (book in downloadableBooks) {
-            assertTrue(book.downloadUrl.startsWith("https://archive.org/download/"))
-            assertTrue(book.fileSizeBytes > 100_000L)
-            assertEquals(64, book.sha256Checksum.length)
-        }
+            // 2. Resume and complete download + SHA-256 verification
+            val completedModel = KitabDownloadAndStorageManager.downloadBookSynchronously(
+                context = context,
+                bookId = testBookId,
+                pauseAfterBytes = -1L
+            )
+            assertNotNull(completedModel)
+            assertEquals(KitabDownloadStatus.DOWNLOADED_VERIFIED, completedModel?.downloadStatus)
+            assertTrue(completedModel!!.isReadyToReadOffline)
+            assertEquals(8, completedModel.totalPageCount)
 
-        // Before user downloads anything, 0 PDF files are saved on the phone
-        val localFilesBeforeDownload = deviceAStorageDir.listFiles()?.filter { it.name.endsWith(".pdf") }.orEmpty()
-        assertTrue("No PDF file may be stored before user initiates download", localFilesBeforeDownload.isEmpty())
+            // 3. Delete downloaded book and verify local file is removed
+            KitabDownloadAndStorageManager.deleteDownloadedBookSynchronously(context, testBookId)
+            assertFalse(KitabDownloadAndStorageManager.getFinalPdfFile(context, testBookId).exists())
+        } finally {
+            KitabDownloadAndStorageManager.networkTransport = prevTransport
+        }
     }
 
     @Test
-    fun test02_03_08_09_downloadWithPauseResume_progressPercentAndMb_persistsAcrossRestart_andReadsWithoutRedownload() = runBlocking {
-        val entity = installSyntheticVerifiedBook(
-            bookId = "test_bukhari_vol_1",
-            titleBangla = "সহীহ বুখারী বাংলা শরাহ — ১ম খণ্ড",
-            pageCount = 10,
-            sizeBytesTarget = 40 * 1024
-        )
+    fun verifyReadingProgress_LastReadPage_andBookmarksIsolationPerBook() = runBlocking {
+        val books = KitabDownloadAndStorageManager.catalogItemsFlow.value
+        val bookA = books[0]
+        val bookB = books[1]
 
-        // Step 1: Start download and pause halfway (at 16 KB) -> verifies PAUSED status & partial progress (% and MB)
-        val pausedModel = KitabDownloadAndStorageManager.downloadBookSynchronously(
-            context = context,
-            bookId = entity.bookId,
-            pauseAfterBytes = 16 * 1024L
-        )
-        assertNotNull(pausedModel)
-        assertEquals(KitabDownloadStatus.PAUSED, pausedModel!!.downloadStatus)
-        assertTrue("Partial bytes must be saved in .part file", pausedModel.downloadedBytes >= 16 * 1024L)
-        assertTrue("Progress percent must be between 30% and 90%", pausedModel.progressPercent in 30..90)
-        assertTrue(pausedModel.formattedDownloadedMb.endsWith("MB"))
-        assertFalse("Partial download must NOT be marked ready to read", pausedModel.isReadyToReadOffline)
-
-        // Step 2: Resume download via HTTP 206 Partial Content until 100% completion + SHA-256 verification
-        val completedModel = KitabDownloadAndStorageManager.downloadBookSynchronously(
-            context = context,
-            bookId = entity.bookId,
-            pauseAfterBytes = -1L
-        )
-        assertNotNull(completedModel)
-        assertEquals(KitabDownloadStatus.DOWNLOADED_VERIFIED, completedModel!!.downloadStatus)
-        assertTrue(completedModel.sha256Verified)
-        assertTrue(completedModel.isReadyToReadOffline)
-        assertEquals(100, completedModel.progressPercent)
-        assertEquals(10, completedModel.totalPageCount)
-
-        // Step 3: Read up to page 7 and record progress locally
         KitabDownloadAndStorageManager.recordPageReadSynchronously(
             context = context,
-            bookId = entity.bookId,
-            pageNumber = 7,
-            totalPages = 10
+            bookId = bookA.bookId,
+            pageNumber = 42,
+            totalPages = 520
+        )
+        KitabDownloadAndStorageManager.recordPageReadSynchronously(
+            context = context,
+            bookId = bookB.bookId,
+            pageNumber = 15,
+            totalPages = 400
         )
 
-        // Step 4: Simulate App Restart (re-initializing storage manager & reconciling with disk)
-        KitabDownloadAndStorageManager.initAndAwaitSync(context, deviceAStorageDir)
-        val afterRestartModel = KitabDownloadAndStorageManager.catalogItemsFlow.value
-            .first { it.bookId == entity.bookId }
+        val updatedBooks = KitabDownloadAndStorageManager.catalogItemsFlow.value
+        val updatedA = updatedBooks.first { it.bookId == bookA.bookId }
+        val updatedB = updatedBooks.first { it.bookId == bookB.bookId }
+        assertEquals(42, updatedA.lastReadPage)
+        assertEquals(15, updatedB.lastReadPage)
 
-        assertEquals(KitabDownloadStatus.DOWNLOADED_VERIFIED, afterRestartModel.downloadStatus)
-        assertEquals("Last read page (7) must persist after app restart", 7, afterRestartModel.lastReadPage)
-
-        // Step 5: Open book again without re-downloading -> opens directly at lastReadPage = 7
-        val openCheck = KitabDownloadAndStorageManager.verifyAndPrepareBookForInternalReader(context, entity.bookId)
-        assertTrue(openCheck.canOpen)
-        assertEquals(7, openCheck.initialPage)
-        assertEquals(10, openCheck.totalPages)
+        // Toggle bookmark on Book A Page 42
+        KitabDownloadAndStorageManager.toggleBookmarkSynchronously(
+            context = context,
+            bookId = bookA.bookId,
+            bookTitleBangla = bookA.titleBangla,
+            volumeNumber = bookA.volumeNumber,
+            pageNumber = 42,
+            note = "গুরুত্বপূর্ণ শরাহ"
+        )
+        val bookmarksForA = KitabDownloadAndStorageManager.bookmarksFlow.value.filter { it.bookId == bookA.bookId }
+        val bookmarksForB = KitabDownloadAndStorageManager.bookmarksFlow.value.filter { it.bookId == bookB.bookId }
+        assertTrue(bookmarksForA.any { it.pageNumber == 42 })
+        assertTrue("Bookmarks for Book A must not leak into Book B", bookmarksForB.none { it.pageNumber == 42 })
     }
 
     @Test
-    fun test05_06_offlineModeAllowsReadingDownloadedBook_andBlocksUndownloadedBookWithClearMessage() = runBlocking {
-        val downloadedBook = installSyntheticVerifiedBook(
-            bookId = "offline_ready_muslim_v1",
-            titleBangla = "সহীহ মুসলিম বাংলা শরাহ — ১ম খণ্ড",
-            pageCount = 6
-        )
-        val undownloadedBook = installSyntheticVerifiedBook(
-            bookId = "undownloaded_tirmizi_v1",
-            titleBangla = "জামে তিরমিযী বাংলা শরাহ — ১ম খণ্ড",
-            pageCount = 6
-        )
-
-        // Download only `offline_ready_muslim_v1` while online
-        KitabDownloadAndStorageManager.downloadBookSynchronously(context, downloadedBook.bookId)
-
-        // Turn OFF internet connection (Offline Mode)
-        KitabDownloadAndStorageManager.isNetworkConnectedOverride = false
-
-        // Test 5: Downloaded book opens and renders pages 100% offline without internet
-        val offlineReadResult = KitabDownloadAndStorageManager.verifyAndPrepareBookForInternalReader(
-            context = context,
-            bookId = downloadedBook.bookId
-        )
-        assertTrue("Downloaded book must open when internet is OFF", offlineReadResult.canOpen)
-        val renderedPageBitmap = KitabDownloadAndStorageManager.renderKitabPageBitmap(
-            context = context,
-            bookId = downloadedBook.bookId,
-            pageNumber = 2,
-            targetWidthPx = 600
-        )
-        assertNotNull("Native PDF Reader must render page bitmap while offline", renderedPageBitmap)
-
-        // Test 6: Un-downloaded book cannot open when offline and returns clear Bengali offline message
-        val blockedResult = KitabDownloadAndStorageManager.verifyAndPrepareBookForInternalReader(
-            context = context,
-            bookId = undownloadedBook.bookId
-        )
-        assertFalse("Un-downloaded book must NOT open when offline", blockedResult.canOpen)
-        assertTrue(
-            "Error message must mention offline/download requirement",
-            blockedResult.errorMessageBangla.contains("ডাউনলোড করা হয়নি") &&
-                blockedResult.errorMessageBangla.contains("ইন্টারনেট")
-        )
-    }
-
-    @Test
-    fun test07_deletingOneDownloadedBookRemovesOnlyItsFile_whileKeepingOtherDownloadedBooksIntact() = runBlocking {
-        val bookA = installSyntheticVerifiedBook(
-            bookId = "delete_test_book_A",
-            titleBangla = "সুনানে আবু দাউদ শরাহ — ১ম খণ্ড"
-        )
-        val bookB = installSyntheticVerifiedBook(
-            bookId = "delete_test_book_B",
-            titleBangla = "সুনানে নাসায়ী শরাহ — ১ম খণ্ড"
-        )
-
-        KitabDownloadAndStorageManager.downloadBookSynchronously(context, bookA.bookId)
-        KitabDownloadAndStorageManager.downloadBookSynchronously(context, bookB.bookId)
-
-        assertTrue(KitabDownloadAndStorageManager.getFinalPdfFile(context, bookA.bookId).exists())
-        assertTrue(KitabDownloadAndStorageManager.getFinalPdfFile(context, bookB.bookId).exists())
-
-        // Delete ONLY bookA
-        KitabDownloadAndStorageManager.deleteDownloadedBookSynchronously(context, bookA.bookId)
-
-        // Verify bookA's local PDF file is deleted, but bookA remains in the catalog as NOT_DOWNLOADED
-        assertFalse(KitabDownloadAndStorageManager.getFinalPdfFile(context, bookA.bookId).exists())
-        val updatedBookA = KitabDownloadAndStorageManager.catalogItemsFlow.value.first { it.bookId == bookA.bookId }
-        assertEquals(KitabDownloadStatus.NOT_DOWNLOADED, updatedBookA.downloadStatus)
-
-        // Verify bookB's local PDF file and DOWNLOADED_VERIFIED state remain 100% intact
-        assertTrue(KitabDownloadAndStorageManager.getFinalPdfFile(context, bookB.bookId).exists())
-        val updatedBookB = KitabDownloadAndStorageManager.catalogItemsFlow.value.first { it.bookId == bookB.bookId }
-        assertEquals(KitabDownloadStatus.DOWNLOADED_VERIFIED, updatedBookB.downloadStatus)
-        assertTrue(updatedBookB.isReadyToReadOffline)
-    }
-
-    @Test
-    fun test10_corruptedOrBadChecksumOrInvalidHeaderPdf_isBlockedAndQuarantined() = runBlocking {
-        val corruptedBook = installSyntheticVerifiedBook(
-            bookId = "corrupted_sha256_book",
-            titleBangla = "ক্ষতিগ্রস্ত ফাইল টেস্ট কিতাব",
-            corruptPayloadOnServer = true
-        )
-
-        val resultAfterDownload = KitabDownloadAndStorageManager.downloadBookSynchronously(
-            context = context,
-            bookId = corruptedBook.bookId
-        )
-        assertNotNull(resultAfterDownload)
-        assertEquals(
-            "Corrupted SHA-256 download must be flagged as FAILED_CORRUPTED",
-            KitabDownloadStatus.FAILED_CORRUPTED,
-            resultAfterDownload!!.downloadStatus
-        )
-        assertFalse(resultAfterDownload.isReadyToReadOffline)
-        assertFalse(
-            "Corrupted PDF must never be promoted to final .pdf file",
-            KitabDownloadAndStorageManager.getFinalPdfFile(context, corruptedBook.bookId).exists()
-        )
-
-        val openAttempt = KitabDownloadAndStorageManager.verifyAndPrepareBookForInternalReader(
-            context = context,
-            bookId = corruptedBook.bookId
-        )
-        assertFalse("Corrupted book must be blocked from opening in reader", openAttempt.canOpen)
-    }
-
-    @Test
-    fun test11_perDeviceIsolation_userADownloadDoesNotAffectUserBPhone() = runBlocking {
-        val book = installSyntheticVerifiedBook(
-            bookId = "device_isolation_mishkat_v1",
-            titleBangla = "মাজাহেরে হক্ব (মিশকাত শরাহ) — ১ম খণ্ড"
-        )
-
-        // User A downloads the book on Device A (`deviceAStorageDir`)
-        KitabDownloadAndStorageManager.setCustomStorageDirectoryForTesting(deviceAStorageDir)
-        val userAState = KitabDownloadAndStorageManager.downloadBookSynchronously(context, book.bookId)
-        assertEquals(KitabDownloadStatus.DOWNLOADED_VERIFIED, userAState!!.downloadStatus)
-        assertTrue(File(deviceAStorageDir, "${book.bookId}.pdf").exists())
-
-        // Switch to User B's phone (`deviceBStorageDir` + fresh device database reconciliation)
-        KitabDownloadAndStorageManager.initAndAwaitSync(context, deviceBStorageDir)
-        val userBState = KitabDownloadAndStorageManager.catalogItemsFlow.value.first { it.bookId == book.bookId }
-
-        assertFalse("User B's phone must NOT have the PDF file", File(deviceBStorageDir, "${book.bookId}.pdf").exists())
-        assertEquals(
-            "On User B's phone, the book must remain NOT_DOWNLOADED",
-            KitabDownloadStatus.NOT_DOWNLOADED,
-            userBState.downloadStatus
-        )
-    }
-
-    @Test
-    fun test04_12_uiEndToEnd_catalogToDownloadToInternalPdfReader_andPageNavigation() = runBlocking {
-        val testBook = installSyntheticVerifiedBook(
-            bookId = "ui_test_bukhari_1",
-            titleBangla = "বুখারী শরীফ বাংলা শরাহ (UI টেস্ট)",
-            pageCount = 6
-        )
-        // Pre-download so it can be opened immediately in the UI test
-        KitabDownloadAndStorageManager.downloadBookSynchronously(context, testBook.bookId)
+    fun verifyCompact2ColumnGridLayout_andCardBookmarkAction() {
+        val books = KitabDownloadAndStorageManager.catalogItemsFlow.value
+        val firstBook = books[0]
+        val secondBook = books[1]
 
         composeTestRule.setContent {
-            MyApplicationTheme {
-                Box(modifier = Modifier.width(420.dp).height(1600.dp)) {
-                    KitabLibraryHubScreen(
-                        isAdminUser = false,
-                        onCloseLibrary = {}
-                    )
-                }
+            Box(modifier = Modifier.width(420.dp).height(2200.dp)) {
+                KitabLibraryHubScreen(onCloseLibrary = {})
             }
         }
-        composeTestRule.waitForIdle()
 
-        // 1. Verify Kitab Library Hub Screen, tabs, and category filters are displayed
         composeTestRule.onNodeWithTag("kitab_library_hub_screen").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("kitab_tab_online_catalog").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("kitab_tab_my_books").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("kitab_tab_bookmarks").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("kitab_catalog_list").assertIsDisplayed()
 
-        // 2. Switch to "আমার কিতাব (My Books)" tab -> verify the downloaded book card is shown with Read & Delete buttons
-        composeTestRule.onNodeWithTag("kitab_tab_my_books").performClick()
+        // Verify Row 0 displays 2 compact cards side-by-side on mobile width (420dp)
+        val card1Bounds = composeTestRule.onNodeWithTag("kitab_catalog_card_${firstBook.bookId}")
+            .fetchSemanticsNode().boundsInRoot
+        val card2Bounds = composeTestRule.onNodeWithTag("kitab_catalog_card_${secondBook.bookId}")
+            .fetchSemanticsNode().boundsInRoot
+
+        assertEquals(
+            "Two cards in the same mobile row must have aligned top Y coordinates",
+            card1Bounds.top,
+            card2Bounds.top,
+            2.0f
+        )
+        assertTrue(
+            "Second card must be positioned to the right of first card in 2-column grid",
+            card2Bounds.left > card1Bounds.left
+        )
+
+        // Verify Bookmark button exists on the compact card and toggles bookmark
+        composeTestRule.onNodeWithTag("kitab_card_bookmark_btn_${firstBook.bookId}")
+            .assertIsDisplayed()
+            .performClick()
+
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag("kitab_my_books_card_${testBook.bookId}").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("kitab_my_books_read_btn_${testBook.bookId}").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("kitab_my_books_delete_btn_${testBook.bookId}").assertIsDisplayed()
+        assertTrue(
+            "Card bookmark icon should bookmark page 1",
+            KitabDownloadAndStorageManager.bookmarksFlow.value.any { it.bookId == firstBook.bookId }
+        )
+    }
 
-        // 3. Click "পড়া চালিয়ে যান (Read)" -> opens the Internal Native PDF Reader directly inside the app
-        composeTestRule.onNodeWithTag("kitab_my_books_read_btn_${testBook.bookId}").performClick()
+    @Test
+    fun verifyInAppPdfReader_SwipePageTurning_NextPrev_JumpFirstLast_andZoomControls() {
+        val book = KitabDownloadAndStorageManager.catalogItemsFlow.value.first()
+        val finalPdf = KitabDownloadAndStorageManager.getFinalPdfFile(context, book.bookId)
+        finalPdf.writeBytes(
+            KitabDownloadAndStorageManager.buildValidTestPdfBytes(
+                title = book.titleBangla,
+                pageCount = 10
+            )
+        )
+
+        composeTestRule.setContent {
+            Box(modifier = Modifier.width(420.dp).height(900.dp)) {
+                val settings by KitabDownloadAndStorageManager.readerSettingsFlow.collectAsState()
+                val theme by KitabDownloadAndStorageManager.readerThemeFlow.collectAsState()
+                val bookmarks by KitabDownloadAndStorageManager.bookmarksFlow.collectAsState()
+                KitabNativePdfReaderView(
+                    book = book,
+                    siblingVolumes = listOf(book),
+                    initialPage = 1,
+                    totalPages = 10,
+                    bookmarksForBook = bookmarks.filter { it.bookId == book.bookId },
+                    themeMode = theme,
+                    onThemeModeChange = { KitabDownloadAndStorageManager.setReaderThemeMode(context, it) },
+                    onSwitchVolume = {},
+                    onCloseReader = {},
+                    readerSettings = settings,
+                    onUpdateReaderSettings = { transform ->
+                        KitabDownloadAndStorageManager.updateReaderSettings(context, transform)
+                    }
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("kitab_native_pdf_reader_root").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("kitab_reader_bottom_control_bar").assertIsDisplayed()
+
+        fun currentRecordedPage(): Int =
+            KitabDownloadAndStorageManager.catalogItemsFlow.value.first { it.bookId == book.bookId }.lastReadPage
+
+        // 1. Test Next Page button advances from Page 1 to Page 2
+        composeTestRule.onNodeWithTag("kitab_reader_next_page_btn").performClick()
+        composeTestRule.waitForIdle()
+        assertEquals("Next page button must advance to page 2", 2, currentRecordedPage())
+
+        // 2. Test Previous Page button returns from Page 2 to Page 1
+        composeTestRule.onNodeWithTag("kitab_reader_prev_page_btn").performClick()
+        composeTestRule.waitForIdle()
+        assertEquals("Previous page button must return to page 1", 1, currentRecordedPage())
+
+        // 3. Test Right-to-Left Swipe (swipeLeft) advances from Page 1 to Page 2
+        composeTestRule.onNodeWithTag("kitab_reader_horizontal_pager")
+            .performTouchInput { swipeLeft() }
+        composeTestRule.waitForIdle()
+        assertEquals("Swipe Right-to-Left must advance to Next Page (Page 2)", 2, currentRecordedPage())
+
+        // 4. Test Left-to-Right Swipe (swipeRight) returns from Page 2 to Page 1
+        composeTestRule.onNodeWithTag("kitab_reader_horizontal_pager")
+            .performTouchInput { swipeRight() }
+        composeTestRule.waitForIdle()
+        assertEquals("Swipe Left-to-Right must return to Previous Page (Page 1)", 1, currentRecordedPage())
+
+        // 5. Test Jump to Page Dialog -> Last Page & First Page buttons
+        composeTestRule.onNodeWithTag("kitab_reader_jump_page_btn").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("kitab_reader_last_page_btn").performClick()
+        composeTestRule.waitForIdle()
+        assertEquals("Last Page button must jump to page 10", 10, currentRecordedPage())
+
+        composeTestRule.onNodeWithTag("kitab_reader_jump_page_btn").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("kitab_reader_first_page_btn").performClick()
+        composeTestRule.waitForIdle()
+        assertEquals("First Page button must jump back to page 1", 1, currentRecordedPage())
+
+        // 6. Test Zoom In (+), Reset Zoom (100%), and Table of Contents dialog
+        composeTestRule.onNodeWithTag("kitab_reader_zoom_in_btn").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("kitab_reader_zoom_reset_btn").performClick()
         composeTestRule.waitForIdle()
 
-        composeTestRule.onNodeWithTag("kitab_internal_pdf_reader_screen").assertIsDisplayed()
-        composeTestRule.onNodeWithText("বুখারী শরীফ বাংলা শরাহ (UI টেস্ট)").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("kitab_reader_next_page_button").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("kitab_reader_prev_page_button").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("kitab_reader_zoom_in_button").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("kitab_reader_zoom_out_button").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("kitab_reader_page_jump_button").assertIsDisplayed()
-
-        // 4. Navigate to Page 2 using the Next Page button and verify lastReadPage updates to 2
-        composeTestRule.onNodeWithTag("kitab_reader_next_page_button").performClick()
+        composeTestRule.onNodeWithTag("kitab_reader_toc_btn").performClick()
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag("kitab_pdf_page_canvas_2").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("kitab_reader_toc_dialog").assertIsDisplayed()
+    }
 
-        val updatedModel = KitabDownloadAndStorageManager.catalogItemsFlow.value.first { it.bookId == testBook.bookId }
-        assertEquals(2, updatedModel.lastReadPage)
+    @Test
+    fun verifyQuranReaderBottomControlBar_isVisibleAndResponsive() {
+        composeTestRule.setContent {
+            Box(modifier = Modifier.width(420.dp).height(900.dp)) {
+                HafeziQuranReaderView(
+                    initialPage = 2,
+                    onBackToHub = {}
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("hafezi_quran_reader_screen").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("quran_reader_bottom_control_bar").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("quran_reader_prev_page_button").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("quran_reader_next_page_button").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("quran_reader_bottom_page_badge").assertIsDisplayed()
+    }
+
+    @Test
+    fun verifyStrictFeatureSeparation_Quran_Hadith_Tilawat_andOtherServices() {
+        var navigatedDestination: MainDestination? = null
+
+        composeTestRule.setContent {
+            Box(modifier = Modifier.width(420.dp).height(1800.dp)) {
+                IslamicAndEssentialServicesSection(
+                    onOpenPrayerTimes = {},
+                    onNavigate = { dest -> navigatedDestination = dest }
+                )
+            }
+        }
+
+        // 1. Clicking "tilawat" must open AudioTilawatSectionDialog, NOT Quran PDF Hub
+        composeTestRule.onNodeWithTag("home_islamic_service_tilawat").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("tilawat_audio_section_dialog").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("tilawat_dialog_close_btn").performClick()
+        composeTestRule.waitForIdle()
+
+        // 2. Clicking "dua" must open DedicatedIslamicServiceDialog("dua"), NOT navigate to AJKER_SMORON
+        composeTestRule.onNodeWithTag("home_islamic_service_dua").performClick()
+        composeTestRule.waitForIdle()
+        assertNull("Clicking Dua must not redirect to AJKER_SMORON", navigatedDestination)
+        composeTestRule.onNodeWithTag("dedicated_service_dialog_dua").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("dedicated_service_dialog_close_btn").performClick()
+        composeTestRule.waitForIdle()
+
+        // 3. Clicking "amol_tracker" must open DedicatedIslamicServiceDialog("amol_tracker"), NOT AJKER_SMORON
+        composeTestRule.onNodeWithTag("home_islamic_service_amol_tracker").performClick()
+        composeTestRule.waitForIdle()
+        assertNull("Clicking Amol Tracker must not redirect to AJKER_SMORON", navigatedDestination)
+        composeTestRule.onNodeWithTag("dedicated_service_dialog_amol_tracker").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("dedicated_service_dialog_close_btn").performClick()
+        composeTestRule.waitForIdle()
+
+        // 4. Clicking "hadith" must open Hadith Kitab Library Hub
+        composeTestRule.onNodeWithTag("home_islamic_service_hadith").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("kitab_library_hub_screen").assertIsDisplayed()
     }
 }

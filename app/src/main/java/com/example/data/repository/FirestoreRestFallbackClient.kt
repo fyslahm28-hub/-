@@ -254,10 +254,7 @@ object FirestoreRestFallbackClient {
                     403 -> FirebaseFirestoreException.Code.PERMISSION_DENIED
                     404 -> FirebaseFirestoreException.Code.NOT_FOUND
                     400 -> FirebaseFirestoreException.Code.INVALID_ARGUMENT
-                    429 -> {
-                        FirestoreConnectionMonitor.recordQuotaExhausted()
-                        FirebaseFirestoreException.Code.RESOURCE_EXHAUSTED
-                    }
+                    429 -> FirebaseFirestoreException.Code.RESOURCE_EXHAUSTED
                     else -> FirebaseFirestoreException.Code.UNAVAILABLE
                 }
                 Result.failure(
@@ -548,12 +545,7 @@ object FirestoreRestFallbackClient {
                 out.write(bodyStr.toByteArray(Charsets.UTF_8))
                 out.flush()
             }
-            val code = conn.responseCode
-            if (code == 429) {
-                FirestoreConnectionMonitor.recordQuotaExhausted()
-                return null
-            }
-            if (code !in 200..299) return null
+            if (conn.responseCode !in 200..299) return null
             val responseText = conn.inputStream.bufferedReader().use { it.readText() }
             if (responseText.isBlank()) return null
             JSONArray(responseText)
@@ -704,12 +696,7 @@ object FirestoreRestFallbackClient {
                 setRequestProperty("Accept", "application/json")
                 setRequestProperty("Cache-Control", "no-cache")
             }
-            val code = conn.responseCode
-            if (code == 429) {
-                FirestoreConnectionMonitor.recordQuotaExhausted()
-                return null
-            }
-            if (code !in 200..299) return null
+            if (conn.responseCode !in 200..299) return null
             val body = conn.inputStream.bufferedReader().use { it.readText() }
             if (body.isBlank()) return null
             JSONObject(body)

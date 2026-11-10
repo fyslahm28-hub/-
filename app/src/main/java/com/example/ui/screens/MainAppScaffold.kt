@@ -251,7 +251,7 @@ fun MainAppScaffold(
 
     DisposableEffect(lifecycleOwner, viewModel.currentUserId) {
         val updateResumeObserver = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME && AppUpdateManagerHelper.shouldRunPeriodicCheck(context)) {
+            if (event == Lifecycle.Event.ON_RESUME) {
                 resumeUpdateCheckTick++
             }
         }

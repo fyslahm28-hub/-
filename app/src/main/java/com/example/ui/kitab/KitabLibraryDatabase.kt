@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
-import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
@@ -13,14 +12,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import kotlinx.coroutines.flow.Flow
 
-/**
- * Room Entity storing Book Metadata in the local SQLite database.
- * Synchronized from the verified seed catalog and optional Admin-approved Firestore `/kitab_catalog` entries.
- */
-@Entity(
-    tableName = "kitab_metadata",
-    indices = [Index(value = ["seriesId"]), Index(value = ["categoryId"])]
-)
+@Entity(tableName = "kitab_metadata")
 data class KitabMetadataEntity(
     @PrimaryKey val bookId: String,
     val seriesId: String,
@@ -46,10 +38,6 @@ data class KitabMetadataEntity(
     val updatedAtMillis: Long = System.currentTimeMillis()
 )
 
-/**
- * Room Entity storing strictly local Device Download & Reading Progress per Book ID.
- * Never uploaded to Firestore or synced across other users' devices.
- */
 @Entity(tableName = "kitab_local_state")
 data class KitabLocalStateEntity(
     @PrimaryKey val bookId: String,
@@ -66,13 +54,7 @@ data class KitabLocalStateEntity(
     val errorMessageBangla: String = ""
 )
 
-/**
- * Room Entity storing per-page Bookmarks for downloaded Kitabs.
- */
-@Entity(
-    tableName = "kitab_bookmarks",
-    indices = [Index(value = ["bookId", "pageNumber"], unique = true)]
-)
+@Entity(tableName = "kitab_bookmarks")
 data class KitabBookmarkEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
     val bookId: String,
@@ -113,6 +95,9 @@ interface KitabLibraryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertLocalState(state: KitabLocalStateEntity)
 
+    @Query("DELETE FROM kitab_local_state WHERE bookId = :bookId")
+    suspend fun deleteLocalStateById(bookId: String)
+
     @Query(
         """
         UPDATE kitab_local_state 
@@ -122,13 +107,18 @@ interface KitabLibraryDao {
         WHERE bookId = :bookId
         """
     )
-    suspend fun updateLastReadPage(bookId: String, pageNumber: Int, totalPages: Int, timestampMillis: Long)
-
-    @Query("DELETE FROM kitab_local_state WHERE bookId = :bookId")
-    suspend fun deleteLocalStateById(bookId: String)
+    suspend fun updateLastReadPage(
+        bookId: String,
+        pageNumber: Int,
+        totalPages: Int,
+        timestampMillis: Long
+    )
 
     @Query("SELECT * FROM kitab_bookmarks ORDER BY createdAtMillis DESC")
     fun observeAllBookmarks(): Flow<List<KitabBookmarkEntity>>
+
+    @Query("SELECT * FROM kitab_bookmarks ORDER BY createdAtMillis DESC")
+    suspend fun getAllBookmarksOnce(): List<KitabBookmarkEntity>
 
     @Query("SELECT * FROM kitab_bookmarks WHERE bookId = :bookId ORDER BY pageNumber ASC")
     fun observeBookmarksForBook(bookId: String): Flow<List<KitabBookmarkEntity>>
@@ -142,8 +132,8 @@ interface KitabLibraryDao {
     @Query("DELETE FROM kitab_bookmarks WHERE bookId = :bookId AND pageNumber = :pageNumber")
     suspend fun deleteBookmarkForPage(bookId: String, pageNumber: Int)
 
-    @Query("DELETE FROM kitab_bookmarks WHERE id = :bookmarkId")
-    suspend fun deleteBookmarkById(bookmarkId: Long)
+    @Query("DELETE FROM kitab_bookmarks WHERE id = :id")
+    suspend fun deleteBookmarkById(id: Long)
 }
 
 @Database(
@@ -156,7 +146,6 @@ interface KitabLibraryDao {
     exportSchema = false
 )
 abstract class KitabLibraryDatabase : RoomDatabase() {
-
     abstract fun kitabLibraryDao(): KitabLibraryDao
 
     companion object {
@@ -166,17 +155,16 @@ abstract class KitabLibraryDatabase : RoomDatabase() {
         fun getInstance(context: Context): KitabLibraryDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
-                    context.applicationContext ?: context,
+                    context.applicationContext,
                     KitabLibraryDatabase::class.java,
                     "qawmi_kitab_library_room_v1.db"
                 )
-                    .fallbackToDestructiveMigration(dropAllTables = true)
+                    .fallbackToDestructiveMigration()
                     .build()
                     .also { INSTANCE = it }
             }
         }
 
-        @Synchronized
         fun overrideInstanceForTesting(db: KitabLibraryDatabase) {
             INSTANCE = db
         }

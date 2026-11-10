@@ -137,6 +137,8 @@ import kotlinx.coroutines.delay
 import java.util.Calendar
 import java.util.TimeZone
 
+import com.example.ui.kitab.KitabLibraryHubDialog
+
 data class IslamicServiceGridItem(
     val id: String,
     val titleBangla: String,
@@ -148,7 +150,7 @@ data class IslamicServiceGridItem(
 
 /**
  * Home Screen section: "ইসলামিক ও প্রয়োজনীয় সেবাসমূহ" matching the existing Islamic Green, White & Gold design.
- * Clicking "নামাজের সময়" opens the full Prayer Times & Auto Azan Screen.
+ * Enforces strict feature isolation across Quran, Hadith Library, Audio Tilawat, Ajker Smoron, and other services.
  */
 @Composable
 fun IslamicAndEssentialServicesSection(
@@ -157,7 +159,8 @@ fun IslamicAndEssentialServicesSection(
 ) {
     var selectedInfoItem by remember { mutableStateOf<IslamicServiceGridItem?>(null) }
     var showHafeziQuranHub by rememberSaveable { mutableStateOf(false) }
-    var showKitabLibraryHub by rememberSaveable { mutableStateOf(false) }
+    var showHadithKitabLibrary by rememberSaveable { mutableStateOf(false) }
+    var showAudioTilawatDialog by rememberSaveable { mutableStateOf(false) }
 
     val ilmAndAmolItems = remember {
         listOf(
@@ -207,12 +210,12 @@ fun IslamicAndEssentialServicesSection(
 
     fun handleServiceClick(item: IslamicServiceGridItem) {
         when (item.id) {
-            "quran", "quran_learning", "tilawat" -> showHafeziQuranHub = true
-            "islamic_books", "hadith" -> showKitabLibraryHub = true
+            "quran" -> showHafeziQuranHub = true
+            "hadith" -> showHadithKitabLibrary = true
+            "tilawat" -> showAudioTilawatDialog = true
             "prayer_times", "islamic_calendar" -> onOpenPrayerTimes()
             "bookmarks" -> onNavigate(MainDestination.BOOKMARKS)
             "support" -> onNavigate(MainDestination.HELP_AND_SUPPORT)
-            "amol_tracker", "dua", "sunnah" -> onNavigate(MainDestination.AJKER_SMORON)
             "my_mosque", "find_mosque" -> onNavigate(MainDestination.MADRASA)
             else -> selectedInfoItem = item
         }
@@ -272,7 +275,7 @@ fun IslamicAndEssentialServicesSection(
             ServiceSubCategoryBlock(
                 badgeTitle = "ইলম ও আমল",
                 items = ilmAndAmolItems,
-                highlightedItemId = "prayer_times",
+                highlightedItemId = "hadith",
                 onItemClick = ::handleServiceClick
             )
 
@@ -294,65 +297,277 @@ fun IslamicAndEssentialServicesSection(
         }
     }
 
+    // 1. Dedicated Quran Section (ONLY Quran Mushaf & Pages)
     if (showHafeziQuranHub) {
         HafeziQuranHubDialog(
             onDismiss = { showHafeziQuranHub = false }
         )
     }
 
-    if (showKitabLibraryHub) {
-        com.example.ui.kitab.KitabLibraryHubDialog(
-            onDismiss = { showKitabLibraryHub = false }
+    // 2. Dedicated Hadith Kitab Library Section (ONLY Hadith Sharah & Kitab Library)
+    if (showHadithKitabLibrary) {
+        KitabLibraryHubDialog(
+            onDismiss = { showHadithKitabLibrary = false }
         )
     }
 
-    if (selectedInfoItem != null) {
-        val item = selectedInfoItem!!
-        AlertDialog(
-            onDismissRequest = { selectedInfoItem = null },
-            containerColor = Color.White,
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = item.icon,
-                        contentDescription = null,
-                        tint = QawmiDeepGreen,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = item.titleBangla,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = QawmiTextDark,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            },
-            text = {
-                Text(
-                    text = "আলহামদুলিল্লাহ, '${item.titleBangla}' বিভাগের বিস্তারিত কন্টেন্ট ধাপে ধাপে সংযোজন করা হচ্ছে। এখন নামাজের সময়সূচি ও স্বয়ংক্রিয় আজান সেবা দেখতে নিচের বাটনে ট্যাপ করুন।",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = QawmiTextSecondary
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        selectedInfoItem = null
-                        onOpenPrayerTimes()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = QawmiDeepGreen)
-                ) {
-                    Text("নামাজের সময়সূচি দেখুন", color = Color.White, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { selectedInfoItem = null }) {
-                    Text("বন্ধ করুন", color = QawmiTextSecondary)
-                }
-            }
+    // 3. Dedicated Audio Tilawat Section (ONLY Qari, Surah Audio & Tilawat Playback — NO Quran PDF Pages)
+    if (showAudioTilawatDialog) {
+        AudioTilawatSectionDialog(
+            onDismiss = { showAudioTilawatDialog = false }
         )
     }
+
+    // 4. Dedicated Section Dialogs for Dua, Sunnah, Amol Tracker, Islamic Books, Quran Learning, etc.
+    if (selectedInfoItem != null) {
+        val item = selectedInfoItem!!
+        DedicatedIslamicServiceDialog(
+            item = item,
+            onDismiss = { selectedInfoItem = null }
+        )
+    }
+}
+
+@Composable
+private fun AudioTilawatSectionDialog(
+    onDismiss: () -> Unit
+) {
+    val qariList = remember {
+        listOf(
+            "শাইখ মাশারী রশিদ আল-আফাসী" to "মাক্কী ও মাদানী তিলাওয়াত",
+            "শাইখ আব্দুর রহমান আস-সুদাইস" to "ইমাম, মসজিদুল হারাম, মক্কা",
+            "শাইখ মাহের আল-মুআইকলি" to "মসজিদুল হারাম, মক্কা",
+            "শাইখ আব্দুল বাসিত আব্দুস সামাদ" to "মুরাত্তাল ও তাজবীদ তিলাওয়াত"
+        )
+    }
+    val featuredSurahs = remember {
+        listOf(
+            "১. সূরা আল-ফাতিহা (৭ আয়াত)",
+            "২. সূরা আল-বাকারা — আয়াতুল কুরসি",
+            "১৮. সূরা আল-কাহফ (১১০ আয়াত)",
+            "৩৬. সূরা ইয়াসিন (৮৩ আয়াত)",
+            "৫৫. সূরা আর-রহমান (৭৮ আয়াত)",
+            "৫৬. সূরা আল-ওয়াকিয়াহ (৯৬ আয়াত)",
+            "৬৭. সূরা আল-মুলক (৩০ আয়াত)"
+        )
+    }
+    var selectedQariIndex by remember { mutableIntStateOf(0) }
+    var activePlayingSurah by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        modifier = Modifier.testTag("tilawat_audio_section_dialog"),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Headphones,
+                    contentDescription = null,
+                    tint = QawmiDeepGreen,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = "অডিও তিলাওয়াত ও ক্বারী বিভাগ",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = QawmiDeepGreen,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "বিশ্ববরেণ্য ক্বারীদের কণ্ঠে পবিত্র কোরআন তিলাওয়াত শ্রবণ",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = QawmiTextSecondary
+                    )
+                }
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "ক্বারী নির্বাচন করুন:",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = QawmiDeepGreen,
+                    fontWeight = FontWeight.Bold
+                )
+                qariList.forEachIndexed { idx, (qariName, qariDesc) ->
+                    val selected = selectedQariIndex == idx
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (selected) Color(0xFFE8F5E9) else Color(0xFFF7FAF8),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(
+                                width = 1.dp,
+                                color = if (selected) QawmiDeepGreen else QawmiMintBorder,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .clickable { selectedQariIndex = idx }
+                            .testTag("tilawat_qari_option_$idx")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (selected) Icons.Default.CheckCircle else Icons.Default.GraphicEq,
+                                contentDescription = null,
+                                tint = if (selected) QawmiDeepGreen else QawmiGold,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = qariName,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = QawmiTextDark
+                                )
+                                Text(
+                                    text = qariDesc,
+                                    fontSize = 10.sp,
+                                    color = QawmiTextSecondary
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "নির্বাচিত সূরা তিলাওয়াত:",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = QawmiDeepGreen,
+                    fontWeight = FontWeight.Bold
+                )
+                featuredSurahs.take(4).forEachIndexed { sIdx, surahTitle ->
+                    val isPlaying = activePlayingSurah == surahTitle
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isPlaying) QawmiDeepGreen else Color(0xFFF3F8F5),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                activePlayingSurah = if (isPlaying) null else surahTitle
+                            }
+                            .testTag("tilawat_surah_play_row_$sIdx")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = surahTitle,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isPlaying) Color.White else QawmiTextDark
+                            )
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = if (isPlaying) QawmiGold else QawmiDeepGreen,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = QawmiDeepGreen),
+                modifier = Modifier.testTag("tilawat_dialog_close_btn")
+            ) {
+                Text("বন্ধ করুন", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
+    )
+}
+
+@Composable
+private fun DedicatedIslamicServiceDialog(
+    item: IslamicServiceGridItem,
+    onDismiss: () -> Unit
+) {
+    val dedicatedPoints = remember(item.id) {
+        when (item.id) {
+            "dua" -> listOf(
+                "• সকাল ও সন্ধ্যার মাসনূন দোয়া ও যিকির",
+                "• নামাজ পরবর্তী দোয়া ও ইস্তিগফার",
+                "• সফর, অসুস্থতা ও বিপদমুক্তির দোয়া"
+            )
+            "sunnah" -> listOf(
+                "• প্রাত্যহিক জীবনের সুন্নতে মুআক্কাদা ও আদব",
+                "• খানা-পিনা, পোশাক ও ঘুমের সুন্নাহসমূহ",
+                "• মুআশারাত ও উত্তম আখলাকের নববী আদর্শ"
+            )
+            "amol_tracker" -> listOf(
+                "• পাঁচ ওয়াক্ত জামাতে নামাজ আদায়ের হিসাব",
+                "• দৈনিক তিলাওয়াত, ইস্তিগফার ও দরুদ শরীফ ট্র্যাকিং",
+                "• সাপ্তাহিক ও মাসিক নফল ইবাদতের আত্মপর্যালোচনা"
+            )
+            "islamic_books" -> listOf(
+                "• আকাইদ, ফিকহ, সিরাত ও তাসাওউফের মৌলিক গ্রন্থাবলি",
+                "• আকাবিরে দেওবন্দ ও সালফে সালেহীনের রচনাসমগ্র",
+                "• হাদিস শরাহ কিতাবের জন্য 'হাদিস' বিভাগ ব্যবহার করুন"
+            )
+            "quran_learning" -> listOf(
+                "• মাখরাজ, সিফাত ও তাজবীদ শিক্ষার মৌলিক নিয়মাবলি",
+                "• নূরানী কায়দা ও বিশুদ্ধ তিলাওয়াত অনুশীলন",
+                "• ওয়াকফ ও মাদের নিয়মাবলি"
+            )
+            else -> listOf(
+                "• '${item.titleBangla}' বিভাগের নিজস্ব দ্বীনি নির্দেশিকা ও তথ্যসমূহ",
+                "• কওমি মাদরাসা ও উলামায়ে কেরামের তত্ত্বাবধানে যাচাইকৃত কন্টেন্ট"
+            )
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        modifier = Modifier.testTag("dedicated_service_dialog_${item.id}"),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = item.icon,
+                    contentDescription = null,
+                    tint = QawmiDeepGreen,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "${item.titleBangla} বিভাগ",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = QawmiTextDark,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                dedicatedPoints.forEach { point ->
+                    Text(
+                        text = point,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = QawmiTextDark,
+                        fontSize = 12.5.sp
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = QawmiDeepGreen),
+                modifier = Modifier.testTag("dedicated_service_dialog_close_btn")
+            ) {
+                Text("বন্ধ করুন", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
+    )
 }
 
 @Composable

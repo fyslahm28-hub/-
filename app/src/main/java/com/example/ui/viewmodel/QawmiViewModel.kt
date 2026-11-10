@@ -1202,19 +1202,12 @@ class QawmiViewModel(
     fun onAppForegrounded() {
         val now = System.currentTimeMillis()
         val prev = lastForegroundSyncEpochMs.get()
-        val isRobolectric = com.example.data.repository.FirestoreRestFallbackClient.isRobolectricRuntime()
-        if (!isRobolectric && (now - prev) in 0L..3_000L) return
+        if ((now - prev) < 1_500L) return
         lastForegroundSyncEpochMs.set(now)
-
-        val needsFullSync = isRobolectric ||
-            !com.example.data.repository.FirestoreConnectionMonitor.isServerConnected.value ||
-            (now - prev) >= 45_000L
 
         viewModelScope.launch {
             repository.ensureLiveConnectionActive(forceTokenRefresh = false, reason = "APP_FOREGROUND")
-            if (needsFullSync) {
-                repository.refreshCriticalDataInParallel(currentUserId)
-            }
+            repository.refreshCriticalDataInParallel(currentUserId)
             setUserOnlineStatus(true)
         }
     }
@@ -1233,9 +1226,7 @@ class QawmiViewModel(
     fun onNetworkRestored() {
         val now = System.currentTimeMillis()
         val prev = lastNetworkSyncEpochMs.get()
-        val isRobolectric = com.example.data.repository.FirestoreRestFallbackClient.isRobolectricRuntime()
-        val minIntervalMs = if (isRobolectric) 1_200L else 5_000L
-        if ((now - prev) in 0L until minIntervalMs) return
+        if ((now - prev) < 1_200L) return
         lastNetworkSyncEpochMs.set(now)
 
         viewModelScope.launch {

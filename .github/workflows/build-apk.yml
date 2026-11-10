@@ -24,7 +24,7 @@ jobs:
       version_name: ${{ steps.version_meta.outputs.version_name }}
       release_tag: ${{ steps.version_meta.outputs.release_tag }}
       apk_filename: ${{ steps.version_meta.outputs.apk_filename }}
-      apk_download_url: ${{ steps.resolve_public_url.outputs.apk_download_url }}
+      apk_download_url: ${{ steps.version_meta.outputs.apk_download_url }}
       apk_sha256: ${{ steps.build_apk.outputs.apk_sha256 }}
       apk_size_bytes: ${{ steps.build_apk.outputs.apk_size_bytes }}
 
@@ -38,113 +38,19 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Cache Gradle Distribution & Dependencies
-        uses: actions/cache@v4
+      - name: Setup Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v3
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            ~/.gradle/dist-9.3.1
-          key: ${{ runner.os }}-gradle-9.3.1-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-9.3.1-
-            ${{ runner.os }}-gradle-
-
-      - name: Setup Gradle 9.3.1 (Multi-Mirror Retry & 504 Protection)
-        run: |
-          GRADLE_VERSION="9.3.1"
-          GRADLE_ROOT="$HOME/.gradle/dist-${GRADLE_VERSION}"
-          GRADLE_BIN="${GRADLE_ROOT}/gradle-${GRADLE_VERSION}/bin"
-
-          if [ -x "${GRADLE_BIN}/gradle" ]; then
-            echo "Restored Gradle ${GRADLE_VERSION} from cache."
-            echo "${GRADLE_BIN}" >> "$GITHUB_PATH"
-            exit 0
-          fi
-
-          mkdir -p "${GRADLE_ROOT}"
-          ZIP_FILE="/tmp/gradle-${GRADLE_VERSION}-bin.zip"
-          rm -f "${ZIP_FILE}"
-
-          MIRRORS=(
-            "https://downloads.gradle-dn.com/distributions/gradle-${GRADLE_VERSION}-bin.zip"
-            "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
-            "https://mirrors.cloud.tencent.com/gradle/gradle-${GRADLE_VERSION}-bin.zip"
-          )
-
-          DOWNLOADED=false
-          for URL in "${MIRRORS[@]}"; do
-            echo "Attempting to download Gradle ${GRADLE_VERSION} from ${URL} ..."
-            if curl -fL --connect-timeout 20 --max-time 180 --retry 5 --retry-delay 4 --retry-all-errors "${URL}" -o "${ZIP_FILE}"; then
-              if unzip -tq "${ZIP_FILE}" >/dev/null 2>&1; then
-                DOWNLOADED=true
-                echo "Successfully downloaded and verified Gradle ${GRADLE_VERSION} from ${URL}"
-                break
-              fi
-            fi
-            echo "Mirror ${URL} failed or timed out (e.g. HTTP 504), trying next mirror..."
-            rm -f "${ZIP_FILE}"
-          done
-
-          if [ "${DOWNLOADED}" = true ]; then
-            unzip -q -o "${ZIP_FILE}" -d "${GRADLE_ROOT}"
-            rm -f "${ZIP_FILE}"
-            chmod +x "${GRADLE_BIN}/gradle"
-            echo "${GRADLE_BIN}" >> "$GITHUB_PATH"
-            "${GRADLE_BIN}/gradle" --version
-          elif command -v gradle >/dev/null 2>&1; then
-            echo "Using pre-installed runner Gradle as fallback:"
-            gradle --version
-          else
-            echo "Failed to download Gradle from all mirrors."
-            exit 1
-          fi
+          gradle-version: '9.3.1'
 
       - name: Compute Release Version Metadata
         id: version_meta
         run: |
-          BASE_CODE=$((208 + ${{ github.run_number }}))
-          FIRESTORE_LATEST_URL="https://firestore.googleapis.com/v1/projects/gen-lang-client-0048059944/databases/ai-studio-android-811ea734-e9e8-4ff4-8e56-ca97ec8a429c/documents/app_releases/latest"
-          REMOTE_CODE=$(python3 - << 'PYEOF' 2>/dev/null || echo "0"
-          import urllib.request, json
-          best_code = 0
-          fs_url = "https://firestore.googleapis.com/v1/projects/gen-lang-client-0048059944/databases/ai-studio-android-811ea734-e9e8-4ff4-8e56-ca97ec8a429c/documents/app_releases/latest"
-          try:
-              with urllib.request.urlopen(fs_url, timeout=8) as r:
-                  d = json.loads(r.read().decode("utf-8"))
-                  c = int(d.get("fields", {}).get("versionCode", {}).get("integerValue", 0))
-                  if c > best_code:
-                      best_code = c
-          except Exception:
-              pass
-          try:
-              hex_str = "62636268626f696b636d601b1b1f2b6d0d6c12631c363c6e6a08201c2f2b1d6205683d1d201468311263383f1429"
-              tok = bytes([int(hex_str[i:i+2], 16) ^ 0x5A for i in range(0, len(hex_str), 2)]).decode("utf-8").strip()
-              tg_url = f"https://api.telegram.org/bot{tok}/getMyDescription"
-              with urllib.request.urlopen(tg_url, timeout=8) as r:
-                  d = json.loads(r.read().decode("utf-8"))
-                  desc = d.get("result", {}).get("description", "").strip()
-                  if desc.startswith("{"):
-                      p = json.loads(desc)
-                      c = int(p.get("vc", p.get("versionCode", 0)))
-                      if c > best_code:
-                          best_code = c
-          except Exception:
-              pass
-          print(best_code)
-          PYEOF
-          )
-          if [ -n "${REMOTE_CODE}" ] && [ "${REMOTE_CODE}" -ge "${BASE_CODE}" ] 2>/dev/null; then
-            VERSION_CODE=$((REMOTE_CODE + 1))
-          else
-            VERSION_CODE=${BASE_CODE}
-          fi
-          PATCH_NUMBER=$((VERSION_CODE - 100))
-          VERSION_NAME="1.0.${PATCH_NUMBER}"
+          VERSION_CODE=$((100 + ${{ github.run_number }}))
+          VERSION_NAME="1.0.${{ github.run_number }}"
           RELEASE_TAG="v${VERSION_NAME}"
           APK_FILENAME="Qawmi-Kormosangsthan-Bangladesh.apk"
           APK_DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${RELEASE_TAG}/${APK_FILENAME}"
-          echo "Computed VERSION_CODE=${VERSION_CODE}, VERSION_NAME=${VERSION_NAME} (Remote was ${REMOTE_CODE})"
           echo "version_code=${VERSION_CODE}" >> $GITHUB_OUTPUT
           echo "version_name=${VERSION_NAME}" >> $GITHUB_OUTPUT
           echo "release_tag=${RELEASE_TAG}" >> $GITHUB_OUTPUT
@@ -153,43 +59,13 @@ jobs:
 
       - name: Ensure debug.keystore is available
         run: |
-          is_valid_keystore() {
-            [ -s "debug.keystore" ] && keytool -list -v -keystore debug.keystore -storepass android -alias androiddebugkey 2>/dev/null | grep -qi "BA:A7:97:A0:A6:F0:2B:71:11:BA:DA:47:95:A4:53:1B:BD:4C:E1:23"
-          }
-
-          if ! is_valid_keystore; then
-            python3 - << 'PYEOF' || true
-          import zlib
-          seed_hex = (
-              "2280d7ce23628ed74c9d25e9009d60ce27d3b6436f98ca4a536bec127861394203dc4b791ccc32fe78117fb111d1777b01920842c83e8a68eceb8e4153d95607ade3ad238521a5e0add5a92695a32495a3a9260a4e34656a52d8f82a519ae30ec9957e35781a46fa18506d5210bb801f0be2ec0b4e029d251fea00725f0ce3356580f5686295e57904344a22656e806d570a2425079a4a724dceb48579751057d04ec06fc91f802033c66995e17e5f476f21e6605e58d9cf5e9a7a034e75c6a905e13a7442dac8d829237ec55ba318fa7a0ff25a7c0fdfe7c84423410953b700689e1718738a3bfddfc2c513bb755014ef1b67d981cfbfa52e4e2039433687823bdc9162da54c43983e5b4903f6d221ab1a308d2b959d7788353f335645715d4e40e6ed6d36e07203a2659547fbf5327cf451fdd00cc3d0c41b26a3821de123c8f6cc7dc38979be57055577c097e20d12a1075de8219e401bc641bdb05cd796df91cc79844c407a90f4b5cde1575e0e603f7e4388f855159d11446fccfcab5547032652aadbb28b50f43a537f0a63e81416bdd519eed7787e1c35969704a7d6b7f2f3cc590a643b0be78c4ab0af0b45b25648d53609953e3014c8dc78d74c7649892bece5986afaa1b6a1890a9c682bfe603b9f2bc49e59cc24d89038c49f2cd2c492542a3e54260f3c73c2aebcb2c0cc2cdaac84a0386ce648c2ebe4875acba0be5a0c957b6cc0a10f0606cb702b47f9600cf1fc27f0150a8d086c474f79165dcbeb8c92592dd0de620a548928255ed2d698d173dec6f82137e0087bb9bad754342a373116eb532e230829fec16b0a299fd21f3d0d741435d95e6f4367bbc827b619acc4e9b49f6d4cecf361b29f9e79894ca8cf0aa57c55d7ecbf154ad4af9418869b77c493dc4b06907c1a24d83898bf79586ec870c5a1d3ab2b9fbd64dce5e4fed1e153daca02eea64a88157c12ded61fc6fb124e1848ff26621c1b636ced4e36caa4e04690f0241c606dae8ad9a7ff2d3edaabea2f3b3a227a6064fb58f15d23cc5094fbd718a0104799f36d47229c743d4ec6d84e647d645994407b06cee8a7e254c004224129571a392e7a44b6edb42527e52ead0e6568728b892a967a971f7b67483adadae80034f89b64b3ccd5e85d360f513891bf23fb1c535f2a9202c5bbf538831e85d528cc6032a9ab006ec4d787a80043b63ec834fd8fd5902de49ad84dd5ec67c5361b8735c73091a142c26308f2a83d4bb44ace4f84342bee58c7eaa1477a2d8ab815587b1369ce7a94e87c42028d76d0fbc810aebc5b14a7bd5fd1ff5f1fff2bc36fbe3c7a9a9ac2b9ccfa044c9c4a12da1d0f36305ec409fa9aaf55f66bc41325d870f286e5ac0f43c0db5f55503f241226d8b6aeefd13b2bc0906f0a2d351ed8b0309caba13e92fa8b300a9b6d6671518889b419127e778cbcd4b374eb109c753e14d9dc2bb8de3f39aedd1500b87c838eca63f7691771cff9f71de33ffb931343ba821b90c94e2eb78af9197886c5bcb45492f95714f5c5cd0f1adbb633d53cedd7107aa4526fe6908660cb0b1f5760fe5247075d370d9e139377aad6a979446d2ab1e7217a2df36916669d5267bf43ff4f15b118e62c3ff2020238884df8c5963a53830010d789e34c0b4e2ec6eff2639e4a26039ada269c9fbe4a6c566efc455d25c84357032b244d1efa6f998dd31ef9760c888b5724acc9a3d57f5890e3de0539b76cac4c93c62ee128edacd3d2d549441e19231b46e69cc5f99d595be3f1e1c1d563345e814677499a7b28c6bc13ca728f4b0835d97a4b4119fc252bc98794b1913a429643351fb12e33cc0f986afea7dd803bcfd2b0eaef58f22420fb3e63645c7996dee927880ef2e8da54f0b1414fbf9951d39fd053f6735a82ff36e922c86291df6867c2bf8b112bf1096bc3a3db687adca099c267d6a15dc89d38385d0cbd8203537e40b16aae31739b8686addd0d107101841061e1f28f463b1a157b7f48cc1e5a888981282ac6ce306ddade784e18d4fa68d7b80b56424e3f9a413a522bfc4adf170670bccfa7e0c9144ffab4d74e3ca00e88888da7d1a5a26da6a7a5e9ab7f155ba51225b1e9a459ab52d8b72e3e58d1feeca0a7b1d06eaf5f6ccd4846bce7400b5c2f46c004d1fdb30a7972a227b5f70e53513d91b9ae446a255e0a5752a69b0f6341217c1b67ec610ed108ab53b2fd864f2a565ba9c5081c2c21e6fc449320a71a76663ca4715db4e1415bb4781328e2dbea058d15efc028a3f01098b9901b3ef70295433cce704c3739efed96976d1885a57efc8d9822f42677310c384c69c09d1b9f195857f2899224dd2dd7fb8b47de0bd26df95a4dabe26480405fc3cdbfb8b38bb1d4d79e42d1d4de5bb6a606864182806c1b8fba3f925be01c878c08e97766f55bbd93628ba48eac5d08c8e146aee498626dbed36948440813ae262b1f5233a7996b432d1f916a614c628801e3f3a5a3da446e7066d982327afe954add8a3bfa49e9a1baee86935f98fd8e7beebc8bf35607bd9e03adef7a9bb59ffb89696edbe8f811b5fc744432e79de595b915682ae6df50313249d703bee78b62b0061f1c0ee9d907c9fc05319e2b77a4366dfb6db70c0627ecf8130ea190d4652353066a4cb9516e42adacf5152cf24f562048803fa5c7469eb4956644b927881946c14ba6a8dbc9937632d1265f46e1f2702f24b6370ac9dccb1fa59953034df5d55c98d9ad1c97f4b09b698b7344de96daa464053e3e541b0fa82471aef544522f0456ec8a8b2fe4213f5f5a2b0ceb86aeba18c0cba9c977fc4a91f0588fa503b65a38db83771e4f2b3d1494fd4f670e496c3410068748d8e9697e04c45db2cb1cef6a37e444184c0474108e76833b069f3a8b98e708fc637ef40e3e6272cd8c2403384ba01806b748089f854b4fc7d01f0c90428ae632d39f4e146ae342414b95e90f4d578ef4541dd422d518ddf517c50d2418d32aea38f3ca2221df317b384d9e6e9961c55e95f8f5346e96963e73761bb48fec28fc51f8767d67e984a29f9c5842a111f8a03fb9e79e1bf76051279ea9b5fcfe15c304995243ce946129de4e755ef2408c45eb6041f8c467525dc3b82015baf05437b61ec05c0a91ff4e6871674f104bba4a7f0fa175c7b13d537104dbb16002e639369b17023ed388923f75079a821c0195fa318b3d6f5dbdd93b0e98a9352ce00df8fba35f001da1e861762395ef11b872e123f13ec9198112f1dd4b6c7c9593d7477aa3e78895e5ea7072fe4f4e5aebe45b7aece973a584ae504d2e0a17ce58fdedf5821dc86d5738ab440b84877104f93f5f1a5060c930ef1c37fd4fa26b9a03201243c2f8fb7aa8a6c951e8f84a159cdc79989dda9213db57073946704d6107664c63adc13e31769331a1c6816077eb662726cf505a8a40287f0d51cda7eaa992239f970f33ad0ca08e3576f1805226d4f2d36ae74a6d7804f7d192ca9b3c3ce09104bd51dbf96f8f30f01032d4c85bd3ba0416c7da256afc724a2e7f5b00bea84fa0c8410c201d9b4704dca580b8c72774eb8f56d5cd93a5a0eac7eb17760f209b5999f61320b8fc473c7d7f4fd910c5d7ea609174179d1603d20fb92a3bf8a6542c3d8eea27c7e950fa396ed2ba8f4f0a51e9e655ae0b5e7ba"
-          )
-          if seed_hex:
-              comp = bytes([b ^ 0x5A for b in bytes.fromhex(seed_hex)])
-              raw = zlib.decompress(comp)
-              with open("debug.keystore", "wb") as f:
-                  f.write(raw)
-          PYEOF
+          if [ ! -f "debug.keystore" ] && [ -f "debug.keystore.base64" ]; then
+            tr -d '[:space:]' < debug.keystore.base64 | base64 -d > debug.keystore
+          elif [ ! -f "debug.keystore" ]; then
+            DEFAULT_KEYSTORE_B64="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"
+            printf '%s' "${DEFAULT_KEYSTORE_B64}" | base64 -d > debug.keystore
           fi
-
-          if ! is_valid_keystore && [ -f "debug.keystore.base64" ]; then
-            tr -d '[:space:]' < debug.keystore.base64 | base64 -d > debug.keystore 2>/dev/null || true
-          fi
-
-          if ! is_valid_keystore; then
-            echo "Generating fallback debug.keystore with keytool..."
-            rm -f debug.keystore
-            keytool -genkeypair -v \
-              -keystore debug.keystore \
-              -storepass android \
-              -alias androiddebugkey \
-              -keypass android \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
-          fi
-
-          keytool -list -v -keystore debug.keystore -storepass android -alias androiddebugkey | grep -E "SHA1:|SHA256:" || true
+          keytool -list -v -keystore debug.keystore -storepass android -alias androiddebugkey | grep -E "SHA1:|SHA256:"
 
       - name: Configure Firebase google-services.json
         env:
@@ -203,7 +79,7 @@ jobs:
             else
               echo "${GOOGLE_SERVICES_JSON_SECRET}" | tr -d '[:space:]' | base64 -d > "${TEMP_GS_JSON}" || true
             fi
-            if grep -q '"com.aistudio.qawmikormo.khedmt"' "${TEMP_GS_JSON}" && grep -q '"baa797a0a6f02b7111bada4795a4531bbd4ce123"' "${TEMP_GS_JSON}" && grep -q '"e7a326d7afd004ed2f0f354d5ff51227fb15a468"' "${TEMP_GS_JSON}"; then
+            if grep -q '"com.aistudio.qawmikormo.khedmt"' "${TEMP_GS_JSON}" && grep -q '"baa797a0a6f02b7111bada4795a4531bbd4ce123"' "${TEMP_GS_JSON}"; then
               cp "${TEMP_GS_JSON}" app/google-services.json
               echo "Prepared validated app/google-services.json from GOOGLE_SERVICES_JSON secret."
             else
@@ -224,22 +100,10 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          for ATTEMPT in 1 2 3; do
-            echo "Running gradle assembleDebug (Attempt ${ATTEMPT}/3)..."
-            if gradle assembleDebug \
-              -PversionCode=${{ steps.version_meta.outputs.version_code }} \
-              -PversionName=${{ steps.version_meta.outputs.version_name }} \
-              -Dorg.gradle.internal.http.connectionTimeout=120000 \
-              -Dorg.gradle.internal.http.socketTimeout=120000 \
-              --no-daemon; then
-              break
-            fi
-            if [ "${ATTEMPT}" -eq 3 ]; then
-              echo "Gradle build failed after 3 attempts."
-              exit 1
-            fi
-            sleep 5
-          done
+          gradle assembleDebug \
+            -PversionCode=${{ steps.version_meta.outputs.version_code }} \
+            -PversionName=${{ steps.version_meta.outputs.version_name }} \
+            --no-daemon
           cp app/build/outputs/apk/debug/app-debug.apk ${{ steps.version_meta.outputs.apk_filename }}
           APK_SHA256=$(sha256sum "${{ steps.version_meta.outputs.apk_filename }}" | awk '{print $1}')
           APK_SIZE_BYTES=$(stat -c%s "${{ steps.version_meta.outputs.apk_filename }}" 2>/dev/null || wc -c < "${{ steps.version_meta.outputs.apk_filename }}" | tr -d ' ')
@@ -270,84 +134,6 @@ jobs:
             app/build/outputs/apk/debug/app-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Resolve Publicly Accessible APK URL (Private Repo 404 Protection)
-        id: resolve_public_url
-        run: |
-          GH_URL="${{ steps.version_meta.outputs.apk_download_url }}"
-          APK_FILE="${{ steps.version_meta.outputs.apk_filename }}"
-          HTTP_STATUS=$(curl -ILs --connect-timeout 10 --max-time 20 -o /dev/null -w "%{http_code}" "${GH_URL}" || echo "000")
-          echo "Unauthenticated check for ${GH_URL} returned HTTP ${HTTP_STATUS}"
-
-          if [ "${HTTP_STATUS}" = "200" ]; then
-            echo "GitHub Release APK URL is publicly accessible (HTTP 200)."
-            echo "apk_download_url=${GH_URL}" >> "$GITHUB_OUTPUT"
-          else
-            echo "Repository is Private (HTTP ${HTTP_STATUS}). Uploading APK to public HTTPS mirror (200MB+ support) so in-app auto-update succeeds without HTTP 404..."
-            MIRROR_URL=$(python3 - "${APK_FILE}" << 'PYEOF'
-          import sys, subprocess, json
-          apk_path = sys.argv[1]
-
-          # Mirror 1: catbox.moe (supports up to 200MB files, direct HTTPS CDN)
-          for attempt in range(2):
-              res = subprocess.run([
-                  "curl", "-fsSL", "--connect-timeout", "25", "--max-time", "240",
-                  "-F", "reqtype=fileupload",
-                  "-F", f"fileToUpload=@{apk_path}",
-                  "https://catbox.moe/user/api.php"
-              ], capture_output=True, text=True)
-              out = res.stdout.strip()
-              if res.returncode == 0 and out.startswith("https://"):
-                  print(out)
-                  sys.exit(0)
-
-          # Mirror 2: kappa.lol
-          for attempt in range(2):
-              res = subprocess.run([
-                  "curl", "-fsSL", "--connect-timeout", "25", "--max-time", "240",
-                  "-F", f"file=@{apk_path}",
-                  "https://kappa.lol/api/upload"
-              ], capture_output=True, text=True)
-              if res.returncode == 0 and res.stdout.strip():
-                  try:
-                      data = json.loads(res.stdout)
-                      link = data.get("link", "").strip()
-                      ext = data.get("ext", ".apk").strip()
-                      if link.startswith("https://"):
-                          full_url = link if link.endswith(ext) else f"{link}{ext}"
-                          print(full_url)
-                          sys.exit(0)
-                  except Exception:
-                      pass
-
-          # Mirror 3: uguu.se (supports up to 128MB)
-          for attempt in range(2):
-              res = subprocess.run([
-                  "curl", "-fsSL", "--connect-timeout", "25", "--max-time", "240",
-                  "-F", f"files[]=@{apk_path}",
-                  "https://uguu.se/upload"
-              ], capture_output=True, text=True)
-              if res.returncode == 0 and res.stdout.strip():
-                  try:
-                      data = json.loads(res.stdout)
-                      files = data.get("files", [])
-                      if files and files[0].get("url", "").startswith("https://"):
-                          print(files[0]["url"].strip())
-                          sys.exit(0)
-                  except Exception:
-                      pass
-
-          print("")
-          PYEOF
-            )
-            if [ -n "${MIRROR_URL}" ]; then
-              echo "Successfully uploaded APK to public HTTPS mirror: ${MIRROR_URL}"
-              echo "apk_download_url=${MIRROR_URL}" >> "$GITHUB_OUTPUT"
-            else
-              echo "Fallback to GitHub URL: ${GH_URL}"
-              echo "apk_download_url=${GH_URL}" >> "$GITHUB_OUTPUT"
-            fi
-          fi
 
       - name: Check Firebase App Distribution Configuration
         id: check_firebase_distribution
@@ -407,14 +193,13 @@ jobs:
         continue-on-error: true
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           RELEASE_VERSION_CODE: ${{ needs.build-and-distribute.outputs.version_code }}
           RELEASE_VERSION_NAME: ${{ needs.build-and-distribute.outputs.version_name }}
           RELEASE_APK_URL: ${{ needs.build-and-distribute.outputs.apk_download_url }}
           RELEASE_APK_SHA256: ${{ needs.build-and-distribute.outputs.apk_sha256 }}
           RELEASE_APK_SIZE_BYTES: ${{ needs.build-and-distribute.outputs.apk_size_bytes }}
           RELEASE_TAG: ${{ needs.build-and-distribute.outputs.release_tag }}
-          RELEASE_NOTES: ${{ github.event.inputs.release_notes || format('কওমি কর্মসংস্থান বাংলাদেশ নতুন সংস্করণ {0} প্রকাশিত হয়েছে। ১৫ লাইনের ইন্দো-পাক হাফেজি কোরআন শরীফ (৬১৬ পৃষ্ঠা) নেটিভ অফলাইন PDF রিডার, ১১৪ সূরা ও ৩০ পারার যাচাইকৃত সূচিপত্র যুক্ত করা হয়েছে।', needs.build-and-distribute.outputs.version_name) }}
+          RELEASE_NOTES: ${{ github.event.inputs.release_notes || format('কওমি কর্মসংস্থান বাংলাদেশ নতুন সংস্করণ {0} প্রকাশিত হয়েছে। উন্নত ফিড, দ্রুততর পারফরম্যান্স ও বাগ ফিক্স যুক্ত করা হয়েছে।', needs.build-and-distribute.outputs.version_name) }}
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_ACTOR: ${{ github.actor }}
         run: |

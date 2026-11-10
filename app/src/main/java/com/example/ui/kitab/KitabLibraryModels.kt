@@ -48,9 +48,40 @@ enum class KitabReaderThemeMode(
     NIGHT_DARK("night", "রাতের মোড")
 }
 
-/**
- * UI & Domain combined model representing a Kitab in the Catalog or My Books (আমার কিতাব) section.
- */
+enum class KitabReaderPageMode(
+    val id: String,
+    val titleBangla: String
+) {
+    HORIZONTAL_PAGER("horizontal", "পৃষ্ঠা সোয়াইপ মোড (ডান-বাম)"),
+    VERTICAL_SCROLL("vertical", "উপর-নিচ স্ক্রল মোড")
+}
+
+enum class KitabZoomFitMode(
+    val id: String,
+    val titleBangla: String
+) {
+    FIT_PAGE("fit_page", "পূর্ণ পৃষ্ঠা (Fit Page)"),
+    FIT_WIDTH("fit_width", "প্রস্থ অনুযায়ী (Fit Width)")
+}
+
+enum class KitabOrientationMode(
+    val id: String,
+    val titleBangla: String
+) {
+    AUTO("auto", "স্বয়ংক্রিয় (Auto)"),
+    PORTRAIT("portrait", "লম্বালম্বি (Portrait)"),
+    LANDSCAPE("landscape", "আড়াআড়ি (Landscape)")
+}
+
+data class KitabReaderSettings(
+    val pageMode: KitabReaderPageMode = KitabReaderPageMode.HORIZONTAL_PAGER,
+    val zoomFitMode: KitabZoomFitMode = KitabZoomFitMode.FIT_PAGE,
+    val orientationMode: KitabOrientationMode = KitabOrientationMode.AUTO,
+    val keepScreenOn: Boolean = true,
+    val brightnessLevel: Float = 1.0f,
+    val pageSpacingDp: Int = 8
+)
+
 data class KitabItemUiModel(
     val bookId: String,
     val seriesId: String,
@@ -73,7 +104,6 @@ data class KitabItemUiModel(
     val licenseNoteBangla: String,
     val coverPrimaryHex: Long,
     val coverAccentHex: Long,
-    // Local Device State
     val downloadStatus: KitabDownloadStatus = KitabDownloadStatus.NOT_DOWNLOADED,
     val downloadedBytes: Long = 0L,
     val localFilePath: String = "",
