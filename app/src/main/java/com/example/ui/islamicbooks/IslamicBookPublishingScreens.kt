@@ -125,8 +125,8 @@ fun AuthorPublisherSelfPublishingPortalScreen(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         if (uri != null) {
-            coverImageUriString = uri.toString()
-            statusBannerMessage = "কভার ছবি নির্বাচিত হয়েছে।"
+            coverImageUriString = bookManager.prepareCoverImageFromUri(uri)
+            statusBannerMessage = "কভার ছবি নির্বাচিত ও সংরক্ষিত হয়েছে।"
             isStatusError = false
         }
     }
@@ -1400,6 +1400,51 @@ fun AdminBookApprovalDashboardScreen(
             }
         }
 
+    val context = LocalContext.current
+    val uploadProgress by bookManager.uploadProgress.collectAsState()
+    var directBookTitle by remember { mutableStateOf("") }
+    var directCategory by remember { mutableStateOf(IslamicBookCategory.AQIDAH_IMAN) }
+    var directCoverImageUrl by remember { mutableStateOf("") }
+
+    val adminCoverPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            directCoverImageUrl = bookManager.prepareCoverImageFromUri(uri)
+            feedbackBanner = "কিতাবের কভার ছবি নির্বাচিত হয়েছে।"
+        }
+    }
+
+    val adminPdfPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                var displayName = "admin_uploaded_book.pdf"
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex >= 0 && cursor.moveToFirst()) {
+                        displayName = cursor.getString(nameIndex) ?: displayName
+                    }
+                }
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                if (bytes != null) {
+                    bookManager.validateAndPreparePdfForUpload(
+                        fileName = displayName,
+                        pdfBytes = bytes,
+                        contributorId = adminId.ifBlank { "admin_uploader" }
+                    ).onSuccess {
+                        feedbackBanner = "পিডিএফ ফাইল প্রস্তুত হয়েছে (${it.fileName})।"
+                    }.onFailure { err ->
+                        feedbackBanner = err.message
+                    }
+                }
+            } catch (e: Exception) {
+                feedbackBanner = "পিডিএফ পড়তে ত্রুটি: ${e.localizedMessage}"
+            }
+        }
+    }
+
         feedbackBanner?.let { msg ->
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFFDCFCE7)),
@@ -1425,6 +1470,117 @@ fun AdminBookApprovalDashboardScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Admin Direct Book Upload Card
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, PortalDeepGreen.copy(alpha = 0.3f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("admin_direct_upload_card")
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "অ্যাডমিন সরাসরি কিতাব আপলোড ও প্রকাশ",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = PortalDarkGreen
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = directBookTitle,
+                            onValueChange = { directBookTitle = it },
+                            label = { Text("কিতাবের নাম (বাংলা)") },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("admin_direct_book_title_input")
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            IslamicBookCategory.entries.forEach { cat ->
+                                FilterChip(
+                                    selected = directCategory == cat,
+                                    onClick = { directCategory = cat },
+                                    label = { Text(cat.titleBangla, fontSize = 11.sp) }
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    adminCoverPickerLauncher.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    )
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("admin_pick_cover_btn")
+                            ) {
+                                Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    if (directCoverImageUrl.isNotBlank()) "কভার যুক্ত হয়েছে" else "কভার ছবি দিন",
+                                    fontSize = 12.sp
+                                )
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    adminPdfPickerLauncher.launch(arrayOf("application/pdf"))
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("admin_pick_pdf_btn")
+                            ) {
+                                Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    if (uploadProgress.state == IslamicBookUploadState.COMPLETED) "PDF যুক্ত হয়েছে" else "PDF ফাইল দিন",
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = {
+                                bookManager.adminDirectPublishBook(
+                                    adminId = adminId,
+                                    adminEmail = adminEmail,
+                                    adminPhone = adminPhone,
+                                    bookTitleBangla = directBookTitle,
+                                    category = directCategory,
+                                    coverImageUrl = directCoverImageUrl
+                                ).onSuccess { published ->
+                                    feedbackBanner = "আলহামদুলিল্লাহ! '${published.titleBangla}' সরাসরি লাইব্রেরিতে প্রকাশিত হয়েছে।"
+                                    directBookTitle = ""
+                                    directCoverImageUrl = ""
+                                }.onFailure { err ->
+                                    feedbackBanner = err.message
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = PortalDeepGreen),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("admin_direct_publish_btn")
+                        ) {
+                            Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("সরাসরি লাইব্রেরিতে প্রকাশ করুন", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+
             if (filteredSubmissions.isEmpty()) {
                 item {
                     Card(

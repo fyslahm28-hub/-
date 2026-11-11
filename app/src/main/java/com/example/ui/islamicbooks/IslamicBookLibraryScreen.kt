@@ -1,12 +1,15 @@
 package com.example.ui.islamicbooks
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
+import android.util.Base64
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
@@ -39,6 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -200,16 +204,20 @@ fun IslamicBookLibraryScreen(
         }
 
         LibrarySubView.CATALOG_HOME -> {
+            var isSearchExpanded by remember { mutableStateOf(false) }
+            var bookmarkRefreshTick by remember { mutableIntStateOf(0) }
+
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(LibMintBg)
+                    .background(Color(0xFFF7FAF8))
                     .testTag("islamic_book_library_root")
             ) {
+                // মোবাইলে এক সারিতে ৪টি ছোট কিতাবের কার্ড, এবং স্ক্রিনের প্রস্থ অনুযায়ী ৫টি বা ৬টি কার্ডের Responsive Grid
                 val columnsCount = when {
-                    maxWidth >= 840.dp -> 3
-                    maxWidth >= 560.dp -> 2
-                    else -> 1
+                    maxWidth >= 700.dp -> 6
+                    maxWidth >= 520.dp -> 5
+                    else -> 4
                 }
                 val chunkedBooks = remember(displayedBooks, columnsCount) {
                     displayedBooks.chunked(columnsCount)
@@ -219,165 +227,175 @@ fun IslamicBookLibraryScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .testTag("islamic_book_library_list"),
-                    contentPadding = PaddingValues(bottom = 28.dp)
+                    contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
-                    // 1. Top Islamic Header Banner + Self-Publishing Portal Button + Search Bar
+                    // 1. Compact Deep Green Header Bar (matching reference image)
                     item {
-                        Box(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(
-                                    Brush.verticalGradient(
-                                        listOf(LibDarkGreen, LibDeepGreen)
-                                    )
-                                )
-                                .padding(horizontal = 16.dp, vertical = 14.dp)
+                                .background(LibDeepGreen)
+                                .padding(horizontal = 10.dp, vertical = 8.dp)
                         ) {
-                            Column {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth()
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                IconButton(
+                                    onClick = onNavigateBackHome,
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .testTag("islamic_book_library_back_btn")
                                 ) {
-                                    IconButton(
-                                        onClick = onNavigateBackHome,
-                                        modifier = Modifier
-                                            .size(48.dp)
-                                            .testTag("islamic_book_library_back_btn")
-                                    ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "হোমে ফিরে যান",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    color = LibGold.copy(alpha = 0.22f),
+                                    shape = RoundedCornerShape(6.dp),
+                                    border = BorderStroke(1.dp, LibGold),
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
                                         Icon(
-                                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                            contentDescription = "হোমে ফিরে যান",
-                                            tint = Color.White
+                                            imageVector = Icons.Default.MenuBook,
+                                            contentDescription = null,
+                                            tint = LibGold,
+                                            modifier = Modifier.size(14.dp)
                                         )
                                     }
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "ডিজিটাল ইসলামিক বই লাইব্রেরি",
-                                            color = Color.White,
-                                            fontSize = 19.sp,
-                                            fontWeight = FontWeight.Bold
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "ইসলামিক বই",
+                                    color = Color.White,
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                // Compact Portal & Admin Access + Search Icon
+                                Surface(
+                                    color = LibGold,
+                                    shape = RoundedCornerShape(14.dp),
+                                    modifier = Modifier
+                                        .clickable { currentSubView = LibrarySubView.SELF_PUBLISHING_PORTAL }
+                                        .testTag("open_self_publishing_portal_btn")
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Publish,
+                                            contentDescription = "বই প্রকাশ",
+                                            tint = LibDarkGreen,
+                                            modifier = Modifier.size(13.dp)
                                         )
+                                        Spacer(modifier = Modifier.width(3.dp))
                                         Text(
-                                            text = "প্রামাণ্য কুরআন-তাফসির, হাদিস, ফিকহ, সিরাত ও আকাবিরদের গ্রন্থসম্ভার",
-                                            color = Color(0xFFD9F2E6),
-                                            fontSize = 12.sp
+                                            text = "বই প্রকাশ",
+                                            color = LibDarkGreen,
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.Bold
                                         )
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                // Action Row: Self-Publishing Button + My Books Filter + Admin Dashboard Button
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Button(
-                                        onClick = {
-                                            currentSubView = LibrarySubView.SELF_PUBLISHING_PORTAL
-                                        },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = LibGold,
-                                            contentColor = LibDarkGreen
-                                        ),
-                                        shape = RoundedCornerShape(24.dp),
+                                if (isAdmin) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        color = Color.White.copy(alpha = 0.16f),
+                                        shape = RoundedCornerShape(14.dp),
+                                        border = BorderStroke(0.8.dp, LibGold),
                                         modifier = Modifier
-                                            .height(48.dp)
-                                            .testTag("open_self_publishing_portal_btn")
+                                            .clickable { currentSubView = LibrarySubView.ADMIN_APPROVAL_DASHBOARD }
+                                            .testTag("open_admin_book_dashboard_btn")
                                     ) {
-                                        Icon(Icons.Default.Publish, contentDescription = null)
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = "আপনার লেখা বই প্রকাশ করুন",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 13.sp
-                                        )
-                                    }
-
-                                    FilterChip(
-                                        selected = showOnlyDownloadedMyBooks,
-                                        onClick = { showOnlyDownloadedMyBooks = !showOnlyDownloadedMyBooks },
-                                        label = {
-                                            Text(
-                                                text = "আমার ডাউনলোডকৃত বই (My Books)",
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (showOnlyDownloadedMyBooks) LibDarkGreen else Color.White
-                                            )
-                                        },
-                                        leadingIcon = {
-                                            Icon(
-                                                imageVector = Icons.Default.DownloadDone,
-                                                contentDescription = null,
-                                                tint = if (showOnlyDownloadedMyBooks) LibDarkGreen else LibGold
-                                            )
-                                        },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = LibGoldLight,
-                                            containerColor = Color.White.copy(alpha = 0.14f)
-                                        ),
-                                        modifier = Modifier
-                                            .height(48.dp)
-                                            .testTag("islamic_book_my_books_tab")
-                                    )
-
-                                    if (isAdmin) {
-                                        OutlinedButton(
-                                            onClick = {
-                                                currentSubView = LibrarySubView.ADMIN_APPROVAL_DASHBOARD
-                                            },
-                                            colors = ButtonDefaults.outlinedButtonColors(
-                                                contentColor = Color.White
-                                            ),
-                                            border = BorderStroke(1.dp, LibGold),
-                                            shape = RoundedCornerShape(24.dp),
-                                            modifier = Modifier
-                                                .height(48.dp)
-                                                .testTag("open_admin_book_dashboard_btn")
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Icon(Icons.Default.AdminPanelSettings, contentDescription = null, tint = LibGold)
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text("অ্যাডমিন অনুমোদন প্যানেল", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                            Icon(
+                                                imageVector = Icons.Default.AdminPanelSettings,
+                                                contentDescription = "অ্যাডমিন প্যানেল",
+                                                tint = LibGold,
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(3.dp))
+                                            Text(
+                                                text = "অ্যাডমিন",
+                                                color = Color.White,
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
                                         }
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.height(10.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                IconButton(
+                                    onClick = { isSearchExpanded = !isSearchExpanded },
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .testTag("islamic_book_search_toggle_btn")
+                                ) {
+                                    Icon(
+                                        imageVector = if (isSearchExpanded) Icons.Default.Close else Icons.Default.Search,
+                                        contentDescription = "অনুসন্ধান",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(19.dp)
+                                    )
+                                }
+                            }
 
-                                // Search Bar
+                            if (isSearchExpanded || searchQuery.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(6.dp))
                                 OutlinedTextField(
                                     value = searchQuery,
                                     onValueChange = { searchQuery = it },
                                     placeholder = {
                                         Text(
-                                            "বইয়ের নাম, লেখক, অনুবাদক বা প্রকাশনী দিয়ে খুঁজুন...",
+                                            "কিতাবের নাম দিয়ে খুঁজুন...",
                                             color = Color.White.copy(alpha = 0.78f),
-                                            fontSize = 13.sp
+                                            fontSize = 12.sp
                                         )
                                     },
                                     leadingIcon = {
-                                        Icon(Icons.Default.Search, contentDescription = "অনুসন্ধান", tint = LibGold)
+                                        Icon(
+                                            Icons.Default.Search,
+                                            contentDescription = null,
+                                            tint = LibGold,
+                                            modifier = Modifier.size(16.dp)
+                                        )
                                     },
                                     trailingIcon = {
                                         if (searchQuery.isNotBlank()) {
                                             IconButton(
                                                 onClick = { searchQuery = "" },
-                                                modifier = Modifier.size(48.dp)
+                                                modifier = Modifier.size(32.dp)
                                             ) {
-                                                Icon(Icons.Default.Clear, contentDescription = "মুছুন", tint = Color.White)
+                                                Icon(
+                                                    Icons.Default.Clear,
+                                                    contentDescription = "মুছুন",
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
                                             }
                                         }
                                     },
                                     singleLine = true,
-                                    shape = RoundedCornerShape(14.dp),
+                                    shape = RoundedCornerShape(10.dp),
                                     colors = OutlinedTextFieldDefaults.colors(
                                         focusedTextColor = Color.White,
                                         unfocusedTextColor = Color.White,
                                         focusedBorderColor = LibGold,
-                                        unfocusedBorderColor = Color.White.copy(alpha = 0.45f),
+                                        unfocusedBorderColor = Color.White.copy(alpha = 0.4f),
                                         focusedContainerColor = Color.White.copy(alpha = 0.10f),
                                         unfocusedContainerColor = Color.White.copy(alpha = 0.08f)
                                     ),
@@ -389,111 +407,105 @@ fun IslamicBookLibraryScreen(
                         }
                     }
 
-                    // 2. 15 Category Horizontal Selector Chips
+                    // 2. Clean Category Filter Pills Row (matching Reference Image: "সব বই", "আকীদা", etc.)
                     item {
-                        Column(
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(Color.White)
-                                .padding(vertical = 10.dp)
+                                .background(Color(0xFFF7FAF8))
+                                .horizontalScroll(rememberScrollState())
+                                .padding(horizontal = 8.dp, vertical = 7.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "লাইব্রেরির বিভাগসমূহ (১৫টি বিভাগ):",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                color = LibDarkGreen,
-                                modifier = Modifier.padding(horizontal = 16.dp)
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Row(
+                            val allSelected = selectedCategory == null && !showOnlyDownloadedMyBooks
+                            Surface(
+                                color = if (allSelected) LibDeepGreen else Color.White,
+                                shape = RoundedCornerShape(18.dp),
+                                border = BorderStroke(
+                                    width = 0.8.dp,
+                                    color = if (allSelected) LibDeepGreen else Color(0xFFD5E2DA)
+                                ),
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState())
-                                    .padding(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                FilterChip(
-                                    selected = selectedCategory == null && !showOnlyDownloadedMyBooks,
-                                    onClick = {
+                                    .clickable {
                                         selectedCategory = null
                                         showOnlyDownloadedMyBooks = false
-                                    },
-                                    label = {
-                                        Text(
-                                            text = "সকল বিভাগ",
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = LibDeepGreen,
-                                        selectedLabelColor = Color.White
-                                    ),
-                                    modifier = Modifier.testTag("islamic_book_category_chip_ALL")
-                                )
-
-                                IslamicBookCategory.entries.forEach { cat ->
-                                    val isSelected = selectedCategory == cat && !showOnlyDownloadedMyBooks
-                                    FilterChip(
-                                        selected = isSelected,
-                                        onClick = {
-                                            selectedCategory = cat
-                                            showOnlyDownloadedMyBooks = false
-                                        },
-                                        label = {
-                                            Text(
-                                                text = cat.titleBangla,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                            )
-                                        },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = LibDeepGreen,
-                                            selectedLabelColor = Color.White
-                                        ),
-                                        modifier = Modifier.testTag("islamic_book_category_chip_${cat.id}")
+                                    }
+                                    .testTag("islamic_book_category_chip_ALL")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.MenuBook,
+                                        contentDescription = null,
+                                        tint = if (allSelected) Color.White else LibDeepGreen,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "সব বই",
+                                        color = if (allSelected) Color.White else LibDarkGreen,
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
                             }
-                        }
-                    }
 
-                    // 3. Verified Publishers Banner
-                    item {
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = LibGoldLight),
-                            border = BorderStroke(1.dp, LibGold.copy(alpha = 0.6f)),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.VerifiedUser,
-                                    contentDescription = null,
-                                    tint = LibDeepGreen,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column(modifier = Modifier.weight(1f)) {
+                            IslamicBookCategory.entries.forEach { cat ->
+                                val isSelected = selectedCategory == cat && !showOnlyDownloadedMyBooks
+                                Surface(
+                                    color = if (isSelected) LibDeepGreen else Color.White,
+                                    shape = RoundedCornerShape(18.dp),
+                                    border = BorderStroke(
+                                        width = 0.8.dp,
+                                        color = if (isSelected) LibDeepGreen else Color(0xFFD5E2DA)
+                                    ),
+                                    modifier = Modifier
+                                        .clickable {
+                                            selectedCategory = cat
+                                            showOnlyDownloadedMyBooks = false
+                                        }
+                                        .testTag("islamic_book_category_chip_${cat.id}")
+                                ) {
                                     Text(
-                                        text = if (selectedCategory != null) {
-                                            "${selectedCategory!!.titleBangla} — ${selectedCategory!!.subtitleBangla}"
-                                        } else if (showOnlyDownloadedMyBooks) {
-                                            "আমার ডাউনলোডকৃত বই (অফলাইনে ইন্টারনেট ছাড়াই পাঠযোগ্য)"
-                                        } else {
-                                            "নির্ভরযোগ্য প্রকাশনী ও যাচাইকৃত কপিরাইট নীতিমালা"
-                                        },
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = LibDarkGreen
+                                        text = cat.titleBangla,
+                                        color = if (isSelected) Color.White else LibDarkGreen,
+                                        fontSize = 11.5.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                        modifier = Modifier.padding(horizontal = 11.dp, vertical = 5.dp)
                                     )
+                                }
+                            }
+
+                            Surface(
+                                color = if (showOnlyDownloadedMyBooks) LibDeepGreen else Color.White,
+                                shape = RoundedCornerShape(18.dp),
+                                border = BorderStroke(
+                                    width = 0.8.dp,
+                                    color = if (showOnlyDownloadedMyBooks) LibDeepGreen else Color(0xFFD5E2DA)
+                                ),
+                                modifier = Modifier
+                                    .clickable { showOnlyDownloadedMyBooks = !showOnlyDownloadedMyBooks }
+                                    .testTag("islamic_book_my_books_tab")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.DownloadDone,
+                                        contentDescription = null,
+                                        tint = if (showOnlyDownloadedMyBooks) Color.White else LibDeepGreen,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "ইসলামিক ফাউন্ডেশন বাংলাদেশ • মাকতাবাতুল ফুরকান • তাওহীদ পাবলিকেশন্স • আল-ফাতাহ • মাকতাবাতুল আশরাফ • রাহনুমা • দারুল কলম",
-                                        fontSize = 11.sp,
-                                        color = Color.DarkGray
+                                        text = "ডাউনলোডকৃত",
+                                        color = if (showOnlyDownloadedMyBooks) Color.White else LibDarkGreen,
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.SemiBold
                                     )
                                 }
                             }
@@ -502,55 +514,61 @@ fun IslamicBookLibraryScreen(
 
                     localActionMessage?.let { msg ->
                         item {
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFFDCFCE7)),
+                            Surface(
+                                color = Color(0xFFDCFCE7),
+                                shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(10.dp),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(msg, fontSize = 12.sp, color = LibDarkGreen, modifier = Modifier.weight(1f))
-                                    IconButton(onClick = { localActionMessage = null }, modifier = Modifier.size(48.dp)) {
-                                        Icon(Icons.Default.Close, contentDescription = "বন্ধ করুন")
+                                    Text(msg, fontSize = 11.sp, color = LibDarkGreen, modifier = Modifier.weight(1f))
+                                    IconButton(
+                                        onClick = { localActionMessage = null },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = "বন্ধ করুন",
+                                            modifier = Modifier.size(14.dp)
+                                        )
                                     }
                                 }
                             }
                         }
                     }
 
-                    // 4. Books List / Grid
+                    // 3. Ultra Compact Book Grid (4 columns on mobile, 5+ on wider screens)
                     if (chunkedBooks.isEmpty()) {
                         item {
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp)
-                                    .testTag("islamic_book_empty_state")
+                                    .padding(horizontal = 16.dp, vertical = 36.dp)
+                                    .testTag("islamic_book_empty_state"),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(28.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.MenuBook,
                                         contentDescription = null,
-                                        tint = LibDeepGreen,
-                                        modifier = Modifier.size(48.dp)
+                                        tint = LibDeepGreen.copy(alpha = 0.65f),
+                                        modifier = Modifier.size(32.dp)
                                     )
-                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Spacer(modifier = Modifier.height(6.dp))
                                     Text(
                                         text = if (showOnlyDownloadedMyBooks) {
-                                            "আপনার ফোনে এখনো কোনো ইসলামিক বই ডাউনলোড করা হয়নি।"
+                                            "কোনো ডাউনলোডকৃত কিতাব নেই"
                                         } else {
-                                            "অনুসন্ধান অনুযায়ী কোনো বই পাওয়া যায়নি।"
+                                            "এখনো কোনো কিতাব আপলোড করা হয়নি"
                                         },
-                                        fontWeight = FontWeight.Bold,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 13.sp,
                                         color = LibDarkGreen,
                                         textAlign = TextAlign.Center
                                     )
@@ -562,34 +580,31 @@ fun IslamicBookLibraryScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    .padding(horizontal = 8.dp, vertical = 2.5.dp),
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
                             ) {
                                 rowBooks.forEach { book ->
-                                    val key = bookManager.downloadKey(book.bookId, 1)
-                                    val dlProgress = downloadProgressMap[key]
-                                    val isDownloaded = dlProgress?.state == IslamicBookDownloadState.DOWNLOADED ||
-                                        bookManager.isBookDownloaded(book.bookId, 1)
+                                    val isBookmarked = remember(book.bookId, bookmarkRefreshTick) {
+                                        bookManager.getBookmarks(book.bookId, 1).isNotEmpty()
+                                    }
 
                                     IslamicBookCardItem(
                                         book = book,
-                                        isDownloaded = isDownloaded,
-                                        downloadProgress = dlProgress,
+                                        isBookmarked = isBookmarked,
                                         modifier = Modifier.weight(1f),
                                         onOpenDetails = {
                                             selectedBook = book
                                             selectedVolumeNumber = 1
                                             currentSubView = LibrarySubView.BOOK_DETAILS
                                         },
-                                        onPrimaryReadOrDownload = {
-                                            selectedBook = book
-                                            selectedVolumeNumber = 1
-                                            if (isDownloaded) {
-                                                currentSubView = LibrarySubView.PDF_READER
-                                            } else {
-                                                bookManager.startOrResumeDownload(book, 1)
-                                                currentSubView = LibrarySubView.BOOK_DETAILS
-                                            }
+                                        onToggleBookmark = {
+                                            bookManager.addOrRemoveBookmark(
+                                                bookId = book.bookId,
+                                                volumeNumber = 1,
+                                                pageNumber = 1,
+                                                noteBangla = book.titleBangla
+                                            )
+                                            bookmarkRefreshTick++
                                         }
                                     )
                                 }
@@ -608,215 +623,172 @@ fun IslamicBookLibraryScreen(
 }
 
 /**
- * ৪. প্রতিটি বই কার্ডের তথ্যের ডিজাইন
+ * ১ ও ২ নং নির্দেশনা অনুযায়ী Ultra Compact Book Card:
+ * - মোবাইলে এক সারিতে ৪টি ছোট কিতাবের কার্ড, এবং চওড়া স্ক্রিনে ৫/৬টি কার্ড
+ * - প্রতিটি কার্ড ছোট, সরল ও একই মাপের (Uniform 94.dp height)
+ * - উপরে ছোট কভার Thumbnail (Admin যে ছবিটি Upload করেছে সেটিই দেখাবে)
+ * - কভারের ঠিক নিচে শুধু কিতাবের নাম (১–২ লাইনে)
+ * - কোনো লেখক, প্রকাশনী, বিবরণ, পৃষ্ঠাসংখ্যা, অতিরিক্ত Badge বা অপ্রয়োজনীয় তথ্য নেই
+ * - উপরে ডান কোণায় খুব ছোট ও সরল Bookmark আইকন
+ * - কোনো ভারী Shadow, Gradient, Glow, 3D Effect নেই
  */
 @Composable
 private fun IslamicBookCardItem(
     book: IslamicBookCatalogItem,
-    isDownloaded: Boolean,
-    downloadProgress: IslamicBookDownloadProgress?,
+    isBookmarked: Boolean,
     modifier: Modifier = Modifier,
     onOpenDetails: () -> Unit,
-    onPrimaryReadOrDownload: () -> Unit
+    onToggleBookmark: () -> Unit
 ) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = LibCreamCard),
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, LibGold.copy(alpha = 0.45f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    Surface(
+        color = Color.White,
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(0.75.dp, Color(0xFFDCE6DF)),
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
         modifier = modifier
+            .height(94.dp)
             .clickable { onOpenDetails() }
             .testTag("islamic_book_card_${book.bookId}")
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 4.dp, vertical = 5.dp)
+        ) {
+            // খুব ছোট ও সরল Bookmark আইকন (উপরে ডান কোণায়)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(16.dp)
+                    .clickable { onToggleBookmark() }
+                    .testTag("islamic_book_bookmark_btn_${book.bookId}"),
+                contentAlignment = Alignment.Center
             ) {
-                // १. বইয়ের নান্দনিক ইসলামিক কভার প্রচ্ছদ
-                Box(
-                    modifier = Modifier
-                        .width(86.dp)
-                        .height(122.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(Color(book.coverBadgeColorHex), LibDarkGreen)
-                            )
-                        )
-                        .padding(8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        Text(
-                            text = "﷽",
-                            color = LibGold,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = book.titleBangla,
-                            color = Color.White,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center,
-                            maxLines = 4,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "${book.pageCount} পৃষ্ঠা",
-                            color = LibGoldLight,
-                            fontSize = 9.sp
-                        )
-                    }
-                }
-
-                // ২-১০. বইয়ের বিস্তারিত মেটাডেটা
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            color = LibDeepGreen.copy(alpha = 0.12f),
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
-                            Text(
-                                text = book.category.titleBangla,
-                                color = LibDeepGreen,
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-                            )
-                        }
-                        if (book.isPublicationYearVerified && book.publicationYear.isNotBlank()) {
-                            Surface(
-                                color = LibGoldLight,
-                                shape = RoundedCornerShape(6.dp),
-                                border = BorderStroke(0.5.dp, LibGold)
-                            ) {
-                                Text(
-                                    text = "প্রকাশ: ${book.publicationYear}",
-                                    color = LibDarkGreen,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = book.titleBangla,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        color = LibDarkGreen,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (book.titleArabicOrOriginal.isNotBlank()) {
-                        Text(
-                            text = book.titleArabicOrOriginal,
-                            fontSize = 12.sp,
-                            color = LibDeepGreen,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Text(
-                        text = "লেখক: ${book.authorName}",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF1F2937)
-                    )
-                    if (book.translatorOrEditorName.isNotBlank()) {
-                        Text(
-                            text = "অনুবাদক/সংকলক: ${book.translatorOrEditorName}",
-                            fontSize = 11.5.sp,
-                            color = Color(0xFF374151)
-                        )
-                    }
-                    Text(
-                        text = "প্রকাশনী: ${book.publisherName}",
-                        fontSize = 11.5.sp,
-                        color = LibDeepGreen,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = "পৃষ্ঠা: ${book.pageCount} • সাইজ: ${book.fileSizeTextBangla}",
-                        fontSize = 11.sp,
-                        color = Color.Gray
-                    )
-                }
+                Icon(
+                    imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                    contentDescription = "বুকমার্ক",
+                    tint = if (isBookmarked) LibGold else LibDeepGreen.copy(alpha = 0.75f),
+                    modifier = Modifier.size(12.dp)
+                )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = book.shortIntroduction,
-                fontSize = 12.sp,
-                color = Color(0xFF374151),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Top
             ) {
-                OutlinedButton(
-                    onClick = onOpenDetails,
-                    shape = RoundedCornerShape(10.dp),
+                // ছোট কভার ছবি Thumbnail (Admin কর্তৃক Upload করা কভার ছবি)
+                IslamicBookCoverThumbnail(
+                    coverImageUrl = book.coverImageUrl,
+                    titleBangla = book.titleBangla,
                     modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp)
-                        .testTag("book_card_details_btn_${book.bookId}")
-                ) {
-                    Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("বিস্তারিত ও সূচিপত্র", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                }
+                        .width(38.dp)
+                        .height(50.dp)
+                        .testTag("islamic_book_cover_${book.bookId}")
+                )
 
-                Button(
-                    onClick = onPrimaryReadOrDownload,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isDownloaded) LibDeepGreen else Color(0xFF14532D)
-                    ),
-                    shape = RoundedCornerShape(10.dp),
+                Spacer(modifier = Modifier.height(3.dp))
+
+                // কভারের ঠিক নিচে শুধু কিতাবের নাম (সর্বোচ্চ ১–২ লাইনে)
+                Text(
+                    text = book.titleBangla,
+                    color = LibDarkGreen,
+                    fontSize = 10.sp,
+                    lineHeight = 11.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp)
-                        .testTag("book_card_action_btn_${book.bookId}")
-                ) {
-                    Icon(
-                        imageVector = if (isDownloaded) Icons.Default.MenuBook else Icons.Default.Download,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = when {
-                            isDownloaded -> "পড়ুন (অফলাইন)"
-                            downloadProgress?.state == IslamicBookDownloadState.DOWNLOADING ->
-                                "ডাউনলোড ${downloadProgress.progressPercent}%"
-                            downloadProgress?.state == IslamicBookDownloadState.PAUSED ->
-                                "পুনরায় শুরু (${downloadProgress.progressPercent}%)"
-                            else -> "পড়ুন / ডাউনলোড"
-                        },
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                        .fillMaxWidth()
+                        .testTag("islamic_book_title_${book.bookId}")
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun IslamicBookCoverThumbnail(
+    coverImageUrl: String,
+    titleBangla: String,
+    modifier: Modifier = Modifier
+) {
+    val cleanUrl = coverImageUrl.trim()
+    val decodedBase64Bitmap = remember(cleanUrl) {
+        if (cleanUrl.startsWith("data:image", ignoreCase = true) && cleanUrl.contains("base64,")) {
+            try {
+                val base64Part = cleanUrl.substringAfter("base64,")
+                val bytes = Base64.decode(base64Part, Base64.DEFAULT)
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            } catch (_: Exception) {
+                null
+            }
+        } else {
+            null
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(Color(0xFF0E5A3E))
+            .border(0.5.dp, LibGold.copy(alpha = 0.55f), RoundedCornerShape(4.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        when {
+            decodedBase64Bitmap != null -> {
+                Image(
+                    bitmap = decodedBase64Bitmap.asImageBitmap(),
+                    contentDescription = titleBangla,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            cleanUrl.isNotEmpty() -> {
+                // Fallback cover frame behind AsyncImage in case URI is loading or synthetic in tests
+                MinimalIslamicBookCoverPlaceholder(titleBangla = titleBangla)
+                AsyncImage(
+                    model = cleanUrl,
+                    contentDescription = titleBangla,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            else -> {
+                MinimalIslamicBookCoverPlaceholder(titleBangla = titleBangla)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MinimalIslamicBookCoverPlaceholder(titleBangla: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.MenuBook,
+            contentDescription = null,
+            tint = LibGold,
+            modifier = Modifier.size(13.dp)
+        )
+        Spacer(modifier = Modifier.height(1.dp))
+        Text(
+            text = titleBangla,
+            color = Color.White,
+            fontSize = 6.5.sp,
+            lineHeight = 7.5.sp,
+            fontWeight = FontWeight.Medium,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
