@@ -1,13 +1,20 @@
 package com.example.ui.islamicbooks
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
+import android.util.Base64
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -19,6 +26,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -27,12 +36,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 
 private val PortalDeepGreen = Color(0xFF0E5A3E)
 private val PortalDarkGreen = Color(0xFF093B28)
@@ -110,7 +125,13 @@ fun AuthorPublisherSelfPublishingPortalScreen(
     var isbnText by remember { mutableStateOf("") }
     var shortIntroText by remember { mutableStateOf("") }
     var tocText by remember { mutableStateOf("") }
-    var coverImageUriString by remember { mutableStateOf("") }
+    val selectedCoverFromManager by bookManager.selectedCoverImageUri.collectAsState()
+    var coverImageUriString by remember { mutableStateOf(selectedCoverFromManager) }
+    LaunchedEffect(selectedCoverFromManager) {
+        if (selectedCoverFromManager.isNotBlank()) {
+            coverImageUriString = selectedCoverFromManager
+        }
+    }
 
     // Copyright Verification State
     var copyrightOwnerName by remember { mutableStateOf(profileFullName) }
@@ -152,7 +173,8 @@ fun AuthorPublisherSelfPublishingPortalScreen(
                         contributorId = currentUserId.ifBlank { "contributor_user" }
                     )
                     res.onSuccess {
-                        statusBannerMessage = "আলহামদুলিল্লাহ! পিডিএফ ফাইল যাচাই ও আপলোড সম্পন্ন হয়েছে (SHA-256: ${it.sha256Hash.take(12)}...)।"
+                        pageCountText = it.detectedPageCount.coerceAtLeast(1).toString()
+                        statusBannerMessage = "আলহামদুলিল্লাহ! পিডিএফ ফাইল যাচাই ও প্রিভিউ প্রস্তুত হয়েছে (${it.detectedPageCount} পৃষ্ঠা)।"
                         isStatusError = false
                     }.onFailure { err ->
                         statusBannerMessage = err.message
@@ -722,28 +744,24 @@ fun AuthorPublisherSelfPublishingPortalScreen(
                                 )
                                 Spacer(modifier = Modifier.height(10.dp))
 
-                                // 14. কভার ছবি আপলোড
-                                OutlinedButton(
-                                    onClick = {
+                                // 14. বইয়ের কভার ছবি / Thumbnail (600 × 800 pixels, 3:4 Portrait Ratio)
+                                BookThumbnail3x4PreviewSection(
+                                    coverImageUriString = coverImageUriString,
+                                    onSelectOrChangeCover = {
                                         coverPickerLauncher.launch(
                                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                                         )
                                     },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(48.dp)
-                                        .testTag("submission_cover_picker_btn")
-                                ) {
-                                    Icon(Icons.Default.Image, contentDescription = null)
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        if (coverImageUriString.isBlank()) "১৪. বইয়ের কভার ছবি নির্বাচন করুন (সর্বোচ্চ ১০ মেগাবাইট)"
-                                        else "কভার ছবি যুক্ত হয়েছে ✓"
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
+                                    onRemoveCover = {
+                                        bookManager.clearSelectedCoverImage()
+                                        coverImageUriString = ""
+                                        statusBannerMessage = "কভার থাম্বনেইল মুছে ফেলা হয়েছে।"
+                                        isStatusError = false
+                                    }
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
 
-                                // 15. সম্পূর্ণ বইয়ের PDF ফাইল আপলোড
+                                // 15. সম্পূর্ণ বইয়ের PDF ফাইল আপলোড ও তাৎক্ষণিক ফর্ম প্রিভিউ
                                 Card(
                                     colors = CardDefaults.cardColors(containerColor = PortalMintBg),
                                     border = BorderStroke(1.dp, PortalDeepGreen.copy(alpha = 0.35f)),
@@ -751,71 +769,33 @@ fun AuthorPublisherSelfPublishingPortalScreen(
                                 ) {
                                     Column(modifier = Modifier.padding(12.dp)) {
                                         Text(
-                                            text = "১৫. সম্পূর্ণ বইয়ের PDF ফাইল আপলোড (সর্বোচ্চ ৫০ মেগাবাইট) *",
+                                            text = "১৫. সম্পূর্ণ বইয়ের PDF ফাইল নির্বাচন ও তাৎক্ষণিক প্রিভিউ (সর্বোচ্চ ৫০ মেগাবাইট) *",
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 13.sp,
                                             color = PortalDarkGreen
                                         )
                                         Spacer(modifier = Modifier.height(8.dp))
 
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        Button(
+                                            onClick = {
+                                                pdfDocumentLauncher.launch(arrayOf("application/pdf"))
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = PortalDeepGreen),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(48.dp)
+                                                .testTag("submission_pdf_picker_btn")
                                         ) {
-                                            Button(
-                                                onClick = {
-                                                    pdfDocumentLauncher.launch(arrayOf("application/pdf"))
-                                                },
-                                                colors = ButtonDefaults.buttonColors(containerColor = PortalDeepGreen),
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .height(48.dp)
-                                                    .testTag("submission_pdf_picker_btn")
-                                            ) {
-                                                Icon(Icons.Default.PictureAsPdf, contentDescription = null)
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text("PDF নির্বাচন করুন", fontSize = 12.sp)
-                                            }
-
-                                            OutlinedButton(
-                                                onClick = {
-                                                    // Generates a valid multi-page PDF from the entered book metadata for instant verification/upload
-                                                    val sampleBook = IslamicBookCatalogItem(
-                                                        bookId = "temp_${System.currentTimeMillis()}",
-                                                        titleBangla = bookTitleBangla.ifBlank { "নমুনা ইসলামিক বই" },
-                                                        authorName = authorName.ifBlank { profileFullName.ifBlank { "লেখক" } },
-                                                        publisherName = publisherName.ifBlank { "প্রকাশনী" },
-                                                        category = selectedCategory,
-                                                        pageCount = pageCountText.toIntOrNull() ?: 120,
-                                                        shortIntroduction = shortIntroText.ifBlank { "কুরআন ও সুন্নাহ ভিত্তিক প্রামাণ্য আলোচনা ও মাসায়েল সংকলন।" },
-                                                        tableOfContents = tocText.split("\n").filter { it.isNotBlank() }.ifEmpty {
-                                                            listOf("১ম অধ্যায়: ভূমিকা", "২য় অধ্যায়: মূল আলোচনা")
-                                                        },
-                                                        pdfUrl = "",
-                                                        pdfFileSizeBytes = 120_000L,
-                                                        fileSizeTextBangla = "০.২ মেগাবাইট",
-                                                        copyrightOwnerName = copyrightOwnerName.ifBlank { "স্বত্বাধিকারী" }
-                                                    )
-                                                    val pdfBytes = IslamicBookVerifiedCatalog.generateAuthenticBookPdfBytes(sampleBook)
-                                                    val res = bookManager.validateAndPreparePdfForUpload(
-                                                        fileName = "${bookTitleBangla.ifBlank { "islamic_book" }}.pdf",
-                                                        pdfBytes = pdfBytes,
-                                                        contributorId = currentUserId.ifBlank { "contributor_default_uid" }
-                                                    )
-                                                    res.onSuccess {
-                                                        statusBannerMessage = "পিডিএফ যাচাই ও আপলোড সম্পন্ন হয়েছে (SHA-256: ${it.sha256Hash.take(12)}...)"
-                                                        isStatusError = false
-                                                    }.onFailure { err ->
-                                                        statusBannerMessage = err.message
-                                                        isStatusError = true
-                                                    }
-                                                },
-                                                modifier = Modifier
-                                                    .height(48.dp)
-                                                    .testTag("submission_generate_valid_pdf_btn")
-                                            ) {
-                                                Text("প্রস্তুতকৃত PDF যুক্ত করুন", fontSize = 12.sp)
-                                            }
+                                            Icon(Icons.Default.PictureAsPdf, contentDescription = null)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                if (uploadProgress.state == IslamicBookUploadState.COMPLETED)
+                                                    "অন্য PDF নির্বাচন করুন (${uploadProgress.fileName})"
+                                                else
+                                                    "ফোন থেকে PDF নির্বাচন করুন",
+                                                fontSize = 12.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
                                         }
 
                                         if (uploadProgress.state != IslamicBookUploadState.IDLE) {
@@ -830,7 +810,7 @@ fun AuthorPublisherSelfPublishingPortalScreen(
                                             )
                                             Spacer(modifier = Modifier.height(4.dp))
                                             Text(
-                                                text = "ফাইল: ${uploadProgress.fileName} • অবস্থা: ${uploadProgress.state} (${uploadProgress.progressPercent}%)",
+                                                text = "ফাইল: ${uploadProgress.fileName} • পৃষ্ঠা: ${uploadProgress.detectedPageCount} • অবস্থা: ${uploadProgress.state} (${uploadProgress.progressPercent}%)",
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.Medium,
                                                 color = PortalDarkGreen
@@ -876,6 +856,14 @@ fun AuthorPublisherSelfPublishingPortalScreen(
                                                 ) {
                                                     Text("Cancel", fontSize = 11.sp)
                                                 }
+                                            }
+
+                                            // তাৎক্ষণিক ইন-ফর্ম PDF Preview (ফাইল নির্বাচন করার সঙ্গে সঙ্গে ফর্মের মধ্যেই প্রিভিউ)
+                                            if (uploadProgress.stagedLocalFilePath.isNotBlank()) {
+                                                Spacer(modifier = Modifier.height(10.dp))
+                                                InlineSelectedPdfPreviewSection(
+                                                    uploadProgress = uploadProgress
+                                                )
                                             }
                                         }
                                     }
@@ -1513,42 +1501,49 @@ fun AdminBookApprovalDashboardScreen(
                             }
                         }
                         Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        BookThumbnail3x4PreviewSection(
+                            coverImageUriString = directCoverImageUrl,
+                            onSelectOrChangeCover = {
+                                adminCoverPickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            },
+                            onRemoveCover = {
+                                directCoverImageUrl = ""
+                                feedbackBanner = "কভার থাম্বনেইল মুছে ফেলা হয়েছে।"
+                            },
+                            pickerButtonTag = "admin_pick_cover_btn",
+                            previewBoxTag = "admin_thumbnail_preview_box",
+                            changeButtonTag = "admin_thumbnail_change_btn",
+                            fullPreviewButtonTag = "admin_thumbnail_full_preview_btn",
+                            removeButtonTag = "admin_thumbnail_remove_btn"
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = {
+                                adminPdfPickerLauncher.launch(arrayOf("application/pdf"))
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                                .testTag("admin_pick_pdf_btn")
                         ) {
-                            OutlinedButton(
-                                onClick = {
-                                    adminCoverPickerLauncher.launch(
-                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                    )
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("admin_pick_cover_btn")
-                            ) {
-                                Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    if (directCoverImageUrl.isNotBlank()) "কভার যুক্ত হয়েছে" else "কভার ছবি দিন",
-                                    fontSize = 12.sp
-                                )
-                            }
-                            OutlinedButton(
-                                onClick = {
-                                    adminPdfPickerLauncher.launch(arrayOf("application/pdf"))
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("admin_pick_pdf_btn")
-                            ) {
-                                Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    if (uploadProgress.state == IslamicBookUploadState.COMPLETED) "PDF যুক্ত হয়েছে" else "PDF ফাইল দিন",
-                                    fontSize = 12.sp
-                                )
-                            }
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                if (uploadProgress.state == IslamicBookUploadState.COMPLETED)
+                                    "PDF যুক্ত হয়েছে (${uploadProgress.fileName} • ${uploadProgress.detectedPageCount} পৃষ্ঠা)"
+                                else
+                                    "ফোন থেকে PDF ফাইল নির্বাচন করুন",
+                                fontSize = 12.sp
+                            )
+                        }
+                        if (uploadProgress.stagedLocalFilePath.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            InlineSelectedPdfPreviewSection(
+                                uploadProgress = uploadProgress,
+                                previewBoxTag = "admin_pdf_preview_box"
+                            )
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
@@ -1559,7 +1554,8 @@ fun AdminBookApprovalDashboardScreen(
                                     adminPhone = adminPhone,
                                     bookTitleBangla = directBookTitle,
                                     category = directCategory,
-                                    coverImageUrl = directCoverImageUrl
+                                    coverImageUrl = directCoverImageUrl,
+                                    pageCount = uploadProgress.detectedPageCount.coerceAtLeast(1)
                                 ).onSuccess { published ->
                                     feedbackBanner = "আলহামদুলিল্লাহ! '${published.titleBangla}' সরাসরি লাইব্রেরিতে প্রকাশিত হয়েছে।"
                                     directBookTitle = ""
@@ -1863,3 +1859,334 @@ fun AdminBookApprovalDashboardScreen(
         }
     }
 }
+
+/**
+ * ১. ইউজারের নির্বাচিত Book Thumbnail / Cover Image-এর 600 × 800 pixels (3:4 Portrait Ratio) প্রিভিউ বক্স,
+ * যেখানে ছবিটি টেনে বিকৃত করা বা কেটে ফেলা ছাড়াই সম্পূর্ণ দেখা যায় এবং পরিবর্তন, বড় প্রিভিউ ও মুছে ফেলার সুবিধা থাকে।
+ */
+@Composable
+fun BookThumbnail3x4PreviewSection(
+    coverImageUriString: String,
+    onSelectOrChangeCover: () -> Unit,
+    onRemoveCover: () -> Unit,
+    pickerButtonTag: String = "submission_cover_picker_btn",
+    previewBoxTag: String = "submission_thumbnail_preview_box",
+    changeButtonTag: String = "submission_thumbnail_change_btn",
+    fullPreviewButtonTag: String = "submission_thumbnail_full_preview_btn",
+    removeButtonTag: String = "submission_thumbnail_remove_btn"
+) {
+    var isExpandedPreview by remember { mutableStateOf(false) }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = PortalMintBg),
+        border = BorderStroke(1.dp, PortalDeepGreen.copy(alpha = 0.35f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "১৪. বইয়ের থাম্বনেইল / কভার ছবি (600 × 800 px • 3:4 অনুপাত)",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = PortalDarkGreen,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (coverImageUriString.isBlank()) {
+                OutlinedButton(
+                    onClick = onSelectOrChangeCover,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag(pickerButtonTag)
+                ) {
+                    Icon(Icons.Default.Image, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("গ্যালারি থেকে কভার থাম্বনেইল নির্বাচন করুন (3:4)", fontSize = 12.5.sp)
+                }
+            } else {
+                val cleanUrl = coverImageUriString.trim()
+                val decodedBitmap = remember(cleanUrl) {
+                    if (cleanUrl.startsWith("data:image", ignoreCase = true) && cleanUrl.contains("base64,")) {
+                        try {
+                            val base64Part = cleanUrl.substringAfter("base64,")
+                            val bytes = Base64.decode(base64Part, Base64.DEFAULT)
+                            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        } catch (_: Exception) {
+                            null
+                        }
+                    } else {
+                        null
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // 3:4 Portrait Preview Box (600 x 800 ratio -> 96.dp x 128.dp or expanded 165.dp x 220.dp)
+                    val boxWidth = if (isExpandedPreview) 165.dp else 96.dp
+                    val boxHeight = if (isExpandedPreview) 220.dp else 128.dp
+                    Box(
+                        modifier = Modifier
+                            .width(boxWidth)
+                            .height(boxHeight)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFF7FAF8))
+                            .border(1.dp, PortalGold, RoundedCornerShape(8.dp))
+                            .testTag(previewBoxTag),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (decodedBitmap != null) {
+                            Image(
+                                bitmap = decodedBitmap.asImageBitmap(),
+                                contentDescription = "নির্বাচিত কভার থাম্বনেইল প্রিভিউ",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            AsyncImage(
+                                model = cleanUrl,
+                                contentDescription = "নির্বাচিত কভার থাম্বনেইল প্রিভিউ",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "মাপ: 600 × 800 px (3:4 Portrait)",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PortalDeepGreen,
+                            modifier = Modifier.testTag("submission_thumbnail_ratio_label")
+                        )
+                        Text(
+                            text = "ছবিটি বিকৃত বা কাটা ছাড়াই সম্পূর্ণ প্রদর্শিত হচ্ছে।",
+                            fontSize = 11.sp,
+                            color = Color.DarkGray
+                        )
+
+                        // পরিবর্তন (Change)
+                        OutlinedButton(
+                            onClick = onSelectOrChangeCover,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(36.dp)
+                                .testTag(changeButtonTag)
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("থাম্বনেইল পরিবর্তন", fontSize = 11.5.sp)
+                        }
+
+                        // প্রিভিউ (Preview Toggle)
+                        OutlinedButton(
+                            onClick = { isExpandedPreview = !isExpandedPreview },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(36.dp)
+                                .testTag(fullPreviewButtonTag)
+                        ) {
+                            Icon(
+                                imageVector = if (isExpandedPreview) Icons.Default.ZoomOutMap else Icons.Default.ZoomInMap,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                if (isExpandedPreview) "ছোট প্রিভিউ" else "বড় প্রিভিউ দেখুন",
+                                fontSize = 11.5.sp
+                            )
+                        }
+
+                        // মুছে ফেলুন (Remove)
+                        OutlinedButton(
+                            onClick = {
+                                isExpandedPreview = false
+                                onRemoveCover()
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFB91C1C)),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(36.dp)
+                                .testTag(removeButtonTag)
+                        ) {
+                            Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("থাম্বনেইল মুছুন", fontSize = 11.5.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * ১. ইউজার PDF নির্বাচন করার সঙ্গে সঙ্গে ফর্মের মধ্যেই তাৎক্ষণিক PDF Preview দেখানোর কম্পোনেন্ট।
+ */
+@Composable
+fun InlineSelectedPdfPreviewSection(
+    uploadProgress: IslamicBookUploadProgress,
+    previewBoxTag: String = "submission_pdf_preview_box"
+) {
+    var previewPage by remember(uploadProgress.stagedLocalFilePath) { mutableIntStateOf(1) }
+    var totalPages by remember(uploadProgress.stagedLocalFilePath, uploadProgress.detectedPageCount) {
+        mutableIntStateOf(uploadProgress.detectedPageCount.coerceAtLeast(1))
+    }
+    var pageBitmap by remember(uploadProgress.stagedLocalFilePath) { mutableStateOf<Bitmap?>(null) }
+
+    LaunchedEffect(uploadProgress.stagedLocalFilePath, previewPage) {
+        val path = uploadProgress.stagedLocalFilePath
+        if (path.isBlank()) {
+            pageBitmap = null
+            return@LaunchedEffect
+        }
+        withContext(Dispatchers.IO) {
+            var rendered: Bitmap? = null
+            try {
+                val file = File(path)
+                if (file.exists() && file.length() > 100L) {
+                    ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)?.use { pfd ->
+                        PdfRenderer(pfd).use { renderer ->
+                            val count = renderer.pageCount
+                            if (count > 0) {
+                                totalPages = count
+                                val idx = (previewPage - 1).coerceIn(0, count - 1)
+                                renderer.openPage(idx).use { page ->
+                                    val targetW = (page.width * 2).coerceIn(600, 1200)
+                                    val targetH = (page.height * 2).coerceIn(800, 1600)
+                                    val bmp = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+                                    bmp.eraseColor(android.graphics.Color.WHITE)
+                                    page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                                    rendered = bmp
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+            }
+            if (rendered == null) {
+                totalPages = uploadProgress.detectedPageCount.coerceAtLeast(1)
+                val fallbackBmp = Bitmap.createBitmap(600, 800, Bitmap.Config.ARGB_8888)
+                fallbackBmp.eraseColor(android.graphics.Color.WHITE)
+                rendered = fallbackBmp
+            }
+            pageBitmap = rendered
+        }
+    }
+
+    Surface(
+        color = Color.White,
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, PortalDeepGreen.copy(alpha = 0.4f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(previewBoxTag)
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "নির্বাচিত PDF প্রিভিউ (${uploadProgress.fileName})",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    color = PortalDarkGreen,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = "পৃষ্ঠা $previewPage / $totalPages",
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PortalDeepGreen,
+                    modifier = Modifier.testTag("submission_pdf_preview_page_indicator")
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFFF3F4F6))
+                    .border(0.75.dp, Color(0xFFD1D5DB), RoundedCornerShape(6.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                val bmp = pageBitmap
+                if (bmp != null) {
+                    Image(
+                        bitmap = bmp.asImageBitmap(),
+                        contentDescription = "PDF পৃষ্ঠা প্রিভিউ $previewPage",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag("submission_pdf_preview_page_image")
+                    )
+                } else {
+                    Text(
+                        text = "পিডিএফ পৃষ্ঠা লোড হচ্ছে...",
+                        fontSize = 12.sp,
+                        color = PortalDarkGreen
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = { if (previewPage > 1) previewPage -= 1 },
+                    enabled = previewPage > 1,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier
+                        .height(34.dp)
+                        .testTag("submission_pdf_preview_prev_btn")
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Text("আগের পৃষ্ঠা", fontSize = 11.sp)
+                }
+
+                OutlinedButton(
+                    onClick = { if (previewPage < totalPages) previewPage += 1 },
+                    enabled = previewPage < totalPages,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier
+                        .height(34.dp)
+                        .testTag("submission_pdf_preview_next_btn")
+                ) {
+                    Text("পরের পৃষ্ঠা", fontSize = 11.sp)
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+    }
+}
+

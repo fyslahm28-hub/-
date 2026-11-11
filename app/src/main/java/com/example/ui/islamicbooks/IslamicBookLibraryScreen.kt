@@ -11,7 +11,11 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -29,11 +33,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -46,6 +52,7 @@ import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import kotlin.math.abs
 
 private val LibDeepGreen = Color(0xFF0E5A3E)
 private val LibDarkGreen = Color(0xFF093B28)
@@ -86,9 +93,27 @@ fun IslamicBookLibraryScreen(
     var selectedBook by remember { mutableStateOf<IslamicBookCatalogItem?>(null) }
     var selectedVolumeNumber by remember { mutableIntStateOf(1) }
     var localActionMessage by remember { mutableStateOf<String?>(null) }
+    var pendingAutoOpenReaderAfterDownload by remember { mutableStateOf(false) }
 
     val downloadProgressMap by bookManager.downloadProgressMap.collectAsState()
     val dynamicCatalog by bookManager.dynamicCatalogBooks.collectAsState()
+
+    // ২. ডাউনলোড সম্পূর্ণ হওয়ার পরেই স্বয়ংক্রিয়ভাবে PDF Reader খুলবে
+    LaunchedEffect(selectedBook?.bookId, selectedVolumeNumber, downloadProgressMap, pendingAutoOpenReaderAfterDownload) {
+        val book = selectedBook ?: return@LaunchedEffect
+        if (pendingAutoOpenReaderAfterDownload) {
+            val key = bookManager.downloadKey(book.bookId, selectedVolumeNumber)
+            val progress = downloadProgressMap[key]
+            if (progress?.state == IslamicBookDownloadState.DOWNLOADED ||
+                bookManager.isBookDownloaded(book.bookId, selectedVolumeNumber)
+            ) {
+                pendingAutoOpenReaderAfterDownload = false
+                currentSubView = LibrarySubView.PDF_READER
+            } else if (progress?.state == IslamicBookDownloadState.FAILED) {
+                pendingAutoOpenReaderAfterDownload = false
+            }
+        }
+    }
 
     val displayedBooks = remember(selectedCategory, showOnlyDownloadedMyBooks, searchQuery, dynamicCatalog, downloadProgressMap) {
         val base = if (showOnlyDownloadedMyBooks) {
@@ -112,7 +137,10 @@ fun IslamicBookLibraryScreen(
     BackHandler {
         when (currentSubView) {
             LibrarySubView.PDF_READER -> currentSubView = LibrarySubView.BOOK_DETAILS
-            LibrarySubView.BOOK_DETAILS -> currentSubView = LibrarySubView.CATALOG_HOME
+            LibrarySubView.BOOK_DETAILS -> {
+                pendingAutoOpenReaderAfterDownload = false
+                currentSubView = LibrarySubView.CATALOG_HOME
+            }
             LibrarySubView.SELF_PUBLISHING_PORTAL -> currentSubView = LibrarySubView.CATALOG_HOME
             LibrarySubView.ADMIN_APPROVAL_DASHBOARD -> currentSubView = LibrarySubView.CATALOG_HOME
             LibrarySubView.CATALOG_HOME -> onNavigateBackHome()
@@ -143,13 +171,15 @@ fun IslamicBookLibraryScreen(
 
         LibrarySubView.PDF_READER -> {
             val book = selectedBook
-            if (book != null) {
+            if (book != null && bookManager.isBookDownloaded(book.bookId, selectedVolumeNumber)) {
                 IslamicBookNativePdfReaderScreen(
                     book = book,
                     volumeNumber = selectedVolumeNumber,
                     bookManager = bookManager,
                     onBackToDetails = { currentSubView = LibrarySubView.BOOK_DETAILS }
                 )
+            } else if (book != null) {
+                currentSubView = LibrarySubView.BOOK_DETAILS
             } else {
                 currentSubView = LibrarySubView.CATALOG_HOME
             }
@@ -171,30 +201,41 @@ fun IslamicBookLibraryScreen(
                 IslamicBookDetailsFullScreenView(
                     book = book,
                     selectedVolumeNumber = selectedVolumeNumber,
-                    onSelectVolume = { selectedVolumeNumber = it },
+                    onSelectVolume = {
+                        pendingAutoOpenReaderAfterDownload = false
+                        selectedVolumeNumber = it
+                    },
                     downloadProgress = progress,
+                    isPendingAutoOpenReader = pendingAutoOpenReaderAfterDownload,
                     lastReadPage = bookManager.getLastReadPage(book.bookId, selectedVolumeNumber),
                     bookmarks = bookManager.getBookmarks(book.bookId, selectedVolumeNumber),
                     onStartOrResumeDownload = {
                         bookManager.startOrResumeDownload(book, selectedVolumeNumber)
                     },
+                    onRetryDownload = {
+                        bookManager.retryDownload(book, selectedVolumeNumber)
+                    },
                     onPauseDownload = {
+                        pendingAutoOpenReaderAfterDownload = false
                         bookManager.pauseDownload(book.bookId, selectedVolumeNumber)
                     },
                     onCancelDownload = {
+                        pendingAutoOpenReaderAfterDownload = false
                         bookManager.cancelDownload(book.bookId, selectedVolumeNumber)
                     },
-                    onDeleteLocalCopy = {
-                        bookManager.deleteLocalDownloadedBook(book.bookId, selectedVolumeNumber)
-                        localActionMessage = "ফোন থেকে অফলাইন পিডিএফ কপি মুছে ফেলা হয়েছে। মূল লাইব্রেরিতে বইটি অক্ষুণ্ণ রয়েছে।"
-                    },
                     onOpenPdfReader = {
-                        if (!bookManager.isBookDownloaded(book.bookId, selectedVolumeNumber)) {
+                        if (bookManager.isBookDownloaded(book.bookId, selectedVolumeNumber)) {
+                            // ইতিমধ্যে ডাউনলোড করা থাকলে সরাসরি ইন্টারনেট ছাড়াই PDF Reader খুলবে (একই PDF বারবার ডাউনলোড হবে না)
+                            pendingAutoOpenReaderAfterDownload = false
+                            currentSubView = LibrarySubView.PDF_READER
+                        } else {
+                            // প্রথমবার পড়তে চাইলে আগে সার্ভার থেকে ডাউনলোড শুরু হবে এবং ডাউনলোড সম্পূর্ণ হওয়ার পরেই PDF Reader খুলবে
+                            pendingAutoOpenReaderAfterDownload = true
                             bookManager.startOrResumeDownload(book, selectedVolumeNumber)
                         }
-                        currentSubView = LibrarySubView.PDF_READER
                     },
                     onBackToCatalog = {
+                        pendingAutoOpenReaderAfterDownload = false
                         currentSubView = LibrarySubView.CATALOG_HOME
                     }
                 )
@@ -678,13 +719,13 @@ private fun IslamicBookCardItem(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Top
             ) {
-                // ছোট কভার ছবি Thumbnail (Admin কর্তৃক Upload করা কভার ছবি)
+                // ছোট কভার ছবি Thumbnail (3:4 Portrait Ratio — 39.dp x 52.dp, বিকৃত বা কাটা ছাড়াই)
                 IslamicBookCoverThumbnail(
                     coverImageUrl = book.coverImageUrl,
                     titleBangla = book.titleBangla,
                     modifier = Modifier
-                        .width(38.dp)
-                        .height(50.dp)
+                        .width(39.dp)
+                        .height(52.dp)
                         .testTag("islamic_book_cover_${book.bookId}")
                 )
 
@@ -742,17 +783,16 @@ private fun IslamicBookCoverThumbnail(
                 Image(
                     bitmap = decodedBase64Bitmap.asImageBitmap(),
                     contentDescription = titleBangla,
-                    contentScale = ContentScale.Crop,
+                    contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize()
                 )
             }
             cleanUrl.isNotEmpty() -> {
-                // Fallback cover frame behind AsyncImage in case URI is loading or synthetic in tests
                 MinimalIslamicBookCoverPlaceholder(titleBangla = titleBangla)
                 AsyncImage(
                     model = cleanUrl,
                     contentDescription = titleBangla,
-                    contentScale = ContentScale.Crop,
+                    contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -793,7 +833,7 @@ private fun MinimalIslamicBookCoverPlaceholder(titleBangla: String) {
 }
 
 /**
- * ৪.২ ও ৫. বই বিস্তারিত পেজ (Book Details Full-Screen Page)
+ * ৪.২ ও ৫. বই বিস্তারিত পেজ ও প্রথমবার ডাউনলোড নিয়ন্ত্রণ (Book Details Full-Screen Page)
  */
 @Composable
 private fun IslamicBookDetailsFullScreenView(
@@ -801,12 +841,13 @@ private fun IslamicBookDetailsFullScreenView(
     selectedVolumeNumber: Int,
     onSelectVolume: (Int) -> Unit,
     downloadProgress: IslamicBookDownloadProgress,
+    isPendingAutoOpenReader: Boolean,
     lastReadPage: Int,
     bookmarks: List<IslamicBookBookmark>,
     onStartOrResumeDownload: () -> Unit,
+    onRetryDownload: () -> Unit,
     onPauseDownload: () -> Unit,
     onCancelDownload: () -> Unit,
-    onDeleteLocalCopy: () -> Unit,
     onOpenPdfReader: () -> Unit,
     onBackToCatalog: () -> Unit
 ) {
@@ -856,42 +897,15 @@ private fun IslamicBookDetailsFullScreenView(
                         verticalAlignment = Alignment.Top,
                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        // Large Book Cover
-                        Box(
+                        // 3:4 Portrait Book Cover (108.dp x 144.dp)
+                        IslamicBookCoverThumbnail(
+                            coverImageUrl = book.coverImageUrl,
+                            titleBangla = book.titleBangla,
                             modifier = Modifier
-                                .width(110.dp)
-                                .height(156.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(
-                                    Brush.verticalGradient(
-                                        listOf(Color(book.coverBadgeColorHex), Color(0xFF05291C))
-                                    )
-                                )
-                                .padding(10.dp)
-                                .testTag("book_details_large_cover"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.SpaceBetween,
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                Text("﷽", color = LibGold, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                Text(
-                                    text = book.titleBangla,
-                                    color = Color.White,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Center
-                                )
-                                Text(
-                                    text = book.publisherName,
-                                    color = LibGoldLight,
-                                    fontSize = 9.5.sp,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                        }
+                                .width(108.dp)
+                                .height(144.dp)
+                                .testTag("book_details_large_cover")
+                        )
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
@@ -985,9 +999,12 @@ private fun IslamicBookDetailsFullScreenView(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = if (isDownloaded) "অফলাইনে ডাউনলোড সম্পন্ন ✓" else "পিডিএফ ডাউনলোড ও পঠন নিয়ন্ত্রণ",
+                            text = if (isDownloaded)
+                                "অফলাইনে ডাউনলোড সম্পন্ন ✓ (ইন্টারনেট ছাড়াই পাঠযোগ্য)"
+                            else
+                                "পিডিএফ ডাউনলোড ও পঠন নিয়ন্ত্রণ",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
+                            fontSize = 14.sp,
                             color = LibDarkGreen
                         )
                         Text(
@@ -1001,10 +1018,11 @@ private fun IslamicBookDetailsFullScreenView(
                     Spacer(modifier = Modifier.height(10.dp))
 
                     if (downloadProgress.state == IslamicBookDownloadState.DOWNLOADING ||
-                        downloadProgress.state == IslamicBookDownloadState.PAUSED
+                        downloadProgress.state == IslamicBookDownloadState.PAUSED ||
+                        downloadProgress.state == IslamicBookDownloadState.FAILED
                     ) {
                         LinearProgressIndicator(
-                            progress = { downloadProgress.progressPercent / 100f },
+                            progress = { (downloadProgress.progressPercent / 100f).coerceIn(0f, 1f) },
                             color = LibDeepGreen,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1013,10 +1031,22 @@ private fun IslamicBookDetailsFullScreenView(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "ডাউনলোড প্রোগ্রেস: ${downloadProgress.progressPercent}% (${downloadProgress.state})",
+                            text = when (downloadProgress.state) {
+                                IslamicBookDownloadState.DOWNLOADING ->
+                                    if (isPendingAutoOpenReader)
+                                        "ডাউনলোড হচ্ছে: ${downloadProgress.progressPercent}% (সম্পূর্ণ হলে স্বয়ংক্রিয়ভাবে বই খুলবে)"
+                                    else
+                                        "ডাউনলোড প্রোগ্রেস: ${downloadProgress.progressPercent}%"
+                                IslamicBookDownloadState.PAUSED ->
+                                    "ডাউনলোড বিরতি দেওয়া হয়েছে: ${downloadProgress.progressPercent}%"
+                                IslamicBookDownloadState.FAILED ->
+                                    downloadProgress.errorMessageBangla ?: "ডাউনলোড ব্যর্থ হয়েছে। পুনরায় চেষ্টা করুন।"
+                                else -> ""
+                            },
                             fontSize = 12.sp,
-                            color = LibDarkGreen,
-                            fontWeight = FontWeight.SemiBold
+                            color = if (downloadProgress.state == IslamicBookDownloadState.FAILED) Color(0xFFB91C1C) else LibDarkGreen,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.testTag("book_download_progress_text")
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
@@ -1036,7 +1066,12 @@ private fun IslamicBookDetailsFullScreenView(
                             Icon(Icons.Default.MenuBook, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                if (isDownloaded) "বইটি পড়ুন (অফলাইন)" else "ডাউনলোড ও পড়ুন",
+                                when {
+                                    isDownloaded -> "বইটি পড়ুন (অফলাইন)"
+                                    downloadProgress.state == IslamicBookDownloadState.DOWNLOADING ->
+                                        "ডাউনলোড হচ্ছে (${downloadProgress.progressPercent}%)..."
+                                    else -> "ডাউনলোড ও পড়ুন"
+                                },
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -1056,50 +1091,52 @@ private fun IslamicBookDetailsFullScreenView(
                                     else "ডাউনলোড করুন"
                                 )
                             }
-                        } else {
-                            OutlinedButton(
-                                onClick = onDeleteLocalCopy,
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFB91C1C)),
-                                modifier = Modifier
-                                    .height(48.dp)
-                                    .testTag("book_delete_local_btn")
-                            ) {
-                                Icon(Icons.Default.DeleteOutline, contentDescription = null)
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("লোকাল কপি মুছুন", fontSize = 12.sp)
-                            }
                         }
                     }
 
-                    // Pause / Resume / Cancel Explicit Controls
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = onPauseDownload,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("book_download_pause_btn")
+                    // Pause / Resume / Retry / Cancel Explicit Controls (when not yet downloaded)
+                    if (!isDownloaded) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Text("Pause", fontSize = 12.sp)
-                        }
-                        OutlinedButton(
-                            onClick = onStartOrResumeDownload,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("book_download_resume_btn")
-                        ) {
-                            Text("Resume", fontSize = 12.sp)
-                        }
-                        OutlinedButton(
-                            onClick = onCancelDownload,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("book_download_cancel_btn")
-                        ) {
-                            Text("Cancel", fontSize = 12.sp)
+                            OutlinedButton(
+                                onClick = onPauseDownload,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("book_download_pause_btn")
+                            ) {
+                                Text("Pause", fontSize = 11.5.sp)
+                            }
+                            OutlinedButton(
+                                onClick = onStartOrResumeDownload,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("book_download_resume_btn")
+                            ) {
+                                Text("Resume", fontSize = 11.5.sp)
+                            }
+                            OutlinedButton(
+                                onClick = onRetryDownload,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("book_download_retry_btn")
+                            ) {
+                                Text("Retry", fontSize = 11.5.sp)
+                            }
+                            OutlinedButton(
+                                onClick = onCancelDownload,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("book_download_cancel_btn")
+                            ) {
+                                Text("Cancel", fontSize = 11.5.sp)
+                            }
                         }
                     }
                 }
@@ -1218,21 +1255,42 @@ private fun IslamicBookDetailsFullScreenView(
     }
 }
 
+enum class PdfReaderScrollDirection {
+    HORIZONTAL,
+    VERTICAL
+}
+
+enum class PdfReaderFitMode {
+    FIT_WIDTH,
+    FIT_PAGE
+}
+
 /**
- * ৫. অ্যাপের নিজস্ব ফুল-স্ক্রিন নেটিভ পিডিএফ রিডার (Bookmark, Last Read Page, Zoom, Night Mode সাপোর্টসহ)
+ * ৩. অ্যাপের নিজস্ব ফুল-স্ক্রিন নেটিভ পিডিএফ রিডার:
+ * - ডান থেকে বামে Swipe করলে পরবর্তী পৃষ্ঠা, বাম থেকে ডানে Swipe করলে আগের পৃষ্ঠা
+ * - Vertical ও Horizontal Reading Mode
+ * - Previous ও Next Button কার্যকর
+ * - সম্পূর্ণ স্ক্রিন ব্যবহার (কোনো সাইড মার্জিন বা বড় বর্ডার নেই) এবং অতিরিক্ত সাদা অংশ ট্রিম করে বড় ও পরিষ্কার লেখা প্রদর্শন
+ * - Fit to Width, Fit to Page, Pinch to Zoom ও Double Tap Zoom
+ * - Full Screen Mode এবং Swipe ও Zoom-এর মধ্যে শূন্য সংঘর্ষ (Zero Gesture Conflict)
  */
 @Composable
-private fun IslamicBookNativePdfReaderScreen(
+internal fun IslamicBookNativePdfReaderScreen(
     book: IslamicBookCatalogItem,
     volumeNumber: Int,
     bookManager: IslamicBookManager,
     onBackToDetails: () -> Unit
 ) {
-    var totalPages by remember { mutableIntStateOf(12) }
+    var totalPages by remember { mutableIntStateOf(book.pageCount.coerceAtLeast(1)) }
     var currentPage by remember {
         mutableIntStateOf(bookManager.getLastReadPage(book.bookId, volumeNumber).coerceAtLeast(1))
     }
+    var readingMode by remember { mutableStateOf(PdfReaderScrollDirection.HORIZONTAL) }
+    var fitMode by remember { mutableStateOf(PdfReaderFitMode.FIT_WIDTH) }
+    var isFullScreenMode by remember { mutableStateOf(false) }
     var zoomScale by remember { mutableFloatStateOf(1f) }
+    var panOffsetX by remember { mutableFloatStateOf(0f) }
+    var panOffsetY by remember { mutableFloatStateOf(0f) }
     var isNightMode by remember { mutableStateOf(false) }
     var renderedBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var isRendering by remember { mutableStateOf(true) }
@@ -1244,175 +1302,497 @@ private fun IslamicBookNativePdfReaderScreen(
         bookmarks.any { it.pageNumber == currentPage }
     }
 
-    LaunchedEffect(book.bookId, volumeNumber, currentPage) {
+    // পৃষ্ঠা পরিবর্তন হলে জুম ও প্যান রিসেট হবে যেন নতুন পৃষ্ঠা পরিষ্কারভাবে শুরু হয়
+    LaunchedEffect(currentPage) {
+        zoomScale = 1f
+        panOffsetX = 0f
+        panOffsetY = 0f
+    }
+
+    LaunchedEffect(book.bookId, volumeNumber, currentPage, isNightMode) {
         isRendering = true
         bookManager.saveLastReadPage(book.bookId, volumeNumber, currentPage)
         withContext(Dispatchers.IO) {
-            var pdfFile: File = bookManager.getBookPdfFile(book.bookId, volumeNumber)
+            val associatedPath = bookManager.getAssociatedPdfFilePathForBook(book.bookId, volumeNumber)
+            var pdfFile: File = if (associatedPath != null) File(associatedPath) else bookManager.getBookPdfFile(book.bookId, volumeNumber)
             if (!bookManager.isValidPdfFile(pdfFile)) {
                 pdfFile = bookManager.downloadBookSynchronously(book, volumeNumber)
             }
             if (bookManager.isValidPdfFile(pdfFile)) {
+                val bgColor = if (isNightMode) {
+                    android.graphics.Color.parseColor("#111827")
+                } else {
+                    android.graphics.Color.WHITE
+                }
+                var rendered: Bitmap? = null
                 try {
                     ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)?.use { pfd ->
                         PdfRenderer(pfd).use { renderer ->
-                            val count = renderer.pageCount.coerceAtLeast(1)
-                            totalPages = count
-                            val safeIndex = (currentPage - 1).coerceIn(0, count - 1)
-                            renderer.openPage(safeIndex).use { page ->
-                                val bmp = Bitmap.createBitmap(
-                                    page.width.coerceAtLeast(595),
-                                    page.height.coerceAtLeast(842),
-                                    Bitmap.Config.ARGB_8888
-                                )
-                                bmp.eraseColor(android.graphics.Color.parseColor("#FCFBF7"))
-                                page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                                renderedBitmap = bmp
+                            val nativeCount = renderer.pageCount
+                            if (nativeCount > 0) {
+                                totalPages = nativeCount
+                                val safeIndex = (currentPage - 1).coerceIn(0, nativeCount - 1)
+                                renderer.openPage(safeIndex).use { page ->
+                                    val renderW = (page.width * 2).coerceIn(1080, 1800)
+                                    val renderH = (page.height * 2).coerceIn(1440, 2400)
+                                    val rawBmp = Bitmap.createBitmap(renderW, renderH, Bitmap.Config.ARGB_8888)
+                                    rawBmp.eraseColor(bgColor)
+                                    page.render(rawBmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                                    rendered = trimPdfOuterWhitespace(rawBmp, bgColor)
+                                }
                             }
                         }
                     }
                 } catch (_: Exception) {
                 }
+
+                if (rendered == null) {
+                    val fallbackCount = bookManager.detectPdfPageCount(pdfFile)
+                        .coerceAtLeast(book.pageCount)
+                        .coerceAtLeast(1)
+                    totalPages = fallbackCount
+                    val fallbackBmp = Bitmap.createBitmap(600, 800, Bitmap.Config.ARGB_8888)
+                    fallbackBmp.eraseColor(bgColor)
+                    rendered = fallbackBmp
+                }
+                renderedBitmap = rendered
             }
         }
         isRendering = false
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(if (isNightMode) Color(0xFF111827) else LibMintBg)
+            .background(if (isNightMode) Color(0xFF111827) else Color.White)
             .testTag("islamic_book_pdf_reader_screen")
     ) {
-        // Top Reader Bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(LibDarkGreen)
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = onBackToDetails,
-                modifier = Modifier
-                    .size(48.dp)
-                    .testTag("pdf_reader_back_btn")
-            ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "ফিরে যান", tint = Color.White)
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = book.titleBangla,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "পৃষ্ঠা $currentPage / $totalPages • খণ্ড $volumeNumber",
-                    color = LibGold,
-                    fontSize = 11.5.sp,
-                    modifier = Modifier.testTag("pdf_reader_page_indicator")
-                )
-            }
-
-            IconButton(
-                onClick = {
-                    bookmarks = bookManager.addOrRemoveBookmark(book.bookId, volumeNumber, currentPage)
-                },
-                modifier = Modifier
-                    .size(48.dp)
-                    .testTag("pdf_reader_bookmark_btn")
-            ) {
-                Icon(
-                    imageVector = if (isCurrentPageBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                    contentDescription = "বুকমার্ক করুন",
-                    tint = if (isCurrentPageBookmarked) LibGold else Color.White
-                )
-            }
-
-            IconButton(
-                onClick = { isNightMode = !isNightMode },
-                modifier = Modifier
-                    .size(48.dp)
-                    .testTag("pdf_reader_night_mode_btn")
-            ) {
-                Icon(
-                    imageVector = if (isNightMode) Icons.Default.LightMode else Icons.Default.DarkMode,
-                    contentDescription = "থিম পরিবর্তন",
-                    tint = Color.White
-                )
-            }
-        }
-
-        // PDF Page Viewport
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .padding(10.dp)
-                .pointerInput(Unit) {
-                    detectTransformGestures { _, _, zoom, _ ->
-                        zoomScale = (zoomScale * zoom).coerceIn(1f, 3f)
-                    }
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            val bmp = renderedBitmap
-            if (bmp != null) {
-                Image(
-                    bitmap = bmp.asImageBitmap(),
-                    contentDescription = "${book.titleBangla} পৃষ্ঠা $currentPage",
-                    contentScale = ContentScale.Fit,
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Top Reader Bar (hidden in Full Screen Mode to maximize visible area)
+            if (!isFullScreenMode) {
+                Row(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer(
-                            scaleX = zoomScale,
-                            scaleY = zoomScale
+                        .fillMaxWidth()
+                        .background(LibDarkGreen)
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = onBackToDetails,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .testTag("pdf_reader_back_btn")
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "ফিরে যান",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
                         )
-                        .testTag("pdf_reader_rendered_page")
-                )
-            } else if (isRendering) {
-                CircularProgressIndicator(color = LibDeepGreen)
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = book.titleBangla,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "পৃষ্ঠা $currentPage / $totalPages • ${if (readingMode == PdfReaderScrollDirection.HORIZONTAL) "Horizontal" else "Vertical"} • ${if (fitMode == PdfReaderFitMode.FIT_WIDTH) "Fit Width" else "Fit Page"}",
+                            color = LibGold,
+                            fontSize = 10.5.sp,
+                            modifier = Modifier.testTag("pdf_reader_page_indicator")
+                        )
+                    }
+
+                    // Reading Mode Toggle (Horizontal / Vertical)
+                    IconButton(
+                        onClick = {
+                            readingMode = if (readingMode == PdfReaderScrollDirection.HORIZONTAL) {
+                                PdfReaderScrollDirection.VERTICAL
+                            } else {
+                                PdfReaderScrollDirection.HORIZONTAL
+                            }
+                        },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .testTag("pdf_reader_reading_mode_btn")
+                    ) {
+                        Icon(
+                            imageVector = if (readingMode == PdfReaderScrollDirection.HORIZONTAL)
+                                Icons.Default.SwapHoriz
+                            else
+                                Icons.Default.SwapVert,
+                            contentDescription = "রিডিং মোড পরিবর্তন",
+                            tint = Color.White,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+
+                    // Fit to Width / Fit to Page Toggle
+                    IconButton(
+                        onClick = {
+                            fitMode = if (fitMode == PdfReaderFitMode.FIT_WIDTH) {
+                                PdfReaderFitMode.FIT_PAGE
+                            } else {
+                                PdfReaderFitMode.FIT_WIDTH
+                            }
+                            zoomScale = 1f
+                            panOffsetX = 0f
+                            panOffsetY = 0f
+                        },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .testTag("pdf_reader_fit_mode_btn")
+                    ) {
+                        Icon(
+                            imageVector = if (fitMode == PdfReaderFitMode.FIT_WIDTH)
+                                Icons.Default.FitScreen
+                            else
+                                Icons.Default.AspectRatio,
+                            contentDescription = "ফিট মোড পরিবর্তন",
+                            tint = Color.White,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+
+                    // Bookmark Toggle
+                    IconButton(
+                        onClick = {
+                            bookmarks = bookManager.addOrRemoveBookmark(book.bookId, volumeNumber, currentPage)
+                        },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .testTag("pdf_reader_bookmark_btn")
+                    ) {
+                        Icon(
+                            imageVector = if (isCurrentPageBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                            contentDescription = "বুকমার্ক করুন",
+                            tint = if (isCurrentPageBookmarked) LibGold else Color.White,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+
+                    // Night Mode Toggle
+                    IconButton(
+                        onClick = { isNightMode = !isNightMode },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .testTag("pdf_reader_night_mode_btn")
+                    ) {
+                        Icon(
+                            imageVector = if (isNightMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                            contentDescription = "থিম পরিবর্তন",
+                            tint = Color.White,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+
+                    // Full Screen Mode Toggle
+                    IconButton(
+                        onClick = { isFullScreenMode = true },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .testTag("pdf_reader_fullscreen_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Fullscreen,
+                            contentDescription = "ফুল স্ক্রিন",
+                            tint = LibGold,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+
+            // Full-Bleed PDF Page Viewport (0.dp side margin, 0.dp border, conflict-free Swipe + Pinch-to-Zoom + Double-Tap Zoom)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(0.dp)
+                    .clipToBounds()
+                    .testTag("pdf_reader_page_viewport")
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onDoubleTap = {
+                                if (zoomScale > 1.05f) {
+                                    zoomScale = 1f
+                                    panOffsetX = 0f
+                                    panOffsetY = 0f
+                                } else {
+                                    zoomScale = 2.25f
+                                }
+                            }
+                        )
+                    }
+                    .pointerInput(readingMode, totalPages) {
+                        val swipeThresholdPx = 42.dp.toPx()
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            var totalDragX = 0f
+                            var totalDragY = 0f
+                            var hadMultiTouch = false
+
+                            do {
+                                val event = awaitPointerEvent()
+                                val activePointers = event.changes.count { it.pressed }
+                                if (activePointers >= 2) {
+                                    hadMultiTouch = true
+                                    val zoomChange = event.calculateZoom()
+                                    val panChange = event.calculatePan()
+                                    val newScale = (zoomScale * zoomChange).coerceIn(1f, 4f)
+                                    zoomScale = newScale
+                                    if (newScale > 1.02f) {
+                                        val maxPanX = (size.width * (newScale - 1f)) / 2f
+                                        val maxPanY = (size.height * (newScale - 1f)) / 2f
+                                        panOffsetX = (panOffsetX + panChange.x).coerceIn(-maxPanX, maxPanX)
+                                        panOffsetY = (panOffsetY + panChange.y).coerceIn(-maxPanY, maxPanY)
+                                    } else {
+                                        panOffsetX = 0f
+                                        panOffsetY = 0f
+                                    }
+                                    event.changes.forEach { if (it.positionChanged()) it.consume() }
+                                } else if (activePointers == 1 && !hadMultiTouch) {
+                                    val panChange = event.calculatePan()
+                                    if (zoomScale > 1.05f) {
+                                        // জুম অবস্থায় প্যান করবে, পেজ সোয়াইপের সাথে কখনোই সংঘর্ষ করবে না
+                                        val maxPanX = (size.width * (zoomScale - 1f)) / 2f
+                                        val maxPanY = (size.height * (zoomScale - 1f)) / 2f
+                                        panOffsetX = (panOffsetX + panChange.x).coerceIn(-maxPanX, maxPanX)
+                                        panOffsetY = (panOffsetY + panChange.y).coerceIn(-maxPanY, maxPanY)
+                                        event.changes.forEach { if (it.positionChanged()) it.consume() }
+                                    } else {
+                                        totalDragX += panChange.x
+                                        totalDragY += panChange.y
+                                    }
+                                }
+                            } while (event.changes.any { it.pressed })
+
+                            // জুম না থাকলে (zoomScale <= 1.05f) এবং এক আঙুলে সোয়াইপ করা হলে পৃষ্ঠা পরিবর্তন হবে
+                            if (!hadMultiTouch && zoomScale <= 1.05f) {
+                                if (readingMode == PdfReaderScrollDirection.HORIZONTAL) {
+                                    if (abs(totalDragX) > abs(totalDragY) && abs(totalDragX) >= swipeThresholdPx) {
+                                        if (totalDragX < 0f && currentPage < totalPages) {
+                                            // ডান থেকে বামে Swipe -> পরবর্তী পৃষ্ঠা
+                                            currentPage += 1
+                                        } else if (totalDragX > 0f && currentPage > 1) {
+                                            // বাম থেকে ডানে Swipe -> আগের পৃষ্ঠা
+                                            currentPage -= 1
+                                        }
+                                    }
+                                } else {
+                                    if (abs(totalDragY) > abs(totalDragX) && abs(totalDragY) >= swipeThresholdPx) {
+                                        if (totalDragY < 0f && currentPage < totalPages) {
+                                            // নিচ থেকে উপরে Swipe -> পরবর্তী পৃষ্ঠা (Vertical Mode)
+                                            currentPage += 1
+                                        } else if (totalDragY > 0f && currentPage > 1) {
+                                            // উপর থেকে নিচে Swipe -> আগের পৃষ্ঠা (Vertical Mode)
+                                            currentPage -= 1
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                val bmp = renderedBitmap
+                if (bmp != null) {
+                    Image(
+                        bitmap = bmp.asImageBitmap(),
+                        contentDescription = "${book.titleBangla} পৃষ্ঠা $currentPage",
+                        contentScale = if (fitMode == PdfReaderFitMode.FIT_WIDTH) {
+                            ContentScale.FillWidth
+                        } else {
+                            ContentScale.Fit
+                        },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer(
+                                scaleX = zoomScale,
+                                scaleY = zoomScale,
+                                translationX = panOffsetX,
+                                translationY = panOffsetY
+                            )
+                            .testTag("pdf_reader_rendered_page")
+                    )
+                } else if (isRendering) {
+                    CircularProgressIndicator(color = LibDeepGreen)
+                }
+            }
+
+            // Bottom Page Controls (Previous & Next Buttons remain active)
+            if (!isFullScreenMode) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(LibDarkGreen)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(
+                        onClick = { if (currentPage > 1) currentPage -= 1 },
+                        enabled = currentPage > 1,
+                        colors = ButtonDefaults.buttonColors(containerColor = LibDeepGreen),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier
+                            .height(38.dp)
+                            .testTag("pdf_reader_prev_page_btn")
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text("পূর্ববর্তী পৃষ্ঠা", fontSize = 12.sp)
+                    }
+
+                    Text(
+                        text = "পৃষ্ঠা $currentPage / $totalPages (${(zoomScale * 100).toInt()}%)",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        modifier = Modifier.testTag("pdf_reader_bottom_page_zoom_text")
+                    )
+
+                    Button(
+                        onClick = { if (currentPage < totalPages) currentPage += 1 },
+                        enabled = currentPage < totalPages,
+                        colors = ButtonDefaults.buttonColors(containerColor = LibDeepGreen),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier
+                            .height(38.dp)
+                            .testTag("pdf_reader_next_page_btn")
+                    ) {
+                        Text("পরবর্তী পৃষ্ঠা", fontSize = 12.sp)
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(18.dp))
+                    }
+                }
             }
         }
 
-        // Bottom Page Controls
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(LibDarkGreen)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Button(
-                onClick = { if (currentPage > 1) currentPage -= 1 },
-                enabled = currentPage > 1,
-                colors = ButtonDefaults.buttonColors(containerColor = LibDeepGreen),
-                modifier = Modifier.testTag("pdf_reader_prev_page_btn")
+        // Floating Minimal Controls when in Full Screen Mode
+        if (isFullScreenMode) {
+            Surface(
+                color = LibDarkGreen.copy(alpha = 0.85f),
+                shape = RoundedCornerShape(18.dp),
+                border = BorderStroke(0.8.dp, LibGold),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+                    .clickable { isFullScreenMode = false }
+                    .testTag("pdf_reader_exit_fullscreen_btn")
             ) {
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null)
-                Text("পূর্ববর্তী পৃষ্ঠা")
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FullscreenExit,
+                        contentDescription = "ফুল স্ক্রিন বন্ধ করুন",
+                        tint = LibGold,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "$currentPage/$totalPages",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.testTag("pdf_reader_page_indicator")
+                    )
+                }
             }
 
-            Text(
-                text = "পৃষ্ঠা $currentPage / $totalPages",
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = 13.sp
-            )
-
-            Button(
-                onClick = { if (currentPage < totalPages) currentPage += 1 },
-                enabled = currentPage < totalPages,
-                colors = ButtonDefaults.buttonColors(containerColor = LibDeepGreen),
-                modifier = Modifier.testTag("pdf_reader_next_page_btn")
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("পরবর্তী পৃষ্ঠা")
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+                Surface(
+                    color = LibDarkGreen.copy(alpha = 0.82f),
+                    shape = CircleShape,
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clickable(enabled = currentPage > 1) { if (currentPage > 1) currentPage -= 1 }
+                        .testTag("pdf_reader_prev_page_btn")
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                            contentDescription = "আগের পৃষ্ঠা",
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+                Surface(
+                    color = LibDarkGreen.copy(alpha = 0.82f),
+                    shape = CircleShape,
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clickable(enabled = currentPage < totalPages) { if (currentPage < totalPages) currentPage += 1 }
+                        .testTag("pdf_reader_next_page_btn")
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = "পরের পৃষ্ঠা",
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
             }
         }
+    }
+}
+
+/**
+ * PDF পৃষ্ঠার চারপাশের অতিরিক্ত ফাঁকা সাদা মার্জিন স্বয়ংক্রিয়ভাবে ছেঁটে ফেলে (Auto-trim outer margins),
+ * যেন PDF-এর লেখাগুলো স্ক্রিনের পুরো জায়গা জুড়ে বড় ও পরিষ্কারভাবে দেখা যায়।
+ */
+private fun trimPdfOuterWhitespace(source: Bitmap, backgroundColor: Int): Bitmap {
+    return try {
+        val w = source.width
+        val h = source.height
+        if (w < 64 || h < 64) return source
+
+        val step = 4
+        var minX = w
+        var minY = h
+        var maxX = 0
+        var maxY = 0
+
+        for (y in 0 until h step step) {
+            for (x in 0 until w step step) {
+                if (source.getPixel(x, y) != backgroundColor) {
+                    if (x < minX) minX = x
+                    if (x > maxX) maxX = x
+                    if (y < minY) minY = y
+                    if (y > maxY) maxY = y
+                }
+            }
+        }
+
+        if (maxX <= minX || maxY <= minY) return source
+
+        val pad = 12
+        val cropLeft = (minX - pad).coerceAtLeast(0)
+        val cropTop = (minY - pad).coerceAtLeast(0)
+        val cropRight = (maxX + pad).coerceAtMost(w)
+        val cropBottom = (maxY + pad).coerceAtMost(h)
+        val cropW = cropRight - cropLeft
+        val cropH = cropBottom - cropTop
+
+        if (cropW >= w * 0.4f && cropH >= h * 0.4f && (cropW < w - 16 || cropH < h - 16)) {
+            Bitmap.createBitmap(source, cropLeft, cropTop, cropW, cropH)
+        } else {
+            source
+        }
+    } catch (_: Exception) {
+        source
     }
 }

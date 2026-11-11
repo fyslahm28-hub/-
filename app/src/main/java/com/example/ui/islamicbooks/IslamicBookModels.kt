@@ -249,6 +249,8 @@ data class IslamicBookUploadProgress(
     val isDuplicateDetected: Boolean = false,
     val duplicateSubmissionOrBookTitle: String? = null,
     val storageDownloadUrl: String = "",
+    val stagedLocalFilePath: String = "",
+    val detectedPageCount: Int = 1,
     val errorMessageBangla: String? = null
 )
 

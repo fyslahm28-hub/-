@@ -3,7 +3,12 @@ package com.example.ui.islamicbooks
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.ParcelFileDescriptor
 import android.util.Base64
 import android.util.Log
 import com.example.R
@@ -55,9 +60,12 @@ class IslamicBookManager(private val context: Context) {
         private const val KEY_SUBMISSIONS_JSON = "book_submissions_json"
         private const val KEY_DYNAMIC_CATALOG_JSON = "dynamic_catalog_books_json"
         private const val KEY_AUDIT_LOGS_JSON = "book_audit_logs_json"
+        private const val KEY_BOOK_ID_FILE_MAP_JSON = "book_id_to_pdf_file_map_json"
 
         const val MAX_PDF_UPLOAD_SIZE_BYTES: Long = 50L * 1024L * 1024L // 50 MB
         const val MAX_COVER_IMAGE_SIZE_BYTES: Long = 10L * 1024L * 1024L // 10 MB
+        const val THUMBNAIL_WIDTH_PX: Int = 600
+        const val THUMBNAIL_HEIGHT_PX: Int = 800 // 3:4 Portrait Ratio
 
         @Volatile
         private var instance: IslamicBookManager? = null
@@ -84,6 +92,8 @@ class IslamicBookManager(private val context: Context) {
 
     private val _uploadProgress = MutableStateFlow(IslamicBookUploadProgress())
     val uploadProgress: StateFlow<IslamicBookUploadProgress> = _uploadProgress.asStateFlow()
+    private val _selectedCoverImageUri = MutableStateFlow("")
+    val selectedCoverImageUri: StateFlow<String> = _selectedCoverImageUri.asStateFlow()
     private var activeUploadJob: Job? = null
     @Volatile
     private var isUploadPaused: Boolean = false
@@ -264,6 +274,23 @@ class IslamicBookManager(private val context: Context) {
         simulateSlowStepsForPauseTest: Boolean = false
     ) {
         val key = downloadKey(book.bookId, volumeNumber)
+        val existingFile = getBookPdfFile(book.bookId, volumeNumber)
+        // একই PDF বারবার ডাউনলোড করা যাবে না — একবার ডাউনলোড হয়ে গেলে সরাসরি অফলাইন ফাইল ব্যবহার হবে
+        if (isValidPdfFile(existingFile)) {
+            registerBookIdToPdfFileAssociation(book.bookId, volumeNumber, existingFile.absolutePath)
+            _downloadProgressMap.update { map ->
+                map + (key to IslamicBookDownloadProgress(
+                    bookId = book.bookId,
+                    volumeNumber = volumeNumber,
+                    state = IslamicBookDownloadState.DOWNLOADED,
+                    downloadedBytes = existingFile.length(),
+                    totalBytes = existingFile.length(),
+                    progressPercent = 100,
+                    localFilePath = existingFile.absolutePath
+                ))
+            }
+            return
+        }
         if (activeDownloadJobs[key]?.isActive == true) return
         pausedDownloadFlags[key] = false
 
@@ -273,10 +300,38 @@ class IslamicBookManager(private val context: Context) {
         activeDownloadJobs[key] = job
     }
 
+    fun retryDownload(
+        book: IslamicBookCatalogItem,
+        volumeNumber: Int = 1
+    ) {
+        val key = downloadKey(book.bookId, volumeNumber)
+        pausedDownloadFlags[key] = false
+        activeDownloadJobs[key]?.cancel()
+        activeDownloadJobs.remove(key)
+        startOrResumeDownload(book, volumeNumber)
+    }
+
     suspend fun downloadBookSynchronously(
         book: IslamicBookCatalogItem,
         volumeNumber: Int = 1
     ): File = withContext(Dispatchers.IO) {
+        val existingFile = getBookPdfFile(book.bookId, volumeNumber)
+        if (isValidPdfFile(existingFile)) {
+            registerBookIdToPdfFileAssociation(book.bookId, volumeNumber, existingFile.absolutePath)
+            val key = downloadKey(book.bookId, volumeNumber)
+            _downloadProgressMap.update { map ->
+                map + (key to IslamicBookDownloadProgress(
+                    bookId = book.bookId,
+                    volumeNumber = volumeNumber,
+                    state = IslamicBookDownloadState.DOWNLOADED,
+                    downloadedBytes = existingFile.length(),
+                    totalBytes = existingFile.length(),
+                    progressPercent = 100,
+                    localFilePath = existingFile.absolutePath
+                ))
+            }
+            return@withContext existingFile
+        }
         pausedDownloadFlags[downloadKey(book.bookId, volumeNumber)] = false
         downloadBookInternal(book, volumeNumber, simulateSlowStepsForPauseTest = false)
         getBookPdfFile(book.bookId, volumeNumber)
@@ -365,6 +420,7 @@ class IslamicBookManager(private val context: Context) {
             }
 
             if (isValidPdfFile(finalFile)) {
+                registerBookIdToPdfFileAssociation(book.bookId, volumeNumber, finalFile.absolutePath)
                 _downloadProgressMap.update { map ->
                     map + (key to IslamicBookDownloadProgress(
                         bookId = book.bookId,
@@ -401,8 +457,41 @@ class IslamicBookManager(private val context: Context) {
         }
     }
 
+    private fun registerBookIdToPdfFileAssociation(bookId: String, volumeNumber: Int, filePath: String) {
+        try {
+            val raw = prefs.getString(KEY_BOOK_ID_FILE_MAP_JSON, null)
+            val obj = if (!raw.isNullOrBlank()) JSONObject(raw) else JSONObject()
+            obj.put(downloadKey(bookId, volumeNumber), filePath)
+            obj.put(bookId, filePath)
+            prefs.edit().putString(KEY_BOOK_ID_FILE_MAP_JSON, obj.toString()).apply()
+        } catch (_: Exception) {
+        }
+    }
+
+    fun getAssociatedPdfFilePathForBook(bookId: String, volumeNumber: Int = 1): String? {
+        val directFile = getBookPdfFile(bookId, volumeNumber)
+        if (isValidPdfFile(directFile)) {
+            return directFile.absolutePath
+        }
+        return try {
+            val raw = prefs.getString(KEY_BOOK_ID_FILE_MAP_JSON, null) ?: return null
+            val obj = JSONObject(raw)
+            val mapped = obj.optString(downloadKey(bookId, volumeNumber)).ifBlank { obj.optString(bookId) }
+            if (mapped.isNotBlank() && isValidPdfFile(File(mapped))) mapped else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private fun resolveUploadedBookPdfBytes(book: IslamicBookCatalogItem, volumeNumber: Int): ByteArray {
-        // 1. Check staged contributor/admin uploads matching SHA-256 prefix
+        // 1. Check dedicated server_storage folder by full SHA-256
+        if (book.pdfSha256.isNotBlank()) {
+            val serverFile = File(booksPdfDir, "server_storage/${book.pdfSha256}.pdf")
+            if (isValidPdfFile(serverFile)) {
+                return serverFile.readBytes()
+            }
+        }
+        // 2. Check staged contributor/admin uploads matching SHA-256 prefix
         val hashPrefix = book.pdfSha256.take(12)
         if (hashPrefix.isNotBlank()) {
             val uploadsRoot = File(booksPdfDir, "contributor_uploads")
@@ -415,51 +504,92 @@ class IslamicBookManager(private val context: Context) {
                 }
             }
         }
-        // 2. Check if pdfUrl points to a local file path
+        // 3. Check if pdfUrl points to a local file path
         if (book.pdfUrl.startsWith("file://")) {
             val localFile = File(Uri.parse(book.pdfUrl).path ?: "")
             if (isValidPdfFile(localFile)) {
                 return localFile.readBytes()
             }
         }
-        // 3. Fallback to generated PDF bytes when running offline or in test environments
+        // 4. Try remote HTTP/HTTPS download if online
+        if (book.pdfUrl.startsWith("http://") || book.pdfUrl.startsWith("https://")) {
+            try {
+                val conn = (URL(book.pdfUrl).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 5000
+                    readTimeout = 8000
+                    requestMethod = "GET"
+                }
+                if (conn.responseCode in 200..299) {
+                    val remoteBytes = conn.inputStream.use { it.readBytes() }
+                    if (remoteBytes.size >= 5 && String(remoteBytes.copyOfRange(0, 5), Charsets.US_ASCII) == "%PDF-") {
+                        return remoteBytes
+                    }
+                }
+            } catch (_: Exception) {
+            }
+        }
+        // 5. Fallback for offline test verification
         return IslamicBookVerifiedCatalog.generateAuthenticBookPdfBytes(book, volumeNumber)
     }
 
     /**
-     * কভার ছবি নির্বাচন করার পর সেটিকে ছোট ও পরিষ্কার থাম্বনেইলে রূপান্তর করে লোকাল ফাইল এবং Base64 URI হিসেবে সংরক্ষণ করে,
-     * যেন অ্যাপ রিস্টার্ট বা অন্য ডিভাইসেও Admin কর্তৃক আপলোড করা আসল কভার ছবিটিই সবসময় দেখা যায়।
+     * যেকোনো নির্বাচিত কভার ছবিকে নির্দিষ্ট 600 × 800 pixels (3:4 Portrait Ratio)-এ রূপান্তর করে,
+     * যেখানে ছবিটি কোনোভাবেই টেনে বিকৃত (stretched/distorted) হয় না এবং কোনো অংশ কেটে (cropped) ফেলা হয় না।
      */
+    fun formatBitmapTo3x4Portrait600x800(source: Bitmap): Bitmap {
+        val targetWidth = THUMBNAIL_WIDTH_PX
+        val targetHeight = THUMBNAIL_HEIGHT_PX
+        val output = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(output)
+        // হালকা ও পরিচ্ছন্ন ব্যাকগ্রাউন্ড যেন ছবির কোনো অংশ না কেটে পুরো ছবি 3:4 বক্সে ফিট হয়
+        canvas.drawColor(android.graphics.Color.parseColor("#F7FAF8"))
+
+        val srcW = source.width.coerceAtLeast(1).toFloat()
+        val srcH = source.height.coerceAtLeast(1).toFloat()
+        val scale = minOf(targetWidth.toFloat() / srcW, targetHeight.toFloat() / srcH)
+        val drawnW = srcW * scale
+        val drawnH = srcH * scale
+        val left = (targetWidth - drawnW) / 2f
+        val top = (targetHeight - drawnH) / 2f
+
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        canvas.drawBitmap(source, null, RectF(left, top, left + drawnW, top + drawnH), paint)
+        return output
+    }
+
+    fun prepareCoverImageFromBitmap(source: Bitmap): String {
+        val portrait600x800 = formatBitmapTo3x4Portrait600x800(source)
+        val baos = ByteArrayOutputStream()
+        portrait600x800.compress(Bitmap.CompressFormat.JPEG, 82, baos)
+        val compressedBytes = baos.toByteArray()
+
+        val coversDir = File(booksPdfDir, "book_covers").apply { if (!exists()) mkdirs() }
+        val coverFile = File(coversDir, "cover_${System.currentTimeMillis()}_600x800.jpg")
+        FileOutputStream(coverFile).use { it.write(compressedBytes) }
+
+        val resultUri = if (compressedBytes.size <= 220_000) {
+            "data:image/jpeg;base64," + Base64.encodeToString(compressedBytes, Base64.NO_WRAP)
+        } else {
+            Uri.fromFile(coverFile).toString()
+        }
+        _selectedCoverImageUri.value = resultUri
+        return resultUri
+    }
+
+    fun clearSelectedCoverImage() {
+        _selectedCoverImageUri.value = ""
+    }
+
     fun prepareCoverImageFromUri(uri: Uri): String {
         return try {
-            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            val bytes = when (uri.scheme?.lowercase()) {
+                "file" -> File(uri.path ?: "").takeIf { it.exists() }?.readBytes()
+                else -> context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            }
             if (bytes == null || bytes.isEmpty()) return uri.toString()
 
             val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return uri.toString()
-            val maxW = 200
-            val maxH = 280
-            val ratio = minOf(maxW.toFloat() / decoded.width.coerceAtLeast(1), maxH.toFloat() / decoded.height.coerceAtLeast(1), 1f)
-            val targetW = (decoded.width * ratio).toInt().coerceAtLeast(1)
-            val targetH = (decoded.height * ratio).toInt().coerceAtLeast(1)
-            val scaled = if (targetW != decoded.width || targetH != decoded.height) {
-                Bitmap.createScaledBitmap(decoded, targetW, targetH, true)
-            } else {
-                decoded
-            }
-
-            val baos = ByteArrayOutputStream()
-            scaled.compress(Bitmap.CompressFormat.JPEG, 80, baos)
-            val compressedBytes = baos.toByteArray()
-
-            val coversDir = File(booksPdfDir, "book_covers").apply { if (!exists()) mkdirs() }
-            val coverFile = File(coversDir, "cover_${System.currentTimeMillis()}.jpg")
-            FileOutputStream(coverFile).use { it.write(compressedBytes) }
-
-            if (compressedBytes.size <= 150_000) {
-                "data:image/jpeg;base64," + Base64.encodeToString(compressedBytes, Base64.NO_WRAP)
-            } else {
-                Uri.fromFile(coverFile).toString()
-            }
+            prepareCoverImageFromBitmap(decoded)
         } catch (_: Exception) {
             uri.toString()
         }
@@ -748,13 +878,20 @@ class IslamicBookManager(private val context: Context) {
             return Result.failure(IllegalStateException(msg))
         }
 
-        // Save staged PDF locally in contributor staging folder and mark COMPLETED
+        // Save staged PDF locally in contributor staging folder AND server_storage folder
         val stagingDir = File(booksPdfDir, "contributor_uploads/$contributorId").apply {
+            if (!exists()) mkdirs()
+        }
+        val serverStorageDir = File(booksPdfDir, "server_storage").apply {
             if (!exists()) mkdirs()
         }
         val safeFileName = cleanName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
         val stagedFile = File(stagingDir, "${sha256.take(12)}_$safeFileName")
         FileOutputStream(stagedFile).use { it.write(pdfBytes) }
+        val serverFile = File(serverStorageDir, "$sha256.pdf")
+        FileOutputStream(serverFile).use { it.write(pdfBytes) }
+
+        val detectedPages = detectPdfPageCount(stagedFile)
 
         val storageUrl = "https://firebasestorage.googleapis.com/v0/b/qawmi-islamic-books/o/islamic_book_submissions%2F${contributorId}%2F${safeFileName}?alt=media"
         val completedProgress = IslamicBookUploadProgress(
@@ -765,10 +902,35 @@ class IslamicBookManager(private val context: Context) {
             progressPercent = 100,
             sha256Hash = sha256,
             isDuplicateDetected = false,
-            storageDownloadUrl = storageUrl
+            storageDownloadUrl = storageUrl,
+            stagedLocalFilePath = stagedFile.absolutePath,
+            detectedPageCount = detectedPages
         )
         _uploadProgress.value = completedProgress
         return Result.success(completedProgress)
+    }
+
+    fun detectPdfPageCount(file: File): Int {
+        if (!isValidPdfFile(file)) return 1
+        val nativeCount = try {
+            ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)?.use { pfd ->
+                PdfRenderer(pfd).use { renderer ->
+                    renderer.pageCount
+                }
+            } ?: 0
+        } catch (_: Exception) {
+            0
+        }
+        if (nativeCount > 0) return nativeCount
+
+        return try {
+            val content = file.readBytes().toString(Charsets.ISO_8859_1)
+            val regex = Regex("/Type\\s*/Page\\b")
+            val matches = regex.findAll(content).count()
+            matches.coerceAtLeast(1)
+        } catch (_: Exception) {
+            1
+        }
     }
 
     fun pauseUpload() {
@@ -1761,6 +1923,7 @@ class IslamicBookManager(private val context: Context) {
         _dynamicCatalogBooks.value = emptyList()
         _auditLogs.value = emptyList()
         _uploadProgress.value = IslamicBookUploadProgress()
+        _selectedCoverImageUri.value = ""
         if (!booksPdfDir.exists()) booksPdfDir.mkdirs()
         booksPdfDir.listFiles()?.forEach { it.deleteRecursively() }
         refreshDownloadStatesFromDisk()
