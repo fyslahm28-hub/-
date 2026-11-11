@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Policy
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -441,6 +442,48 @@ fun MainAppScaffold(
                     ) {
                         scope.launch { drawerState.close() }
                         viewModel.navigateTo(MainDestination.APP_SETTINGS)
+                    }
+                    DrawerMenuItem(
+                        label = "নতুন আপডেট চেক করুন (v${installedVersion.versionName})",
+                        icon = Icons.Default.SystemUpdate,
+                        selected = false,
+                        testTag = "drawer_item_check_update"
+                    ) {
+                        scope.launch {
+                            drawerState.close()
+                            AppUpdateManagerHelper.clearDismissedUpdatePrompt(context)
+                            viewModel.resetDismissedUpdatePrompt()
+                            resumeUpdateCheckTick++
+                            android.widget.Toast.makeText(
+                                context,
+                                "সার্ভার ও GitHub থেকে সর্বশেষ আপডেট যাচাই করা হচ্ছে...",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                            val remote = AppUpdateManagerHelper.fetchLatestReleaseSafely(context)
+                            if (remote != null) {
+                                fetchedFallbackRelease = AppUpdateManagerHelper.pickMoreRecentRelease(fetchedFallbackRelease, remote)
+                            }
+                            val resolved = AppUpdateManagerHelper.pickMoreRecentRelease(latestAppRelease, fetchedFallbackRelease)
+                            val updateReady = AppUpdateManagerHelper.isUpdateAvailable(
+                                installedVersionCode = installedVersion.versionCode,
+                                installedVersionName = installedVersion.versionName,
+                                remoteRelease = resolved,
+                                dismissedVersionCode = null
+                            )
+                            if (!updateReady) {
+                                val msg = if (resolved != null) {
+                                    "আলহামদুলিল্লাহ! আপনি ইতিমধ্যে সর্বশেষ সংস্করণ (${installedVersion.versionName}, Build #${installedVersion.versionCode}) ব্যবহার করছেন।"
+                                } else {
+                                    AppUpdateManagerHelper.lastUpdateCheckErrorMessage
+                                        ?: "আপডেট যাচাই করা সম্ভব হয়নি। ইন্টারনেট সংযোগ পরীক্ষা করে পুনরায় চেষ্টা করুন।"
+                                }
+                                android.widget.Toast.makeText(
+                                    context,
+                                    msg,
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
                     }
                     DrawerMenuItem(
                         label = "অ্যাপ সম্পর্কে",

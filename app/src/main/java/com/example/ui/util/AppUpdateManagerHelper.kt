@@ -67,8 +67,10 @@ object AppUpdateManagerHelper {
 
     const val GITHUB_OWNER = "fyslahm28-hub"
     const val GITHUB_REPO = "Faitu-kaj-bal"
-    const val GITHUB_LATEST_RELEASE_API_URL = "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/latest"
-    const val GITHUB_LATEST_RELEASE_WEB_URL = "https://github.com/$GITHUB_OWNER/$GITHUB_REPO/releases/latest"
+    const val ACTIVE_GITHUB_REPO = "-"
+    val CANDIDATE_GITHUB_REPOS = listOf("-", "Faitu-kaj-bal")
+    const val GITHUB_LATEST_RELEASE_API_URL = "https://api.github.com/repos/$GITHUB_OWNER/$ACTIVE_GITHUB_REPO/releases/latest"
+    const val GITHUB_LATEST_RELEASE_WEB_URL = "https://github.com/$GITHUB_OWNER/$ACTIVE_GITHUB_REPO/releases/latest"
     const val DEFAULT_APK_ASSET_NAME = "Qawmi-Kormosangsthan-Bangladesh.apk"
     const val DEFAULT_FIREBASE_PROJECT_ID = "gen-lang-client-0048059944"
     const val DEFAULT_FIRESTORE_DATABASE_ID = "ai-studio-android-811ea734-e9e8-4ff4-8e56-ca97ec8a429c"
@@ -339,7 +341,7 @@ object AppUpdateManagerHelper {
     fun deriveVersionCodeFromSemanticName(versionName: String, explicitBodyText: String = ""): Int {
         if (explicitBodyText.isNotBlank()) {
             val banglaOrEngCodeRegex = Regex(
-                """(?:ভার্সন কোড|Version\s*Code|versionCode)[\s*_:=\-]*(\d+)""",
+                """(?:ভার্সন কোড|Version\s*Code|versionCode)[\s*_:=\-`]*(\d+)""",
                 RegexOption.IGNORE_CASE
             )
             banglaOrEngCodeRegex.find(explicitBodyText)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { code ->
@@ -822,38 +824,45 @@ object AppUpdateManagerHelper {
     }
 
     /**
-     * Fetches the latest published release from GitHub Releases API (`fyslahm28-hub/Faitu-kaj-bal`),
-     * with automatic fallback to GitHub's `/releases/latest` HTTP redirect header if the unauthenticated
-     * GitHub REST API rate limit (HTTP 403/429) is reached.
+     * Fetches the latest published release from GitHub Releases API across all candidate repositories
+     * under `fyslahm28-hub` (`-` and `Faitu-kaj-bal`), with automatic fallback to GitHub's `/releases/latest`
+     * HTTP redirect header if the unauthenticated GitHub REST API rate limit (HTTP 403/429) is reached.
      */
     fun fetchFromGitHubReleases(): AppReleaseInfo? {
-        var conn: HttpURLConnection? = null
-        try {
-            conn = (URL(GITHUB_LATEST_RELEASE_API_URL).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 5_000
-                readTimeout = 5_000
-                setRequestProperty("Accept", "application/vnd.github+json")
-                setRequestProperty("User-Agent", "QawmiKormosangsthan-AutoUpdater/1.0 (Android)")
+        var best: AppReleaseInfo? = null
+        for (repo in CANDIDATE_GITHUB_REPOS) {
+            val apiUrl = "https://api.github.com/repos/$GITHUB_OWNER/$repo/releases/latest"
+            var conn: HttpURLConnection? = null
+            val fromApi = try {
+                conn = (URL(apiUrl).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 5_000
+                    readTimeout = 5_000
+                    setRequestProperty("Accept", "application/vnd.github+json")
+                    setRequestProperty("User-Agent", "QawmiKormosangsthan-AutoUpdater/1.0 (Android)")
+                }
+                val code = conn.responseCode
+                if (code in 200..299) {
+                    val json = conn.inputStream.bufferedReader().use { it.readText() }
+                    parseGitHubReleaseJson(json, repo)
+                } else {
+                    null
+                }
+            } catch (_: Throwable) {
+                null
+            } finally {
+                runCatching { conn?.disconnect() }
             }
-            val code = conn.responseCode
-            if (code in 200..299) {
-                val json = conn.inputStream.bufferedReader().use { it.readText() }
-                val parsed = parseGitHubReleaseJson(json)
-                if (parsed != null) return parsed
-            }
-        } catch (_: Throwable) {
-            // Fall through to web redirect fallback
-        } finally {
-            runCatching { conn?.disconnect() }
+            val candidate = fromApi ?: fetchFromGitHubWebRedirect(repo)
+            best = pickMoreRecentRelease(best, candidate)
         }
-        return fetchFromGitHubWebRedirect()
+        return best
     }
 
     /**
      * Parses a GitHub Releases API `/releases/latest` JSON payload into [AppReleaseInfo].
      */
-    fun parseGitHubReleaseJson(jsonString: String): AppReleaseInfo? {
+    fun parseGitHubReleaseJson(jsonString: String, defaultRepo: String = GITHUB_REPO): AppReleaseInfo? {
         if (jsonString.isBlank()) return null
         return try {
             val isDraft = Regex(""""draft"\s*:\s*true""").containsMatchIn(jsonString)
@@ -874,38 +883,40 @@ object AppUpdateManagerHelper {
             val combinedText = "$releaseTitle\n$rawBody"
             val versionCode = deriveVersionCodeFromSemanticName(versionName, combinedText)
 
-            var apkUrl = ""
-            var apkSize = 0L
-
             val downloadUrlRegex = Regex(""""browser_download_url"\s*:\s*"((?:\\.|[^"\\])*\.apk)"""", RegexOption.IGNORE_CASE)
             val allDownloadUrls = downloadUrlRegex.findAll(jsonString).mapNotNull { m ->
                 m.groupValues.getOrNull(1)?.let { unescapeJsonValue(it).trim() }?.takeIf { isTrustedHttpsApkUrl(it) }
             }.toList()
 
-            apkUrl = allDownloadUrls.firstOrNull { it.endsWith("/$DEFAULT_APK_ASSET_NAME", ignoreCase = true) }
+            val apkUrl = allDownloadUrls.firstOrNull { it.endsWith("/$DEFAULT_APK_ASSET_NAME", ignoreCase = true) }
                 ?: allDownloadUrls.firstOrNull()
-                ?: "https://github.com/$GITHUB_OWNER/$GITHUB_REPO/releases/download/$tagName/$DEFAULT_APK_ASSET_NAME"
+                ?: "https://github.com/$GITHUB_OWNER/$defaultRepo/releases/download/$tagName/$DEFAULT_APK_ASSET_NAME"
 
             if (!isTrustedHttpsApkUrl(apkUrl)) return null
 
             val assetSizeRegex = Regex(""""size"\s*:\s*(\d+)""")
-            apkSize = assetSizeRegex.findAll(jsonString)
+            val apkSize = assetSizeRegex.findAll(jsonString)
                 .mapNotNull { it.groupValues.getOrNull(1)?.toLongOrNull() }
                 .maxOrNull()
                 ?.coerceAtLeast(0L)
                 ?: 0L
 
-            val sha256Regex = Regex("""([0-9a-fA-F]{64})""")
-            val extractedSha256 = sha256Regex.find(rawBody)?.groupValues?.getOrNull(1)?.lowercase().orEmpty()
+            val assetDigestRegex = Regex(""""digest"\s*:\s*"sha256:([0-9a-fA-F]{64})"""", RegexOption.IGNORE_CASE)
+            val digestSha256 = assetDigestRegex.find(jsonString)?.groupValues?.getOrNull(1)?.lowercase().orEmpty()
+            val bodySha256 = Regex("""\b([0-9a-fA-F]{64})\b""").find(rawBody)?.groupValues?.getOrNull(1)?.lowercase().orEmpty()
+            val extractedSha256 = digestSha256.ifBlank { bodySha256 }
 
             val cleanedNotes = rawBody
                 .lineSequence()
                 .filterNot { line ->
                     val trimmed = line.trim()
                     trimmed.startsWith("## ") ||
+                        trimmed.startsWith("### ") ||
                         trimmed.startsWith("- **ভার্সন:") ||
-                        trimmed.startsWith("- **ভার্সন কোড:") ||
-                        trimmed.startsWith("- **কমিট:")
+                        trimmed.startsWith("- **ভার্সন নাম") ||
+                        trimmed.startsWith("- **ভার্সন কোড") ||
+                        trimmed.startsWith("- **কমিট") ||
+                        trimmed.startsWith("- **সরাসরি ডাউনলোড")
                 }
                 .joinToString("\n")
                 .trim()
@@ -935,12 +946,13 @@ object AppUpdateManagerHelper {
 
     /**
      * Rate-limit-free fallback that inspects the 302 Redirect `Location` header from
-     * `https://github.com/fyslahm28-hub/Faitu-kaj-bal/releases/latest` -> `.../releases/tag/v1.0.40`.
+     * `https://github.com/fyslahm28-hub/<repo>/releases/latest` -> `.../releases/tag/v1.2.18`.
      */
-    fun fetchFromGitHubWebRedirect(): AppReleaseInfo? {
+    fun fetchFromGitHubWebRedirect(repo: String = ACTIVE_GITHUB_REPO): AppReleaseInfo? {
+        val webUrl = "https://github.com/$GITHUB_OWNER/$repo/releases/latest"
         var conn: HttpURLConnection? = null
         return try {
-            conn = (URL(GITHUB_LATEST_RELEASE_WEB_URL).openConnection() as HttpURLConnection).apply {
+            conn = (URL(webUrl).openConnection() as HttpURLConnection).apply {
                 instanceFollowRedirects = false
                 requestMethod = "GET"
                 connectTimeout = 5_000
@@ -960,7 +972,7 @@ object AppUpdateManagerHelper {
 
             val versionName = tagName.removePrefix("v").removePrefix("V").trim()
             val versionCode = deriveVersionCodeFromSemanticName(versionName)
-            val apkUrl = "https://github.com/$GITHUB_OWNER/$GITHUB_REPO/releases/download/$tagName/$DEFAULT_APK_ASSET_NAME"
+            val apkUrl = "https://github.com/$GITHUB_OWNER/$repo/releases/download/$tagName/$DEFAULT_APK_ASSET_NAME"
             if (!isTrustedHttpsApkUrl(apkUrl)) return null
 
             AppReleaseInfo(

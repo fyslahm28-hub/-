@@ -362,6 +362,35 @@ class ExampleUnitTest {
         assertTrue(helper.isUpdateAvailable(136, "1.0.36", mergedSameVersion))
         assertFalse(helper.isUpdateAvailable(140, "1.0.40", mergedSameVersion))
         assertFalse(helper.isUpdateAvailable(141, "1.0.41", mergedSameVersion))
+
+        // 6. Parse active repository ('fyslahm28-hub/-') release JSON with backticks and asset digest
+        val activeRepoJson = """
+            {
+              "tag_name": "v1.2.18",
+              "name": "কওমি কর্মসংস্থান বাংলাদেশ 1.2.18",
+              "draft": false,
+              "prerelease": false,
+              "body": "### কওমি কর্মসংস্থান বাংলাদেশ — নতুন সংস্করণ 1.2.18 (Build #218)\n- **ভার্সন কোড**: `218`\n- **ভার্সন নাম**: `1.2.18`\n- **কমিট**: `bc0734d320a8781bb8fb67f8b1bfe07b6705a1d4`",
+              "assets": [
+                {
+                  "name": "Qawmi-Kormosangsthan-Bangladesh.apk",
+                  "size": 45059825,
+                  "digest": "sha256:a5fa55909b44aa8182854716931fb778bdecb368adc4feda86910c7319d62b88",
+                  "browser_download_url": "https://github.com/fyslahm28-hub/-/releases/download/v1.2.18/Qawmi-Kormosangsthan-Bangladesh.apk"
+                }
+              ]
+            }
+        """.trimIndent()
+        val parsedActiveRepo = helper.parseGitHubReleaseJson(activeRepoJson, "-")
+        assertNotNull("Expected active repo GitHub Release JSON to parse", parsedActiveRepo)
+        assertEquals(218, parsedActiveRepo!!.versionCode)
+        assertEquals("1.2.18", parsedActiveRepo.versionName)
+        assertEquals("a5fa55909b44aa8182854716931fb778bdecb368adc4feda86910c7319d62b88", parsedActiveRepo.apkSha256)
+        assertEquals(
+            "https://github.com/fyslahm28-hub/-/releases/download/v1.2.18/Qawmi-Kormosangsthan-Bangladesh.apk",
+            parsedActiveRepo.apkDownloadUrl
+        )
+        assertTrue(helper.isUpdateAvailable(217, "1.2.17", parsedActiveRepo))
     }
 
     @Test
