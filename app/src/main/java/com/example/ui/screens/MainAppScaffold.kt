@@ -530,6 +530,7 @@ fun MainAppScaffold(
             MainDestination.ADMIN_PANEL -> "অ্যাডমিন প্যানেল"
             MainDestination.PRAYER_SCHEDULE -> "নামাজের সময়সূচী"
             MainDestination.TILAWAT -> "তিলাওয়াত"
+            MainDestination.ISLAMIC_BOOK_LIBRARY -> "ইসলামিক বই লাইব্রেরি"
             MainDestination.AJKER_SMORON -> "আজকের স্মরণ"
             MainDestination.APP_SETTINGS -> "অ্যাপ সেটিংস"
             MainDestination.ABOUT_APP -> "অ্যাপ সম্পর্কে"
@@ -1357,6 +1358,19 @@ fun MainAppScaffold(
                         MainDestination.TILAWAT -> {
                             FullAudioTilawatScreen(
                                 onBackToHome = { viewModel.navigateBack() }
+                            )
+                        }
+
+                        MainDestination.ISLAMIC_BOOK_LIBRARY -> {
+                            val currentUserProf = (userProfileState as? UiState.Success)?.data
+                            com.example.ui.islamicbooks.IslamicBookLibraryScreen(
+                                currentUserId = viewModel.currentUserId,
+                                currentUserName = currentUserProf?.fullName?.takeIf { it.isNotBlank() }
+                                    ?: viewModel.currentUserDisplayName.ifBlank { "সম্মানিত পাঠক" },
+                                currentUserPhone = currentUserProf?.contactInfo.orEmpty(),
+                                currentUserEmail = viewModel.currentUserEmail,
+                                isAdmin = isAdminState,
+                                onNavigateBackHome = { viewModel.navigateBack() }
                             )
                         }
 

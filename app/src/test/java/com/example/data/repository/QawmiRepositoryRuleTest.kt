@@ -2602,9 +2602,126 @@ class QawmiRepositoryRuleTest : FirestoreEmulatorTestBase() {
     private suspend fun awaitMainLooperCondition(timeoutMs: Long, label: String, condition: () -> Boolean) {
         awaitMainLooperCondition(timeoutMs, { label }, condition)
     }
+
+    @Test
+    fun islamicBookSelfPublishing_enforcesContributorIsolation_mandatoryCopyrightCheck_andAdminOnlyCatalogPublishing() = runBlocking {
+        val aliceUid = signInTestUser("author_alice_${UUID.randomUUID()}@test.com")
+        val nowTs = com.google.firebase.Timestamp.now()
+        val sha256 = "b".repeat(64)
+
+        // 1. Alice registers her BookContributorProfile
+        firestore.collection("book_contributors").document(aliceUid).set(
+            mapOf(
+                "userId" to aliceUid,
+                "fullName" to "মাওলানা আব্দুল্লাহ",
+                "mobileNumber" to "01711223344",
+                "email" to "alice@example.com",
+                "contributorRole" to "AUTHOR",
+                "organizationOrPublisherName" to "মাকতাবাতুল ফুরকান",
+                "shortBio" to "ফিকহ ও হাদিস গবেষক",
+                "contactInfo" to "01711223344",
+                "isVerifiedContributor" to false,
+                "createdAt" to nowTs,
+                "updatedAt" to nowTs
+            )
+        ).awaitWithTimeout()
+
+        // 2. Submission without isTruthConfirmed == true is rejected by Firestore rules
+        val invalidSubId = "SUB_2026_INVALID_${UUID.randomUUID().toString().take(6)}"
+        val validSubmissionPayload = mapOf(
+            "submissionId" to invalidSubId,
+            "contributorId" to aliceUid,
+            "contributorName" to "মাওলানা আব্দুল্লাহ",
+            "contributorRole" to "AUTHOR",
+            "contributorPhone" to "01711223344",
+            "contributorEmail" to "alice@example.com",
+            "bookTitleBangla" to "আদর্শ উস্তায ও তালিবুল ইলম",
+            "bookTitleArabicOrOriginal" to "آداب المعلم والمتعلم",
+            "authorName" to "মাওলানা আব্দুল্লাহ",
+            "translatorOrEditorName" to "",
+            "publisherName" to "মাকতাবাতুল ফুরকান",
+            "category" to "TAZKIYAH_AKHLAQ",
+            "language" to "বাংলা",
+            "editionText" to "১ম সংস্করণ",
+            "publicationYear" to "২০২৫",
+            "isPublicationYearVerified" to true,
+            "pageCount" to 160,
+            "isbn" to "",
+            "shortIntroduction" to "কওমি মাদরাসার শিক্ষক ও শিক্ষার্থীদের আদব ও আখলাক বিষয়ক মৌলিক গ্রন্থ।",
+            "tableOfContentsText" to "১ম অধ্যায়: ইলমের ফযীলত\n২য় অধ্যায়: উস্তাযের হক",
+            "coverImageUrl" to "",
+            "pdfStorageUrl" to "https://firebasestorage.googleapis.com/v0/b/demo/o/book.pdf?alt=media",
+            "pdfFileName" to "adarsha_ustaz.pdf",
+            "pdfFileSizeBytes" to 2_500_000L,
+            "pdfSha256" to sha256,
+            "copyrightOwnerName" to "মাওলানা আব্দুল্লাহ",
+            "copyrightPermissionType" to "SELF_COPYRIGHT",
+            "permissionProofUrl" to "",
+            "isTruthConfirmed" to false,
+            "status" to "SUBMITTED",
+            "adminComment" to "",
+            "contributorReplyNote" to "",
+            "reviewedByAdminId" to "",
+            "publishedBookId" to "",
+            "createdAt" to nowTs,
+            "updatedAt" to nowTs
+        )
+
+        try {
+            firestore.collection("islamic_book_submissions").document(invalidSubId)
+                .set(validSubmissionPayload)
+                .awaitWithTimeout()
+            fail("Submission with isTruthConfirmed == false must be rejected by security rules")
+        } catch (e: Exception) {
+            val fsEx = findFirestoreException(e)
+            assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED, fsEx?.code)
+        }
+
+        // 3. Valid submission with isTruthConfirmed == true and status == SUBMITTED succeeds
+        val validSubId = "SUB_2026_VALID_${UUID.randomUUID().toString().take(6)}"
+        firestore.collection("islamic_book_submissions").document(validSubId)
+            .set(validSubmissionPayload + ("submissionId" to validSubId) + ("isTruthConfirmed" to true))
+            .awaitWithTimeout()
+
+        // 4. Another contributor (Bob) CANNOT read Alice's unpublished submission or publish directly to /islamic_books_catalog
+        val bobUid = signInTestUser("author_bob_${UUID.randomUUID()}@test.com")
+        assertTrue(bobUid != aliceUid)
+        try {
+            firestore.collection("islamic_book_submissions").document(validSubId)
+                .get(com.google.firebase.firestore.Source.SERVER)
+                .awaitWithTimeout()
+            fail("Bob must not be allowed to read Alice's submission")
+        } catch (e: Exception) {
+            val fsEx = findFirestoreException(e)
+            assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED, fsEx?.code)
+        }
+
+        try {
+            firestore.collection("islamic_books_catalog").document("forged_book_1").set(
+                mapOf(
+                    "bookId" to "forged_book_1",
+                    "titleBangla" to "অননুমোদিত বই",
+                    "authorName" to "বব",
+                    "publisherName" to "প্রকাশনী",
+                    "category" to "FIQH_MASAIL",
+                    "language" to "বাংলা",
+                    "pageCount" to 100,
+                    "shortIntroduction" to "অননুমোদিত বই প্রকাশের চেষ্টা।",
+                    "pdfUrl" to "https://example.com/book.pdf",
+                    "pdfFileSizeBytes" to 1000L,
+                    "copyrightOwnerName" to "বব",
+                    "copyrightPermissionType" to "SELF_COPYRIGHT",
+                    "approvalStatus" to "PUBLISHED",
+                    "isPublicationYearVerified" to false,
+                    "createdAt" to nowTs,
+                    "updatedAt" to nowTs
+                )
+            ).awaitWithTimeout()
+            fail("Non-admin must not be able to write to islamic_books_catalog")
+        } catch (e: Exception) {
+            val fsEx = findFirestoreException(e)
+            assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED, fsEx?.code)
+        }
+    }
 }
-
-
-
-
 

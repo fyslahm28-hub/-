@@ -983,4 +983,256 @@ test("KKS Intelligence Engine: engagement_receipts enforce deterministic ID, dwe
   );
 });
 
+test("Islamic Book Library & Self-Publishing: Contributor account isolation, mandatory copyright verification, cross-contributor protection, Admin review workflow, and Public Catalog approval gate", async () => {
+  const unauthDb = testEnv.unauthenticatedContext().firestore();
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID, {
+    email: "author_alice@gmail.com",
+  }).firestore();
+  const bobDb = testEnv.authenticatedContext(BOB_UID, {
+    email: "author_bob@gmail.com",
+  }).firestore();
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID_1, {
+    email: "foysalahamad102@gmail.com",
+    email_verified: true,
+    role: "SUPER_ADMIN",
+  }).firestore();
+
+  const ts = nowDate();
+
+  // 1. Alice registers her Contributor Profile (/book_contributors/alice_uid_123)
+  await assertSucceeds(
+    aliceDb.collection("book_contributors").doc(ALICE_UID).set({
+      userId: ALICE_UID,
+      fullName: "মাওলানা আব্দুল্লাহ আল-মামুন",
+      mobileNumber: "01711223344",
+      email: "author_alice@gmail.com",
+      roleType: "AUTHOR",
+      organizationName: "মাকতাবাতুল ফুরকান",
+      shortBio: "ইসলামিক ফিকহ ও আকিদা বিষয়ক লেখক ও গবেষক।",
+      contactDetails: "ঢাকা, বাংলাদেশ",
+      isVerifiedContributor: false,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+
+  // Bob CANNOT read or overwrite Alice's Contributor Profile
+  await assertFails(bobDb.collection("book_contributors").doc(ALICE_UID).get());
+  await assertFails(
+    bobDb.collection("book_contributors").doc(ALICE_UID).update({
+      shortBio: "অননুমোদিত পরিবর্তন",
+      updatedAt: nowDate(),
+    })
+  );
+
+  // Admin CAN read and verify Alice's Contributor Profile
+  await assertSucceeds(adminDb.collection("book_contributors").doc(ALICE_UID).get());
+  await assertSucceeds(
+    adminDb.collection("book_contributors").doc(ALICE_UID).update({
+      isVerifiedContributor: true,
+      updatedAt: nowDate(),
+    })
+  );
+
+  const validSha256 = "a3f5c8d9e0b1a2f4c6d8e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1";
+  const baseSubmission = {
+    submissionId: "SUB_2026_1001",
+    contributorId: ALICE_UID,
+    contributorName: "মাওলানা আব্দুল্লাহ আল-মামুন",
+    contributorRole: "AUTHOR",
+    titleBangla: "আহকামুল কুরআন ও সমকালীন মাসায়েল",
+    authorBangla: "মাওলানা আব্দুল্লাহ আল-মামুন",
+    translatorBangla: "",
+    compilerBangla: "",
+    publisherBangla: "মাকতাবাতুল ফুরকান",
+    categoryId: "FIQH_MASAIL",
+    languageBangla: "বাংলা ও আরবি",
+    publicationYear: "২০২৫",
+    editionBangla: "১ম সংস্করণ",
+    isbn: "978-984-8920-11-4",
+    shortDescriptionBangla: "সমকালীন জীবনঘনিষ্ঠ ফিকহি মাসায়েলের দালিলিক সমাধান।",
+    coverImageUrl: "https://firebasestorage.googleapis.com/v0/b/demo/o/cover_1001.jpg?alt=media",
+    pdfDownloadUrl: "https://firebasestorage.googleapis.com/v0/b/demo/o/book_1001.pdf?alt=media",
+    pdfStoragePath: `islamic_book_submissions/${ALICE_UID}/SUB_2026_1001/book.pdf`,
+    pdfSha256: validSha256,
+    totalVolumes: 1,
+    totalPages: 320,
+    fileSizeBytes: 8450000,
+    copyrightOwnerName: "মাওলানা আব্দুল্লাহ আল-মামুন",
+    permissionType: "SELF_COPYRIGHT",
+    permissionProofUrl: "https://firebasestorage.googleapis.com/v0/b/demo/o/proof_1001.jpg?alt=media",
+    isTruthConfirmed: true,
+    status: "SUBMITTED",
+    adminComment: "",
+    applicantReplyNote: "",
+    reviewedByAdminId: "",
+    createdAt: ts,
+    updatedAt: ts,
+  };
+
+  // 2. Submission MUST fail if isTruthConfirmed is false, or if pdfDownloadUrl is Base64 data:, or if contributor tries to self-approve (status: APPROVED)
+  await assertFails(
+    aliceDb.collection("islamic_book_submissions").doc("SUB_2026_1001").set({
+      ...baseSubmission,
+      isTruthConfirmed: false,
+    })
+  );
+  await assertFails(
+    aliceDb.collection("islamic_book_submissions").doc("SUB_2026_1001").set({
+      ...baseSubmission,
+      pdfDownloadUrl: "data:application/pdf;base64,JVBERi0xLjQK",
+    })
+  );
+  await assertFails(
+    aliceDb.collection("islamic_book_submissions").doc("SUB_2026_1001").set({
+      ...baseSubmission,
+      status: "APPROVED",
+    })
+  );
+
+  // 3. Valid submission by Alice succeeds
+  await assertSucceeds(
+    aliceDb.collection("islamic_book_submissions").doc("SUB_2026_1001").set(baseSubmission)
+  );
+
+  // 4. Cross-Contributor Isolation: Bob CANNOT read, list, or modify Alice's submission
+  await assertFails(
+    bobDb.collection("islamic_book_submissions").doc("SUB_2026_1001").get()
+  );
+  await assertFails(
+    bobDb.collection("islamic_book_submissions").where("contributorId", "==", ALICE_UID).get()
+  );
+  await assertFails(
+    bobDb.collection("islamic_book_submissions").doc("SUB_2026_1001").update({
+      titleBangla: "হ্যাকড বই",
+      updatedAt: nowDate(),
+    })
+  );
+
+  // Alice CAN read and list her own submissions
+  await assertSucceeds(
+    aliceDb.collection("islamic_book_submissions").where("contributorId", "==", ALICE_UID).get()
+  );
+
+  // 5. Admin Review Workflow: Admin marks MORE_INFO_REQUIRED -> Alice replies -> Admin marks APPROVED & PUBLISHED
+  await assertSucceeds(
+    adminDb.collection("islamic_book_submissions").doc("SUB_2026_1001").update({
+      status: "MORE_INFO_REQUIRED",
+      adminComment: "অনুগ্রহ করে প্রকাশনীর অনুমোদনপত্রের স্পষ্ট কপি সংযুক্ত করুন।",
+      reviewedByAdminId: ADMIN_UID_1,
+      updatedAt: nowDate(),
+    })
+  );
+
+  // Alice submits additional info and resets status to SUBMITTED
+  await assertSucceeds(
+    aliceDb.collection("islamic_book_submissions").doc("SUB_2026_1001").update({
+      applicantReplyNote: "স্পষ্ট অনুমোদনপত্র সংযুক্ত করা হয়েছে।",
+      status: "SUBMITTED",
+      updatedAt: nowDate(),
+    })
+  );
+
+  // Admin approves and publishes the submission
+  await assertSucceeds(
+    adminDb.collection("islamic_book_submissions").doc("SUB_2026_1001").update({
+      status: "PUBLISHED",
+      adminComment: "কপিরাইট ও পিডিএফ যাচাই সম্পন্ন। পাবলিক লাইব্রেরিতে প্রকাশিত।",
+      reviewedByAdminId: ADMIN_UID_1,
+      updatedAt: nowDate(),
+    })
+  );
+
+  // 6. Public Islamic Book Catalog Gate (/islamic_books_catalog/{bookId})
+  const catalogBookPayload = {
+    bookId: "ibook_pub_1001",
+    submissionId: "SUB_2026_1001",
+    contributorId: ALICE_UID,
+    titleBangla: "আহকামুল কুরআন ও সমকালীন মাসায়েল",
+    authorBangla: "মাওলানা আব্দুল্লাহ আল-মামুন",
+    translatorBangla: "",
+    compilerBangla: "",
+    publisherBangla: "মাকতাবাতুল ফুরকান",
+    categoryId: "FIQH_MASAIL",
+    languageBangla: "বাংলা ও আরবি",
+    publicationYear: "২০২৫",
+    isPublicationYearVerified: true,
+    editionBangla: "১ম সংস্করণ",
+    isbn: "978-984-8920-11-4",
+    shortDescriptionBangla: "সমকালীন জীবনঘনিষ্ঠ ফিকহি মাসায়েলের দালিলিক সমাধান।",
+    tableOfContents: ["অধ্যায় ১: ইবাদত ও পবিত্রতা", "অধ্যায় ২: মুআমালাত ও লেনদেন"],
+    coverImageUrl: "https://firebasestorage.googleapis.com/v0/b/demo/o/cover_1001.jpg?alt=media",
+    pdfDownloadUrl: "https://firebasestorage.googleapis.com/v0/b/demo/o/book_1001.pdf?alt=media",
+    pdfSha256: validSha256,
+    volumeNumber: 1,
+    totalVolumes: 1,
+    totalPages: 320,
+    fileSizeBytes: 8450000,
+    isPdfAvailable: true,
+    copyrightOwnerName: "মাওলানা আব্দুল্লাহ আল-মামুন",
+    permissionType: "SELF_COPYRIGHT",
+    isAdminApproved: true,
+    publicationStatus: "PUBLISHED",
+    approvedByAdminId: ADMIN_UID_1,
+    publishedAt: nowDate(),
+    updatedAt: nowDate(),
+  };
+
+  // Non-admin CANNOT publish directly to /islamic_books_catalog
+  await assertFails(
+    aliceDb.collection("islamic_books_catalog").doc("ibook_pub_1001").set(catalogBookPayload)
+  );
+
+  // Admin publishes to /islamic_books_catalog
+  await assertSucceeds(
+    adminDb.collection("islamic_books_catalog").doc("ibook_pub_1001").set(catalogBookPayload)
+  );
+
+  // Readers (Bob) can query and read approved & PUBLISHED books
+  await assertSucceeds(
+    bobDb
+      .collection("islamic_books_catalog")
+      .where("isAdminApproved", "==", true)
+      .where("publicationStatus", "==", "PUBLISHED")
+      .get()
+  );
+  await assertSucceeds(
+    bobDb.collection("islamic_books_catalog").doc("ibook_pub_1001").get()
+  );
+
+  // If Admin suspends the book (publicationStatus: SUSPENDED), regular users can no longer read it
+  await assertSucceeds(
+    adminDb.collection("islamic_books_catalog").doc("ibook_pub_1001").update({
+      publicationStatus: "SUSPENDED",
+      updatedAt: nowDate(),
+    })
+  );
+  await assertFails(
+    bobDb.collection("islamic_books_catalog").doc("ibook_pub_1001").get()
+  );
+
+  // 7. Audit Log (/islamic_book_audit_logs/{logId}) is create-only and immutable
+  await assertSucceeds(
+    aliceDb.collection("islamic_book_audit_logs").doc("audit_1001").set({
+      logId: "audit_1001",
+      actorId: ALICE_UID,
+      actorName: "মাওলানা আব্দুল্লাহ আল-মামুন",
+      actorRole: "CONTRIBUTOR",
+      actionType: "BOOK_SUBMITTED",
+      submissionId: "SUB_2026_1001",
+      bookTitle: "আহকামুল কুরআন ও সমকালীন মাসায়েল",
+      pdfSha256: validSha256,
+      details: "নতুন বই প্রকাশের আবেদন জমা দেওয়া হয়েছে।",
+      createdAt: nowDate(),
+    })
+  );
+  await assertFails(
+    aliceDb.collection("islamic_book_audit_logs").doc("audit_1001").delete()
+  );
+  await assertFails(
+    unauthDb.collection("islamic_books_catalog").doc("ibook_pub_1001").get()
+  );
+});
+
+
 

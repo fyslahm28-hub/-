@@ -56,6 +56,8 @@ abstract class FirestoreEmulatorTestBase {
         syncRulesWithRunningEmulator()
 
         val context = ApplicationProvider.getApplicationContext<Context>()
+        val resId = context.resources.getIdentifier("firestore_database_id", "string", context.packageName)
+        databaseId = if (resId != 0) context.getString(resId) else "demo-database"
 
         val app = if (FirebaseApp.getApps(context).isEmpty()) {
             val newApp = FirebaseApp.initializeApp(
@@ -66,7 +68,7 @@ abstract class FirestoreEmulatorTestBase {
                     .setApiKey("fake-api-key-for-emulator")
                     .build()
             )
-            val newFirestore = FirebaseFirestore.getInstance(newApp)
+            val newFirestore = FirebaseFirestore.getInstance(newApp, databaseId)
             newFirestore.useEmulator(EMULATOR_HOST, FIRESTORE_PORT)
             newFirestore.firestoreSettings = FirebaseFirestoreSettings.Builder()
                 .setLocalCacheSettings(MemoryCacheSettings.newBuilder().build())
@@ -79,9 +81,11 @@ abstract class FirestoreEmulatorTestBase {
             FirebaseApp.getInstance()
         }
 
-        firestore = FirebaseFirestore.getInstance(app)
+        firestore = FirebaseFirestore.getInstance(app, databaseId)
         auth = FirebaseAuth.getInstance(app)
     }
+
+    protected lateinit var databaseId: String
 
     private fun syncRulesWithRunningEmulator() {
         if (rulesSynced) return
@@ -151,8 +155,8 @@ abstract class FirestoreEmulatorTestBase {
 
     private companion object {
         const val EMULATOR_HOST = "127.0.0.1"
-        const val FIRESTORE_PORT = 8088
-        const val AUTH_PORT = 9098
+        const val FIRESTORE_PORT = 8085
+        const val AUTH_PORT = 9099
         const val PROJECT_ID = "demo-no-project"
         const val DEFAULT_PASSWORD = "password123"
         const val AUTH_TIMEOUT_MS = 5000L

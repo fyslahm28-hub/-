@@ -11,11 +11,46 @@ service firebase.storage {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function isAdmin() {
+      let rawEmail = isSignedIn() ? request.auth.token.get('email', '') : '';
+      let email = rawEmail is string ? rawEmail.lower() : '';
+      let roleClaim = isSignedIn() ? request.auth.token.get('role', '') : '';
+      return isSignedIn() && (
+        request.auth.token.get('admin', false) == true ||
+        roleClaim in ['admin', 'SUPER_ADMIN', 'ADMIN', 'MODERATOR'] ||
+        email in [
+          'foysalahamad102@gmail.com',
+          'foysalahamad204@gmail.com',
+          'fyslahm28@gmail.com'
+        ] ||
+        request.auth.token.get('phone_number', '') in [
+          '+8801300448147',
+          '01300448147'
+        ]
+      );
+    }
+
     function isValidImageUpload(maxSizeBytes) {
       return request.resource != null
         && request.resource.size > 0
         && request.resource.size <= maxSizeBytes
         && request.resource.contentType.matches('image/(jpeg|jpg|png|webp|gif)');
+    }
+
+    function isValidPdfUpload(maxSizeBytes) {
+      return request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= maxSizeBytes
+        && request.resource.contentType.matches('application/pdf');
+    }
+
+    function isValidSubmissionAssetUpload() {
+      return request.resource != null
+        && request.resource.size > 0
+        && (
+          (request.resource.contentType.matches('application/pdf') && request.resource.size <= 50 * 1024 * 1024) ||
+          (request.resource.contentType.matches('image/(jpeg|jpg|png|webp)') && request.resource.size <= 10 * 1024 * 1024)
+        );
     }
 
     function isValidMediaUpload(maxSizeBytes) {
@@ -29,7 +64,6 @@ service firebase.storage {
     }
 
     // 1. Feed Post Media (Job Circulars, Seeker Applications, Deeni Posts)
-    // Authenticated users can view; only the authenticated post author can upload/delete under their own UID path.
     match /feed_posts/{userId}/{postId}/{fileName} {
       allow read: if isSignedIn();
       allow create, update: if isOwner(userId)
@@ -55,6 +89,28 @@ service firebase.storage {
         && fileName.size() > 0 && fileName.size() <= 200
         && isValidImageUpload(10 * 1024 * 1024);
       allow delete: if isOwner(userId);
+    }
+
+    // 4. Author/Publisher Private Book Submissions (Unapproved PDFs, Covers & Copyright Proofs)
+    // Strictly isolated to the submitting Contributor and verified Admins — NO public read before Admin approval.
+    match /islamic_book_submissions/{userId}/{submissionId}/{fileName} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update: if (isOwner(userId) || isAdmin())
+        && submissionId.size() > 0 && submissionId.size() <= 128
+        && fileName.size() > 0 && fileName.size() <= 200
+        && isValidSubmissionAssetUpload();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // 5. Admin-Approved Public Islamic Books Storage
+    // Readable by authenticated app users only after Admin publishes to public path; writable only by Admin.
+    match /islamic_books_public/{bookId}/{fileName} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin()
+        && bookId.size() > 0 && bookId.size() <= 128
+        && fileName.size() > 0 && fileName.size() <= 200
+        && isValidSubmissionAssetUpload();
+      allow delete: if isAdmin();
     }
 
     // Default deny for all other paths

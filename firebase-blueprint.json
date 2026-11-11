@@ -329,6 +329,110 @@
         "lastEventAt": { "type": "timestamp", "required": false },
         "updatedAt": { "type": "timestamp", "required": true }
       }
+    },
+    "BookContributorProfile": {
+      "description": "Author, Translator, Publisher, or Compiler contributor profile bound to the user's Firebase Auth UID for self-publishing Islamic books.",
+      "properties": {
+        "userId": { "type": "string", "required": true },
+        "fullName": { "type": "string", "required": true },
+        "mobileNumber": { "type": "string", "required": true },
+        "email": { "type": "string", "required": false },
+        "roleType": { "type": "string", "required": true, "enum": ["AUTHOR", "TRANSLATOR", "PUBLISHER", "COMPILER"] },
+        "organizationName": { "type": "string", "required": false },
+        "shortBio": { "type": "string", "required": true },
+        "contactDetails": { "type": "string", "required": true },
+        "isVerifiedContributor": { "type": "boolean", "required": true },
+        "createdAt": { "type": "timestamp", "required": true },
+        "updatedAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "IslamicBookSubmission": {
+      "description": "Self-published Islamic book application submitted by an authenticated Author, Translator, Publisher, or Compiler with SHA-256 PDF checksum, Storage reference, and mandatory copyright verification.",
+      "properties": {
+        "submissionId": { "type": "string", "required": true },
+        "contributorId": { "type": "string", "required": true },
+        "contributorName": { "type": "string", "required": true },
+        "contributorRole": { "type": "string", "required": true },
+        "titleBangla": { "type": "string", "required": true },
+        "authorBangla": { "type": "string", "required": true },
+        "translatorBangla": { "type": "string", "required": false },
+        "compilerBangla": { "type": "string", "required": false },
+        "publisherBangla": { "type": "string", "required": true },
+        "categoryId": { "type": "string", "required": true },
+        "languageBangla": { "type": "string", "required": true },
+        "publicationYear": { "type": "string", "required": true },
+        "editionBangla": { "type": "string", "required": true },
+        "isbn": { "type": "string", "required": false },
+        "shortDescriptionBangla": { "type": "string", "required": true },
+        "coverImageUrl": { "type": "string", "required": false },
+        "pdfDownloadUrl": { "type": "string", "required": true },
+        "pdfStoragePath": { "type": "string", "required": true },
+        "pdfSha256": { "type": "string", "required": true },
+        "totalVolumes": { "type": "number", "required": true },
+        "totalPages": { "type": "number", "required": false },
+        "fileSizeBytes": { "type": "number", "required": true },
+        "copyrightOwnerName": { "type": "string", "required": true },
+        "permissionType": { "type": "string", "required": true, "enum": ["SELF_COPYRIGHT", "WRITTEN_PERMISSION", "OPEN_LICENSE"] },
+        "permissionProofUrl": { "type": "string", "required": true },
+        "isTruthConfirmed": { "type": "boolean", "required": true },
+        "status": { "type": "string", "required": true, "enum": ["SUBMITTED", "UNDER_REVIEW", "MORE_INFO_REQUIRED", "APPROVED", "REJECTED", "PUBLISHED"] },
+        "adminComment": { "type": "string", "required": false },
+        "applicantReplyNote": { "type": "string", "required": false },
+        "reviewedByAdminId": { "type": "string", "required": false },
+        "createdAt": { "type": "timestamp", "required": true },
+        "updatedAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "IslamicBookCatalogItem": {
+      "description": "Public Islamic Book Library catalog entry published only after Admin verification of copyright and PDF integrity.",
+      "properties": {
+        "bookId": { "type": "string", "required": true },
+        "submissionId": { "type": "string", "required": false },
+        "contributorId": { "type": "string", "required": false },
+        "titleBangla": { "type": "string", "required": true },
+        "authorBangla": { "type": "string", "required": true },
+        "translatorBangla": { "type": "string", "required": false },
+        "compilerBangla": { "type": "string", "required": false },
+        "publisherBangla": { "type": "string", "required": true },
+        "categoryId": { "type": "string", "required": true },
+        "languageBangla": { "type": "string", "required": true },
+        "publicationYear": { "type": "string", "required": true },
+        "isPublicationYearVerified": { "type": "boolean", "required": true },
+        "editionBangla": { "type": "string", "required": true },
+        "isbn": { "type": "string", "required": false },
+        "shortDescriptionBangla": { "type": "string", "required": true },
+        "tableOfContents": { "type": "array", "required": false },
+        "coverImageUrl": { "type": "string", "required": false },
+        "pdfDownloadUrl": { "type": "string", "required": true },
+        "pdfSha256": { "type": "string", "required": true },
+        "volumeNumber": { "type": "number", "required": true },
+        "totalVolumes": { "type": "number", "required": true },
+        "totalPages": { "type": "number", "required": true },
+        "fileSizeBytes": { "type": "number", "required": true },
+        "isPdfAvailable": { "type": "boolean", "required": true },
+        "copyrightOwnerName": { "type": "string", "required": true },
+        "permissionType": { "type": "string", "required": true, "enum": ["SELF_COPYRIGHT", "WRITTEN_PERMISSION", "OPEN_LICENSE", "REFERENCE_CATALOG_ONLY"] },
+        "isAdminApproved": { "type": "boolean", "required": true },
+        "publicationStatus": { "type": "string", "required": true, "enum": ["PUBLISHED", "SUSPENDED", "REMOVED"] },
+        "approvedByAdminId": { "type": "string", "required": true },
+        "publishedAt": { "type": "timestamp", "required": true },
+        "updatedAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "IslamicBookAuditLog": {
+      "description": "Immutable security and moderation audit log for book uploads, duplicate checks, status transitions, and Admin approvals.",
+      "properties": {
+        "logId": { "type": "string", "required": true },
+        "actorId": { "type": "string", "required": true },
+        "actorName": { "type": "string", "required": true },
+        "actorRole": { "type": "string", "required": true, "enum": ["CONTRIBUTOR", "ADMIN"] },
+        "actionType": { "type": "string", "required": true, "enum": ["CONTRIBUTOR_REGISTERED", "BOOK_SUBMITTED", "SUBMISSION_UPDATED", "STATUS_CHANGED", "BOOK_APPROVED", "BOOK_REJECTED", "BOOK_PUBLISHED", "BOOK_SUSPENDED", "BOOK_REMOVED"] },
+        "submissionId": { "type": "string", "required": true },
+        "bookTitle": { "type": "string", "required": true },
+        "pdfSha256": { "type": "string", "required": false },
+        "details": { "type": "string", "required": true },
+        "createdAt": { "type": "timestamp", "required": true }
+      }
     }
   },
   "collections": [
@@ -421,6 +525,26 @@
       "path": "/post_intelligence_metrics/{postId}/engagement_receipts/{receiptId}",
       "entity": "EngagementReceipt",
       "access": "Create-only deterministic receipt ({uid}_{eventType}) for authenticated users; no updates allowed; admins can audit/delete."
+    },
+    {
+      "path": "/book_contributors/{userId}",
+      "entity": "BookContributorProfile",
+      "access": "Strict owner and admin read/write access for Author, Translator, Publisher, and Compiler contributor profiles."
+    },
+    {
+      "path": "/islamic_book_submissions/{submissionId}",
+      "entity": "IslamicBookSubmission",
+      "access": "Strict contributor-owner and admin read/list access; contributors can create and reply to more-info requests for their own submissions; only verified admins can transition approval/publish status."
+    },
+    {
+      "path": "/islamic_books_catalog/{bookId}",
+      "entity": "IslamicBookCatalogItem",
+      "access": "Authenticated users can read and list ONLY admin-approved and PUBLISHED catalog books; only verified admins can create, update, suspend, or remove public catalog items."
+    },
+    {
+      "path": "/islamic_book_audit_logs/{logId}",
+      "entity": "IslamicBookAuditLog",
+      "access": "Create-only immutable audit log for authenticated actors; actors can read their own logs and admins can read all logs."
     }
   ]
 }

@@ -445,6 +445,126 @@ service cloud.firestore {
              isValidTimestamp(data.updatedAt);
     }
 
+    function isValidBookContributorProfile(data, userId) {
+      let emailVal = data.get('email', '');
+      let orgVal = data.get('organizationName', '');
+      return data.userId is string && data.userId == userId &&
+             data.fullName is string && data.fullName.size() >= 1 && data.fullName.size() <= 150 &&
+             data.mobileNumber is string && data.mobileNumber.size() >= 6 && data.mobileNumber.size() <= 40 &&
+             (emailVal is string && emailVal.size() <= 150) &&
+             data.roleType is string && data.roleType in ['AUTHOR', 'TRANSLATOR', 'PUBLISHER', 'COMPILER'] &&
+             (orgVal is string && orgVal.size() <= 200) &&
+             data.shortBio is string && data.shortBio.size() <= 1500 &&
+             data.contactDetails is string && data.contactDetails.size() <= 300 &&
+             data.isVerifiedContributor is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidIslamicBookSubmission(data, submissionId) {
+      let translatorVal = data.get('translatorBangla', '');
+      let compilerVal = data.get('compilerBangla', '');
+      let isbnVal = data.get('isbn', '');
+      let coverUrlVal = data.get('coverImageUrl', '');
+      let adminCommentVal = data.get('adminComment', '');
+      let applicantReplyVal = data.get('applicantReplyNote', '');
+      let reviewedByVal = data.get('reviewedByAdminId', '');
+      let totalPagesVal = data.get('totalPages', 0);
+      return data.submissionId is string && data.submissionId == submissionId &&
+             data.contributorId is string && data.contributorId.size() >= 1 && data.contributorId.size() <= 128 &&
+             data.contributorName is string && data.contributorName.size() >= 1 && data.contributorName.size() <= 150 &&
+             data.contributorRole is string && data.contributorRole in ['AUTHOR', 'TRANSLATOR', 'PUBLISHER', 'COMPILER'] &&
+             data.titleBangla is string && data.titleBangla.size() >= 1 && data.titleBangla.size() <= 250 &&
+             data.authorBangla is string && data.authorBangla.size() >= 1 && data.authorBangla.size() <= 200 &&
+             (translatorVal is string && translatorVal.size() <= 200) &&
+             (compilerVal is string && compilerVal.size() <= 200) &&
+             data.publisherBangla is string && data.publisherBangla.size() >= 1 && data.publisherBangla.size() <= 200 &&
+             data.categoryId is string && data.categoryId.size() >= 1 && data.categoryId.size() <= 80 &&
+             data.languageBangla is string && data.languageBangla.size() >= 1 && data.languageBangla.size() <= 80 &&
+             data.publicationYear is string && data.publicationYear.size() >= 1 && data.publicationYear.size() <= 30 &&
+             data.editionBangla is string && data.editionBangla.size() <= 100 &&
+             (isbnVal is string && isbnVal.size() <= 60) &&
+             data.shortDescriptionBangla is string && data.shortDescriptionBangla.size() >= 1 && data.shortDescriptionBangla.size() <= 4000 &&
+             (coverUrlVal is string && coverUrlVal.size() <= 2000) &&
+             data.pdfDownloadUrl is string && data.pdfDownloadUrl.size() >= 8 && data.pdfDownloadUrl.size() <= 2000 &&
+             (!data.pdfDownloadUrl.matches('^data:.*')) &&
+             data.pdfStoragePath is string && data.pdfStoragePath.size() >= 1 && data.pdfStoragePath.size() <= 500 &&
+             data.pdfSha256 is string && data.pdfSha256.size() == 64 && data.pdfSha256.matches('^[a-fA-F0-9]{64}$') &&
+             data.totalVolumes is int && data.totalVolumes >= 1 && data.totalVolumes <= 100 &&
+             (totalPagesVal is int && totalPagesVal >= 0 && totalPagesVal <= 20000) &&
+             data.fileSizeBytes is int && data.fileSizeBytes > 0 && data.fileSizeBytes <= 52428800 &&
+             data.copyrightOwnerName is string && data.copyrightOwnerName.size() >= 1 && data.copyrightOwnerName.size() <= 200 &&
+             data.permissionType is string && data.permissionType in ['SELF_COPYRIGHT', 'WRITTEN_PERMISSION', 'OPEN_LICENSE'] &&
+             data.permissionProofUrl is string && data.permissionProofUrl.size() >= 1 && data.permissionProofUrl.size() <= 2000 &&
+             data.isTruthConfirmed is bool && data.isTruthConfirmed == true &&
+             data.status is string && data.status in ['SUBMITTED', 'UNDER_REVIEW', 'MORE_INFO_REQUIRED', 'APPROVED', 'REJECTED', 'PUBLISHED'] &&
+             (adminCommentVal is string && adminCommentVal.size() <= 2000) &&
+             (applicantReplyVal is string && applicantReplyVal.size() <= 2000) &&
+             (reviewedByVal is string && reviewedByVal.size() <= 128) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidIslamicBookCatalogItem(data, bookId) {
+      let subIdVal = data.get('submissionId', '');
+      let contribIdVal = data.get('contributorId', '');
+      let translatorVal = data.get('translatorBangla', '');
+      let compilerVal = data.get('compilerBangla', '');
+      let isbnVal = data.get('isbn', '');
+      let coverUrlVal = data.get('coverImageUrl', '');
+      let tocList = data.get('tableOfContents', []);
+      return data.bookId is string && data.bookId == bookId &&
+             (subIdVal is string && subIdVal.size() <= 128) &&
+             (contribIdVal is string && contribIdVal.size() <= 128) &&
+             data.titleBangla is string && data.titleBangla.size() >= 1 && data.titleBangla.size() <= 250 &&
+             data.authorBangla is string && data.authorBangla.size() >= 1 && data.authorBangla.size() <= 200 &&
+             (translatorVal is string && translatorVal.size() <= 200) &&
+             (compilerVal is string && compilerVal.size() <= 200) &&
+             data.publisherBangla is string && data.publisherBangla.size() >= 1 && data.publisherBangla.size() <= 200 &&
+             data.categoryId is string && data.categoryId.size() >= 1 && data.categoryId.size() <= 80 &&
+             data.languageBangla is string && data.languageBangla.size() >= 1 && data.languageBangla.size() <= 80 &&
+             data.publicationYear is string && data.publicationYear.size() <= 30 &&
+             data.isPublicationYearVerified is bool &&
+             data.editionBangla is string && data.editionBangla.size() <= 100 &&
+             (isbnVal is string && isbnVal.size() <= 60) &&
+             data.shortDescriptionBangla is string && data.shortDescriptionBangla.size() >= 1 && data.shortDescriptionBangla.size() <= 4000 &&
+             (tocList is list && tocList.size() <= 100 && (tocList.size() == 0 || tocList[0] is string)) &&
+             (coverUrlVal is string && coverUrlVal.size() <= 2000) &&
+             data.pdfDownloadUrl is string && data.pdfDownloadUrl.size() <= 2000 &&
+             (!data.pdfDownloadUrl.matches('^data:.*')) &&
+             data.pdfSha256 is string && data.pdfSha256.size() <= 64 &&
+             data.volumeNumber is int && data.volumeNumber >= 1 && data.volumeNumber <= 100 &&
+             data.totalVolumes is int && data.totalVolumes >= 1 && data.totalVolumes <= 100 &&
+             data.totalPages is int && data.totalPages >= 0 && data.totalPages <= 20000 &&
+             data.fileSizeBytes is int && data.fileSizeBytes >= 0 && data.fileSizeBytes <= 104857600 &&
+             data.isPdfAvailable is bool &&
+             data.copyrightOwnerName is string && data.copyrightOwnerName.size() <= 200 &&
+             data.permissionType is string && data.permissionType in ['SELF_COPYRIGHT', 'WRITTEN_PERMISSION', 'OPEN_LICENSE', 'REFERENCE_CATALOG_ONLY'] &&
+             data.isAdminApproved is bool &&
+             data.publicationStatus is string && data.publicationStatus in ['PUBLISHED', 'SUSPENDED', 'REMOVED'] &&
+             data.approvedByAdminId is string && data.approvedByAdminId.size() >= 1 && data.approvedByAdminId.size() <= 128 &&
+             isValidTimestamp(data.publishedAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidIslamicBookAuditLog(data, logId) {
+      let shaVal = data.get('pdfSha256', '');
+      return data.logId is string && data.logId == logId &&
+             data.actorId is string && data.actorId == request.auth.uid &&
+             data.actorName is string && data.actorName.size() >= 1 && data.actorName.size() <= 150 &&
+             data.actorRole is string && data.actorRole in ['CONTRIBUTOR', 'ADMIN'] &&
+             data.actionType is string && data.actionType in [
+               'CONTRIBUTOR_REGISTERED', 'BOOK_SUBMITTED', 'SUBMISSION_UPDATED',
+               'STATUS_CHANGED', 'BOOK_APPROVED', 'BOOK_REJECTED',
+               'BOOK_PUBLISHED', 'BOOK_SUSPENDED', 'BOOK_REMOVED'
+             ] &&
+             data.submissionId is string && data.submissionId.size() >= 1 && data.submissionId.size() <= 128 &&
+             data.bookTitle is string && data.bookTitle.size() >= 1 && data.bookTitle.size() <= 250 &&
+             (shaVal is string && shaVal.size() <= 64) &&
+             data.details is string && data.details.size() >= 1 && data.details.size() <= 2000 &&
+             isValidTimestamp(data.createdAt);
+    }
+
     // 4. Collection Rules
 
     // Admins Registry (সার্ভার-সাইড অ্যাডমিন পরিচয় ও অ্যাক্সেস)
@@ -983,6 +1103,14 @@ service cloud.firestore {
                 (!(request.auth.uid in incMap) || isValidReactionCode(incMap.get(request.auth.uid, ''))));
       }
 
+      function isNotBlocked1on1(receiverId) {
+        let receiverBlocked = exists(/databases/$(database)/documents/users/$(receiverId)) &&
+                              (request.auth.uid in get(/databases/$(database)/documents/users/$(receiverId)).data.get('blockedUserIds', []));
+        let senderBlocked = exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                            (receiverId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('blockedUserIds', []));
+        return !receiverBlocked && !senderBlocked;
+      }
+
       allow get: if isSignedIn() && isValidId(messageId) && (resource == null || isMessageParticipant(existing()));
       allow list: if isSignedIn() && (
                     resource.data.senderId == request.auth.uid ||
@@ -1000,7 +1128,8 @@ service cloud.firestore {
                           (incoming().get('groupMemberIds', []) is list && request.auth.uid in incoming().get('groupMemberIds', [])) &&
                           isVerifiedGroupParticipant(incoming().get('groupId', ''))) ||
                          (incoming().get('groupId', '') == '' &&
-                          incoming().receiverId != request.auth.uid)
+                          incoming().receiverId != request.auth.uid &&
+                          isNotBlocked1on1(incoming().receiverId))
                        ) &&
                        incoming().keys().hasAll([
                          'senderId', 'senderName', 'receiverId', 'receiverName',
@@ -1261,6 +1390,195 @@ service cloud.firestore {
         allow update: if false;
         allow delete: if isTokenVerifiedAdmin();
       }
+    }
+
+    // Author / Translator / Publisher Contributor Account Profiles
+    match /book_contributors/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().userId == request.auth.uid &&
+                       (incoming().isVerifiedContributor == false || isAdmin()) &&
+                       incoming().keys().hasAll([
+                         'userId', 'fullName', 'mobileNumber', 'roleType',
+                         'shortBio', 'contactDetails', 'isVerifiedContributor',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'fullName', 'mobileNumber', 'email', 'roleType',
+                         'organizationName', 'shortBio', 'contactDetails',
+                         'isVerifiedContributor', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidBookContributorProfile(incoming(), userId);
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidBookContributorProfile(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt && (
+                         (request.auth.uid == userId &&
+                          incoming().isVerifiedContributor == existing().isVerifiedContributor &&
+                          incoming().diff(existing()).affectedKeys().hasOnly([
+                            'fullName', 'mobileNumber', 'email', 'roleType',
+                            'organizationName', 'shortBio', 'contactDetails', 'updatedAt'
+                          ])) ||
+                         (isAdmin() &&
+                          incoming().diff(existing()).affectedKeys().hasOnly([
+                            'fullName', 'mobileNumber', 'email', 'roleType',
+                            'organizationName', 'shortBio', 'contactDetails',
+                            'isVerifiedContributor', 'updatedAt'
+                          ]))
+                       );
+
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // Self-Published Islamic Book Submissions (Isolated per Contributor + Admin Review)
+    match /islamic_book_submissions/{submissionId} {
+      allow get: if isSignedIn() && isValidId(submissionId) && (
+        resource == null ||
+        existing().contributorId == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.contributorId == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow create: if isSignedIn() &&
+                       isValidId(submissionId) &&
+                       incoming().contributorId == request.auth.uid &&
+                       incoming().status == 'SUBMITTED' &&
+                       incoming().keys().hasAll([
+                         'submissionId', 'contributorId', 'contributorName', 'contributorRole',
+                         'titleBangla', 'authorBangla', 'publisherBangla', 'categoryId',
+                         'languageBangla', 'publicationYear', 'editionBangla',
+                         'shortDescriptionBangla', 'pdfDownloadUrl', 'pdfStoragePath',
+                         'pdfSha256', 'totalVolumes', 'fileSizeBytes',
+                         'copyrightOwnerName', 'permissionType', 'permissionProofUrl',
+                         'isTruthConfirmed', 'status', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'submissionId', 'contributorId', 'contributorName', 'contributorRole',
+                         'titleBangla', 'authorBangla', 'translatorBangla', 'compilerBangla',
+                         'publisherBangla', 'categoryId', 'languageBangla',
+                         'publicationYear', 'editionBangla', 'isbn',
+                         'shortDescriptionBangla', 'coverImageUrl',
+                         'pdfDownloadUrl', 'pdfStoragePath', 'pdfSha256',
+                         'totalVolumes', 'totalPages', 'fileSizeBytes',
+                         'copyrightOwnerName', 'permissionType', 'permissionProofUrl',
+                         'isTruthConfirmed', 'status', 'adminComment',
+                         'applicantReplyNote', 'reviewedByAdminId',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidIslamicBookSubmission(incoming(), submissionId);
+
+      allow update: if isSignedIn() &&
+                       isValidId(submissionId) &&
+                       isValidIslamicBookSubmission(incoming(), submissionId) &&
+                       incoming().submissionId == existing().submissionId &&
+                       incoming().contributorId == existing().contributorId &&
+                       incoming().createdAt == existing().createdAt && (
+                         // Contributor can update/respond when status is SUBMITTED or MORE_INFO_REQUIRED
+                         (request.auth.uid == existing().contributorId &&
+                          existing().status in ['SUBMITTED', 'MORE_INFO_REQUIRED'] &&
+                          incoming().status == 'SUBMITTED' &&
+                          incoming().pdfSha256 == existing().pdfSha256 &&
+                          incoming().diff(existing()).affectedKeys().hasOnly([
+                            'titleBangla', 'authorBangla', 'translatorBangla', 'compilerBangla',
+                            'publisherBangla', 'categoryId', 'languageBangla',
+                            'publicationYear', 'editionBangla', 'isbn',
+                            'shortDescriptionBangla', 'coverImageUrl',
+                            'permissionProofUrl', 'applicantReplyNote',
+                            'status', 'updatedAt'
+                          ])) ||
+                         // Verified Admin can review, request more info, approve, reject, or publish
+                         (isAdmin() &&
+                          incoming().diff(existing()).affectedKeys().hasOnly([
+                            'titleBangla', 'authorBangla', 'translatorBangla', 'compilerBangla',
+                            'publisherBangla', 'categoryId', 'languageBangla',
+                            'publicationYear', 'editionBangla', 'isbn',
+                            'shortDescriptionBangla', 'coverImageUrl',
+                            'pdfDownloadUrl', 'pdfStoragePath', 'pdfSha256',
+                            'totalVolumes', 'totalPages', 'fileSizeBytes',
+                            'status', 'adminComment', 'reviewedByAdminId', 'updatedAt'
+                          ]))
+                       );
+
+      allow delete: if isAdmin() && isValidId(submissionId);
+    }
+
+    // Public Islamic Book Library Catalog (ONLY Admin-Approved & PUBLISHED books are visible to readers)
+    match /islamic_books_catalog/{bookId} {
+      allow get: if isSignedIn() && isValidId(bookId) && (
+        resource == null ||
+        (existing().isAdminApproved == true && existing().publicationStatus == 'PUBLISHED') ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        (resource.data.isAdminApproved == true && resource.data.publicationStatus == 'PUBLISHED') ||
+        isAdmin()
+      );
+
+      allow create, update: if isAdmin() &&
+                               isValidId(bookId) &&
+                               incoming().keys().hasAll([
+                                 'bookId', 'titleBangla', 'authorBangla', 'publisherBangla',
+                                 'categoryId', 'languageBangla', 'publicationYear',
+                                 'isPublicationYearVerified', 'editionBangla',
+                                 'shortDescriptionBangla', 'pdfDownloadUrl', 'pdfSha256',
+                                 'volumeNumber', 'totalVolumes', 'totalPages',
+                                 'fileSizeBytes', 'isPdfAvailable', 'copyrightOwnerName',
+                                 'permissionType', 'isAdminApproved', 'publicationStatus',
+                                 'approvedByAdminId', 'publishedAt', 'updatedAt'
+                               ]) &&
+                               incoming().keys().hasOnly([
+                                 'bookId', 'submissionId', 'contributorId',
+                                 'titleBangla', 'authorBangla', 'translatorBangla', 'compilerBangla',
+                                 'publisherBangla', 'categoryId', 'languageBangla',
+                                 'publicationYear', 'isPublicationYearVerified', 'editionBangla',
+                                 'isbn', 'shortDescriptionBangla', 'tableOfContents',
+                                 'coverImageUrl', 'pdfDownloadUrl', 'pdfSha256',
+                                 'volumeNumber', 'totalVolumes', 'totalPages',
+                                 'fileSizeBytes', 'isPdfAvailable', 'copyrightOwnerName',
+                                 'permissionType', 'isAdminApproved', 'publicationStatus',
+                                 'approvedByAdminId', 'publishedAt', 'updatedAt'
+                               ]) &&
+                               isValidIslamicBookCatalogItem(incoming(), bookId);
+
+      allow delete: if isAdmin() && isValidId(bookId);
+    }
+
+    // Immutable Audit Log for Islamic Book Submissions & Admin Moderation
+    match /islamic_book_audit_logs/{logId} {
+      allow get: if isSignedIn() && isValidId(logId) && (
+        existing().actorId == request.auth.uid || isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.actorId == request.auth.uid || isAdmin()
+      );
+
+      allow create: if isSignedIn() &&
+                       isValidId(logId) &&
+                       incoming().actorId == request.auth.uid &&
+                       (incoming().actorRole == 'CONTRIBUTOR' || isAdmin()) &&
+                       (incoming().actionType in ['CONTRIBUTOR_REGISTERED', 'BOOK_SUBMITTED', 'SUBMISSION_UPDATED'] || isAdmin()) &&
+                       incoming().keys().hasAll([
+                         'logId', 'actorId', 'actorName', 'actorRole',
+                         'actionType', 'submissionId', 'bookTitle',
+                         'details', 'createdAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'logId', 'actorId', 'actorName', 'actorRole',
+                         'actionType', 'submissionId', 'bookTitle',
+                         'pdfSha256', 'details', 'createdAt'
+                       ]) &&
+                       isValidIslamicBookAuditLog(incoming(), logId);
+
+      allow update, delete: if false;
     }
   }
 }
