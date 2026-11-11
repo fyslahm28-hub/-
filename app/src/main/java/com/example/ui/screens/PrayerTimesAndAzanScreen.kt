@@ -1,7 +1,10 @@
 package com.example.ui.screens
 
 import android.Manifest
+import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -160,7 +163,6 @@ fun IslamicAndEssentialServicesSection(
     var selectedInfoItem by remember { mutableStateOf<IslamicServiceGridItem?>(null) }
     var showHafeziQuranHub by rememberSaveable { mutableStateOf(false) }
     var showHadithKitabLibrary by rememberSaveable { mutableStateOf(false) }
-    var showAudioTilawatDialog by rememberSaveable { mutableStateOf(false) }
 
     val ilmAndAmolItems = remember {
         listOf(
@@ -212,7 +214,7 @@ fun IslamicAndEssentialServicesSection(
         when (item.id) {
             "quran" -> showHafeziQuranHub = true
             "hadith" -> showHadithKitabLibrary = true
-            "tilawat" -> showAudioTilawatDialog = true
+            "tilawat" -> onNavigate(MainDestination.TILAWAT)
             "prayer_times", "islamic_calendar" -> onOpenPrayerTimes()
             "bookmarks" -> onNavigate(MainDestination.BOOKMARKS)
             "support" -> onNavigate(MainDestination.HELP_AND_SUPPORT)
@@ -311,14 +313,7 @@ fun IslamicAndEssentialServicesSection(
         )
     }
 
-    // 3. Dedicated Audio Tilawat Section (ONLY Qari, Surah Audio & Tilawat Playback — NO Quran PDF Pages)
-    if (showAudioTilawatDialog) {
-        AudioTilawatSectionDialog(
-            onDismiss = { showAudioTilawatDialog = false }
-        )
-    }
-
-    // 4. Dedicated Section Dialogs for Dua, Sunnah, Amol Tracker, Islamic Books, Quran Learning, etc.
+    // 3. Dedicated Section Dialogs for Dua, Sunnah, Amol Tracker, Islamic Books, Quran Learning, etc.
     if (selectedInfoItem != null) {
         val item = selectedInfoItem!!
         DedicatedIslamicServiceDialog(
@@ -328,162 +323,451 @@ fun IslamicAndEssentialServicesSection(
     }
 }
 
+private data class TilawatQariItem(
+    val nameBangla: String,
+    val introBangla: String,
+    val streamFolder: String
+)
+
+private data class TilawatSurahItem(
+    val titleBangla: String,
+    val surahCode: String
+)
+
+/**
+ * Full-Screen / Full-Window Tilawat Page occupying the entire main Content Area between Header and Bottom Navigation.
+ * No Modal, Popup, Bottom Sheet, or Floating Window is used.
+ */
 @Composable
-private fun AudioTilawatSectionDialog(
-    onDismiss: () -> Unit
+fun FullAudioTilawatScreen(
+    onBackToHome: () -> Unit = {}
 ) {
+    BackHandler {
+        onBackToHome()
+    }
+
     val qariList = remember {
         listOf(
-            "শাইখ মাশারী রশিদ আল-আফাসী" to "মাক্কী ও মাদানী তিলাওয়াত",
-            "শাইখ আব্দুর রহমান আস-সুদাইস" to "ইমাম, মসজিদুল হারাম, মক্কা",
-            "শাইখ মাহের আল-মুআইকলি" to "মসজিদুল হারাম, মক্কা",
-            "শাইখ আব্দুল বাসিত আব্দুস সামাদ" to "মুরাত্তাল ও তাজবীদ তিলাওয়াত"
+            TilawatQariItem(
+                nameBangla = "শাইখ মাশারী রশিদ আল-আফাসী",
+                introBangla = "মাক্কী ও মাদানী তিলাওয়াত",
+                streamFolder = "mishaari_raashid_al_3afaasee"
+            ),
+            TilawatQariItem(
+                nameBangla = "শাইখ আব্দুর রহমান আস-সুদাইস",
+                introBangla = "ইমাম, মসজিদুল হারাম, মক্কা",
+                streamFolder = "abdurrahmaan_as-sudays"
+            ),
+            TilawatQariItem(
+                nameBangla = "শাইখ মাহের আল-মুআইকলি",
+                introBangla = "মসজিদুল হারাম, মক্কা",
+                streamFolder = "maher_al_muaiqly"
+            ),
+            TilawatQariItem(
+                nameBangla = "শাইখ আব্দুল বাসিত আব্দুস সামাদ",
+                introBangla = "মুরাত্তাল ও তাজবীদ তিলাওয়াত",
+                streamFolder = "abdul_basit_murattal"
+            )
         )
     }
+
     val featuredSurahs = remember {
         listOf(
-            "১. সূরা আল-ফাতিহা (৭ আয়াত)",
-            "২. সূরা আল-বাকারা — আয়াতুল কুরসি",
-            "১৮. সূরা আল-কাহফ (১১০ আয়াত)",
-            "৩৬. সূরা ইয়াসিন (৮৩ আয়াত)",
-            "৫৫. সূরা আর-রহমান (৭৮ আয়াত)",
-            "৫৬. সূরা আল-ওয়াকিয়াহ (৯৬ আয়াত)",
-            "৬৭. সূরা আল-মুলক (৩০ আয়াত)"
+            TilawatSurahItem("১. সূরা আল-ফাতিহা (৭ আয়াত)", "001"),
+            TilawatSurahItem("২. সূরা আল-বাকারা — আয়াতুল কুরসি", "002"),
+            TilawatSurahItem("১৮. সূরা আল-কাহফ (১১০ আয়াত)", "018"),
+            TilawatSurahItem("৩৬. সূরা ইয়াসিন (৮৩ আয়াত)", "036"),
+            TilawatSurahItem("৫৫. সূরা আর-রহমান (৭৮ আয়াত)", "055"),
+            TilawatSurahItem("৫৬. সূরা আল-ওয়াকিয়াহ (৯৬ আয়াত)", "056"),
+            TilawatSurahItem("৬৭. সূরা আল-মুলক (৩০ আয়াত)", "067")
         )
     }
-    var selectedQariIndex by remember { mutableIntStateOf(0) }
-    var activePlayingSurah by remember { mutableStateOf<String?>(null) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color.White,
-        modifier = Modifier.testTag("tilawat_audio_section_dialog"),
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Headphones,
-                    contentDescription = null,
-                    tint = QawmiDeepGreen,
-                    modifier = Modifier.size(24.dp)
+    var selectedQariIndex by rememberSaveable { mutableIntStateOf(0) }
+    var activePlayingSurah by rememberSaveable { mutableStateOf<String?>(null) }
+    val mediaPlayerRef = remember { mutableStateOf<MediaPlayer?>(null) }
+
+    fun stopCurrentAudio() {
+        runCatching {
+            mediaPlayerRef.value?.let { player ->
+                if (player.isPlaying) {
+                    player.stop()
+                }
+                player.release()
+            }
+        }
+        mediaPlayerRef.value = null
+    }
+
+    fun startSurahAudio(qari: TilawatQariItem, surah: TilawatSurahItem) {
+        stopCurrentAudio()
+        val audioUrl = "https://download.quranicaudio.com/quran/${qari.streamFolder}/${surah.surahCode}.mp3"
+        runCatching {
+            val mp = MediaPlayer().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .build()
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Column {
-                    Text(
-                        text = "অডিও তিলাওয়াত ও ক্বারী বিভাগ",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = QawmiDeepGreen,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "বিশ্ববরেণ্য ক্বারীদের কণ্ঠে পবিত্র কোরআন তিলাওয়াত শ্রবণ",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = QawmiTextSecondary
-                    )
+                setDataSource(audioUrl)
+                setOnPreparedListener { it.start() }
+                setOnCompletionListener {
+                    activePlayingSurah = null
+                }
+                setOnErrorListener { _, _, _ ->
+                    true
+                }
+                prepareAsync()
+            }
+            mediaPlayerRef.value = mp
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            stopCurrentAudio()
+        }
+    }
+
+    val selectedQari = qariList.getOrElse(selectedQariIndex) { qariList.first() }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF4F9F6))
+            .testTag("tilawat_full_screen_page"),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Header Banner inside Full-Screen Content Area
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("tilawat_audio_section_dialog"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = QawmiDeepGreen)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        modifier = Modifier.size(44.dp),
+                        shape = CircleShape,
+                        color = Color.White.copy(alpha = 0.14f)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Headphones,
+                                contentDescription = null,
+                                tint = QawmiGold,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "অডিও তিলাওয়াত ও ক্বারী বিভাগ",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "বিশ্ববরেণ্য ক্বারীদের কণ্ঠে পবিত্র কোরআন তিলাওয়াত শ্রবণ",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.88f)
+                        )
+                    }
                 }
             }
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = "ক্বারী নির্বাচন করুন:",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = QawmiDeepGreen,
-                    fontWeight = FontWeight.Bold
-                )
-                qariList.forEachIndexed { idx, (qariName, qariDesc) ->
-                    val selected = selectedQariIndex == idx
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = if (selected) Color(0xFFE8F5E9) else Color(0xFFF7FAF8),
+        }
+
+        // Active Playing Status Bar (when a Surah is selected/playing)
+        if (activePlayingSurah != null) {
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, QawmiGold, RoundedCornerShape(14.dp)),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB))
+                ) {
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .border(
-                                width = 1.dp,
-                                color = if (selected) QawmiDeepGreen else QawmiMintBorder,
-                                shape = RoundedCornerShape(10.dp)
-                            )
-                            .clickable { selectedQariIndex = idx }
-                            .testTag("tilawat_qari_option_$idx")
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                            modifier = Modifier.weight(1f),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = if (selected) Icons.Default.CheckCircle else Icons.Default.GraphicEq,
+                                imageVector = Icons.Default.GraphicEq,
                                 contentDescription = null,
-                                tint = if (selected) QawmiDeepGreen else QawmiGold,
-                                modifier = Modifier.size(16.dp)
+                                tint = QawmiDeepGreen,
+                                modifier = Modifier.size(22.dp)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = qariName,
-                                    fontSize = 12.sp,
+                                    text = "চলমান তিলাওয়াত: $activePlayingSurah",
+                                    fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = QawmiTextDark
+                                    color = QawmiDeepGreen
                                 )
                                 Text(
-                                    text = qariDesc,
-                                    fontSize = 10.sp,
+                                    text = "ক্বারী: ${selectedQari.nameBangla} (${selectedQari.introBangla})",
+                                    fontSize = 11.5.sp,
                                     color = QawmiTextSecondary
                                 )
                             }
                         }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "নির্বাচিত সূরা তিলাওয়াত:",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = QawmiDeepGreen,
-                    fontWeight = FontWeight.Bold
-                )
-                featuredSurahs.take(4).forEachIndexed { sIdx, surahTitle ->
-                    val isPlaying = activePlayingSurah == surahTitle
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (isPlaying) QawmiDeepGreen else Color(0xFFF3F8F5),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                activePlayingSurah = if (isPlaying) null else surahTitle
-                            }
-                            .testTag("tilawat_surah_play_row_$sIdx")
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                activePlayingSurah = null
+                                stopCurrentAudio()
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = QawmiDeepGreen),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.testTag("tilawat_stop_active_btn")
                         ) {
-                            Text(
-                                text = surahTitle,
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (isPlaying) Color.White else QawmiTextDark
-                            )
                             Icon(
-                                imageVector = if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
-                                contentDescription = null,
-                                tint = if (isPlaying) QawmiGold else QawmiDeepGreen,
-                                modifier = Modifier.size(18.dp)
+                                imageVector = Icons.Default.Stop,
+                                contentDescription = "তিলাওয়াত থামান",
+                                tint = QawmiGold,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "থামান",
+                                fontSize = 12.sp,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
                 }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = onDismiss,
-                colors = ButtonDefaults.buttonColors(containerColor = QawmiDeepGreen),
-                modifier = Modifier.testTag("tilawat_dialog_close_btn")
+        }
+
+        // Section 1: 4 Qaris List & Introduction
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, QawmiMintBorder, RoundedCornerShape(16.dp)),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
-                Text("বন্ধ করুন", color = Color.White, fontWeight = FontWeight.Bold)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "ক্বারী নির্বাচন করুন:",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = QawmiDeepGreen,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    qariList.forEachIndexed { idx, qari ->
+                        val selected = selectedQariIndex == idx
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (selected) Color(0xFFE8F5E9) else Color(0xFFF7FAF8),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(
+                                    width = if (selected) 1.5.dp else 1.dp,
+                                    color = if (selected) QawmiDeepGreen else QawmiMintBorder,
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                .clickable {
+                                    selectedQariIndex = idx
+                                    if (activePlayingSurah != null) {
+                                        val currentSurah = featuredSurahs.find { it.titleBangla == activePlayingSurah }
+                                        if (currentSurah != null) {
+                                            startSurahAudio(qari, currentSurah)
+                                        }
+                                    }
+                                }
+                                .testTag("tilawat_qari_option_$idx")
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    modifier = Modifier.size(34.dp),
+                                    shape = CircleShape,
+                                    color = if (selected) QawmiDeepGreen else Color(0xFFE8F5E9)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = if (selected) Icons.Default.CheckCircle else Icons.Default.GraphicEq,
+                                            contentDescription = null,
+                                            tint = if (selected) QawmiGold else QawmiDeepGreen,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = qari.nameBangla,
+                                        fontSize = 13.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = QawmiTextDark
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = qari.introBangla,
+                                        fontSize = 11.5.sp,
+                                        color = QawmiTextSecondary
+                                    )
+                                }
+                                if (selected) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = QawmiDeepGreen
+                                    ) {
+                                        Text(
+                                            text = "নির্বাচিত",
+                                            fontSize = 10.5.sp,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
-    )
+
+        // Section 2: Selected Surahs List & Play Buttons
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, QawmiMintBorder, RoundedCornerShape(16.dp)),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "নির্বাচিত সূরা তিলাওয়াত:",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = QawmiDeepGreen,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = selectedQari.nameBangla,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = QawmiTextSecondary
+                        )
+                    }
+
+                    featuredSurahs.forEachIndexed { sIdx, surah ->
+                        val isPlaying = activePlayingSurah == surah.titleBangla
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isPlaying) QawmiDeepGreen else Color(0xFFF3F8F5),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(
+                                    width = 1.dp,
+                                    color = if (isPlaying) QawmiGold else QawmiMintBorder,
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                .clickable {
+                                    if (isPlaying) {
+                                        activePlayingSurah = null
+                                        stopCurrentAudio()
+                                    } else {
+                                        activePlayingSurah = surah.titleBangla
+                                        startSurahAudio(selectedQari, surah)
+                                    }
+                                }
+                                .testTag("tilawat_surah_play_row_$sIdx")
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = surah.titleBangla,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (isPlaying) Color.White else QawmiTextDark
+                                    )
+                                    Text(
+                                        text = if (isPlaying) "তিলাওয়াত চলছে — ${selectedQari.nameBangla}" else "ক্বারী: ${selectedQari.nameBangla}",
+                                        fontSize = 11.sp,
+                                        color = if (isPlaying) Color.White.copy(alpha = 0.85f) else QawmiTextSecondary
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = if (isPlaying) QawmiGold else QawmiDeepGreen
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
+                                            contentDescription = if (isPlaying) "Stop" else "Play",
+                                            tint = if (isPlaying) QawmiDeepGreen else Color.White,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = if (isPlaying) "Stop" else "Play",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isPlaying) QawmiDeepGreen else Color.White
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

@@ -385,12 +385,15 @@ class KitabLibrarySystemTest {
             }
         }
 
-        // 1. Clicking "tilawat" must open AudioTilawatSectionDialog, NOT Quran PDF Hub
+        // 1. Clicking "tilawat" must navigate directly to Full-Screen TILAWAT page (NO modal popup or Quran PDF Hub)
         composeTestRule.onNodeWithTag("home_islamic_service_tilawat").performClick()
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag("tilawat_audio_section_dialog").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("tilawat_dialog_close_btn").performClick()
-        composeTestRule.waitForIdle()
+        assertEquals(
+            "Clicking Tilawat must navigate directly to Full-Screen TILAWAT page",
+            MainDestination.TILAWAT,
+            navigatedDestination
+        )
+        navigatedDestination = null
 
         // 2. Clicking "dua" must open DedicatedIslamicServiceDialog("dua"), NOT navigate to AJKER_SMORON
         composeTestRule.onNodeWithTag("home_islamic_service_dua").performClick()
@@ -412,5 +415,26 @@ class KitabLibrarySystemTest {
         composeTestRule.onNodeWithTag("home_islamic_service_hadith").performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("kitab_library_hub_screen").assertIsDisplayed()
+    }
+
+    @Test
+    fun verifyFullAudioTilawatScreen_rendersAllQarisAndSurahsInFullScreen() {
+        composeTestRule.setContent {
+            Box(modifier = Modifier.width(420.dp).height(1400.dp)) {
+                com.example.ui.screens.FullAudioTilawatScreen(
+                    onBackToHome = {}
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("tilawat_full_screen_page").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("tilawat_audio_section_dialog").assertIsDisplayed()
+        for (i in 0..3) {
+            composeTestRule.onNodeWithTag("tilawat_qari_option_$i").assertIsDisplayed()
+        }
+        composeTestRule.onNodeWithTag("tilawat_surah_play_row_0").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("tilawat_surah_play_row_0").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("tilawat_stop_active_btn").assertIsDisplayed()
     }
 }

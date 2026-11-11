@@ -124,6 +124,7 @@ enum class MainDestination {
     NOTIFICATIONS,
     ADMIN_PANEL,
     PRAYER_SCHEDULE,
+    TILAWAT,
     AJKER_SMORON,
     APP_SETTINGS,
     ABOUT_APP,

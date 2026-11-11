@@ -529,6 +529,7 @@ fun MainAppScaffold(
             MainDestination.NOTIFICATIONS -> "নোটিফিকেশন"
             MainDestination.ADMIN_PANEL -> "অ্যাডমিন প্যানেল"
             MainDestination.PRAYER_SCHEDULE -> "নামাজের সময়সূচী"
+            MainDestination.TILAWAT -> "তিলাওয়াত"
             MainDestination.AJKER_SMORON -> "আজকের স্মরণ"
             MainDestination.APP_SETTINGS -> "অ্যাপ সেটিংস"
             MainDestination.ABOUT_APP -> "অ্যাপ সম্পর্কে"
@@ -1351,6 +1352,12 @@ fun MainAppScaffold(
 
                         MainDestination.PRAYER_SCHEDULE -> {
                             FullPrayerScheduleScreen()
+                        }
+
+                        MainDestination.TILAWAT -> {
+                            FullAudioTilawatScreen(
+                                onBackToHome = { viewModel.navigateBack() }
+                            )
                         }
 
                         MainDestination.AJKER_SMORON -> {
