@@ -66,8 +66,21 @@ class KitabLibrarySystemTest {
                 assertTrue(book.authorBangla.isNotBlank())
                 assertTrue(book.translatorOrCompilerBangla.isNotBlank())
                 assertTrue(book.publisherBangla.isNotBlank())
+                assertTrue(
+                    "Book ${book.bookId} must be open-license verified with no copyright lock",
+                    book.isOpenLicenseVerified
+                )
+                assertTrue(
+                    "Book ${book.bookId} must have a valid HTTPS PDF download URL",
+                    book.downloadUrl.startsWith("https://")
+                )
             }
         }
+        val runtimeCatalog = KitabDownloadAndStorageManager.catalogItemsFlow.value
+        assertTrue(
+            "No book in runtime catalog may have REFERENCE_ONLY_NO_LICENSE copyright lock",
+            runtimeCatalog.none { it.downloadStatus == KitabDownloadStatus.REFERENCE_ONLY_NO_LICENSE }
+        )
     }
 
     @Test

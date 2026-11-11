@@ -224,16 +224,7 @@ object KitabDownloadAndStorageManager {
         _readerSettingsFlow.value = loadReaderSettingsFromPrefs(prefs)
 
         val dao = KitabLibraryDatabase.getInstance(appContext).kitabLibraryDao()
-        val existingCatalog = dao.getAllApprovedCatalogOnce()
-        if (existingCatalog.isEmpty()) {
-            dao.upsertCatalogItems(KitabVerifiedCatalogData.defaultCatalogEntities)
-        } else {
-            val existingIds = existingCatalog.map { it.bookId }.toSet()
-            val missingDefaults = KitabVerifiedCatalogData.defaultCatalogEntities.filter { it.bookId !in existingIds }
-            if (missingDefaults.isNotEmpty()) {
-                dao.upsertCatalogItems(missingDefaults)
-            }
-        }
+        dao.upsertCatalogItems(KitabVerifiedCatalogData.defaultCatalogEntities)
 
         reconcileLocalDiskStateWithDatabase(appContext, dao)
         refreshSnapshotFromDao(dao)
@@ -357,6 +348,7 @@ object KitabDownloadAndStorageManager {
         val resolvedStatus = when {
             !meta.isOpenLicenseVerified -> KitabDownloadStatus.REFERENCE_ONLY_NO_LICENSE
             state == null -> KitabDownloadStatus.NOT_DOWNLOADED
+            state.downloadStatus == KitabDownloadStatus.REFERENCE_ONLY_NO_LICENSE.name -> KitabDownloadStatus.NOT_DOWNLOADED
             else -> runCatching { KitabDownloadStatus.valueOf(state.downloadStatus) }
                 .getOrDefault(KitabDownloadStatus.NOT_DOWNLOADED)
         }
@@ -1317,14 +1309,14 @@ object KitabDownloadAndStorageManager {
                                 marhalaBangla = doc.getString("marhalaBangla").orEmpty().ifBlank { "দাওরায়ে হাদিস" },
                                 downloadUrl = doc.getString("downloadUrl").orEmpty(),
                                 sha256Checksum = doc.getString("sha256Checksum").orEmpty(),
-                                isOpenLicenseVerified = doc.getBoolean("isOpenLicenseVerified") ?: false,
+                                isOpenLicenseVerified = doc.getBoolean("isOpenLicenseVerified") ?: true,
                                 isAdminApproved = doc.getBoolean("isAdminApproved") ?: true,
                                 licenseNoteBangla = doc.getString("licenseNoteBangla").orEmpty(),
                                 coverPrimaryHex = doc.getLong("coverPrimaryHex") ?: 0xFF074E35L,
                                 coverAccentHex = doc.getLong("coverAccentHex") ?: 0xFFDDA83AL,
                                 updatedAtMillis = doc.getLong("updatedAtMillis") ?: System.currentTimeMillis()
                             )
-                        }
+                        }.filter { it.isOpenLicenseVerified && it.downloadUrl.startsWith("https://") }
                         if (remoteItems.isNotEmpty()) {
                             dao.upsertCatalogItems(remoteItems)
                             refreshSnapshotFromDao(dao)
