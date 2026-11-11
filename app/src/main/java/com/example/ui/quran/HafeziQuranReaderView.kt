@@ -96,8 +96,8 @@ fun HafeziQuranReaderView(
 
     val safeInitialPage = initialPage.coerceIn(1, HafeziQuranIndexData.TOTAL_MUSHAF_PAGES)
 
-    // Default to Horizontal Full-Page PDF Swipe mode (with 1-tap toggle to Vertical Continuous Scroll in top bar)
-    var isVerticalScrollMode by rememberSaveable { mutableStateOf(false) }
+    // Default to Vertical Continuous Scroll mode (matching the reference Hafezi Quran screenshot where (01:03) flows into (01:04) below it)
+    var isVerticalScrollMode by rememberSaveable { mutableStateOf(true) }
 
     val lazyListState = rememberLazyListState(
         initialFirstVisibleItemIndex = (safeInitialPage - 1).coerceAtLeast(0)
