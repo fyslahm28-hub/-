@@ -42,12 +42,18 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -1507,36 +1513,101 @@ enum class PdfReaderScrollDirection {
 }
 
 enum class PdfReaderFitMode {
-    FIT_WIDTH,
-    FIT_PAGE
+    FIT_PAGE,
+    FIT_WIDTH
+}
+
+internal fun Int.toBanglaDigitsString(): String {
+    val banglaDigits = charArrayOf('০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯')
+    return this.toString().map { ch ->
+        if (ch in '0'..'9') banglaDigits[ch - '0'] else ch
+    }.joinToString("")
+}
+
+internal fun formatPdfPageIndicatorBangla(currentPage: Int, totalPages: Int): String {
+    val safePage = currentPage.coerceAtLeast(1)
+    val safeTotal = totalPages.coerceAtLeast(1)
+    return "${safePage.toBanglaDigitsString()} / ${safeTotal.toBanglaDigitsString()}"
 }
 
 /**
- * ৩. অ্যাপের নিজস্ব ফুল-স্ক্রিন নেটিভ পিডিএফ রিডার:
- * - ডান থেকে বামে Swipe করলে পরবর্তী পৃষ্ঠা, বাম থেকে ডানে Swipe করলে আগের পৃষ্ঠা
- * - আঙুল দিয়ে উপরে-নিচে স্ক্রল ও সোয়াইপ করে স্বাভাবিকভাবে পরবর্তী ও আগের পৃষ্ঠায় যাওয়া যায়
- * - Previous ও Next Button কার্যকর
- * - সম্পূর্ণ স্ক্রিন ব্যবহার এবং আসল পেজের অনুপাত ঠিক রেখে অতিরিক্ত সাদা অংশ সুষমভাবে কমিয়ে বড় ও পরিষ্কার লেখা প্রদর্শন
- * - Fit to Width, Fit to Page, Pinch to Zoom ও Double Tap Zoom
- * - Full Screen Mode এবং Swipe ও Zoom-এর মধ্যে শূন্য সংঘর্ষ (Zero Gesture Conflict)
+ * অ্যাপের নিজস্ব আধুনিক ফুল-স্ক্রিন নেটিভ পিডিএফ রিডার:
+ * ১. Android WindowInsets, System Bars (Status Bar ও Gesture/Three-Button Navigation Bar) ও Display Cutout নিরাপদভাবে হ্যান্ডেল করা হয়েছে।
+ * ২. PDF পৃষ্ঠা স্বাভাবিক অনুপাতে ডিফল্টে Fit Page মোডে সম্পূর্ণ প্রদর্শিত হয় যেন কোনো পাশ বা লেখা কেটে না যায়; প্রয়োজনে Fit Width ও Zoom সুবিধা রয়েছে।
+ * ৩. নিচের “পূর্ববর্তী পৃষ্ঠা” ও “পরবর্তী পৃষ্ঠা” বাটন এবং লেখা সম্পূর্ণ বাদ দেওয়া হয়েছে।
+ * ৪. শুধু আঙুল দিয়ে ডানে-বামে Swipe করলেই আগের ও পরের পৃষ্ঠায় মসৃণভাবে যাওয়া যায় এবং Android System Back Gesture-এর সাথে কোনো সংঘর্ষ হয় না।
+ * ৫. নিচে শুধু ছোট ও পরিষ্কার বাংলা Page Indicator (যেমন: ১ / ৫২৮) রয়েছে।
+ * ৬. স্ক্রিনে একবার Tap করলে উপরের ও নিচের Toolbar Hide হয় এবং আবার Tap করলে ফিরে আসে।
+ * ৭. বর্তমান অ্যাপের সবুজ-সোনালি (Deep Green & Gold) থিম বজায় রাখা হয়েছে।
  */
 @Composable
 internal fun IslamicBookNativePdfReaderScreen(
     book: IslamicBookCatalogItem,
     volumeNumber: Int,
     bookManager: IslamicBookManager,
-    onBackToDetails: () -> Unit
+    onBackToDetails: () -> Unit,
+    simulatedStatusBarHeightDp: Dp = 28.dp,
+    simulatedNavigationBarHeightDp: Dp = 24.dp,
+    simulatedCutoutHorizontalDp: Dp = 0.dp
 ) {
+    BackHandler(onBack = onBackToDetails)
+
+    val view = LocalView.current
+    val density = LocalDensity.current
+    val layoutDirection = LocalLayoutDirection.current
+
+    val statusAndCutoutInsets = WindowInsets.statusBars.union(WindowInsets.displayCutout)
+    val navAndCutoutInsets = WindowInsets.navigationBars
+        .union(WindowInsets.systemBars)
+        .union(WindowInsets.displayCutout)
+
+    val rootWindowInsets = remember(view) {
+        ViewCompat.getRootWindowInsets(view)
+    }
+    val systemBarInsetsCompat = rootWindowInsets?.getInsetsIgnoringVisibility(
+        WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+    )
+
+    val topSafeInsetDp = with(density) {
+        val composeTopPx = statusAndCutoutInsets.getTop(this)
+        val compatTopPx = systemBarInsetsCompat?.top ?: 0
+        val androidResStatusId = view.resources.getIdentifier("status_bar_height", "dimen", "android")
+        val resStatusPx = if (androidResStatusId > 0) view.resources.getDimensionPixelSize(androidResStatusId) else 0
+        maxOf(composeTopPx, compatTopPx, resStatusPx).toDp()
+    }.coerceAtLeast(simulatedStatusBarHeightDp).coerceAtLeast(28.dp)
+
+    val bottomSafeInsetDp = with(density) {
+        val composeBottomPx = navAndCutoutInsets.getBottom(this)
+        val compatBottomPx = systemBarInsetsCompat?.bottom ?: 0
+        val androidResNavId = view.resources.getIdentifier("navigation_bar_height", "dimen", "android")
+        val resNavPx = if (androidResNavId > 0) view.resources.getDimensionPixelSize(androidResNavId) else 0
+        maxOf(composeBottomPx, compatBottomPx, resNavPx).toDp()
+    }.coerceAtLeast(simulatedNavigationBarHeightDp).coerceAtLeast(16.dp)
+
+    val leftSafeInsetDp = with(density) {
+        val composeLeftPx = statusAndCutoutInsets.union(navAndCutoutInsets).getLeft(this, layoutDirection)
+        val compatLeftPx = systemBarInsetsCompat?.left ?: 0
+        maxOf(composeLeftPx, compatLeftPx).toDp()
+    }.coerceAtLeast(simulatedCutoutHorizontalDp)
+
+    val rightSafeInsetDp = with(density) {
+        val composeRightPx = statusAndCutoutInsets.union(navAndCutoutInsets).getRight(this, layoutDirection)
+        val compatRightPx = systemBarInsetsCompat?.right ?: 0
+        maxOf(composeRightPx, compatRightPx).toDp()
+    }.coerceAtLeast(simulatedCutoutHorizontalDp)
+
     var totalPages by remember { mutableIntStateOf(book.pageCount.coerceAtLeast(1)) }
     var currentPage by remember {
         mutableIntStateOf(bookManager.getLastReadPage(book.bookId, volumeNumber).coerceAtLeast(1))
     }
-    var readingMode by remember { mutableStateOf(PdfReaderScrollDirection.HORIZONTAL) }
-    var fitMode by remember { mutableStateOf(PdfReaderFitMode.FIT_WIDTH) }
-    var isFullScreenMode by remember { mutableStateOf(false) }
+    // ২. ডিফল্টে Fit Page ব্যবহার করা হয়েছে যাতে সম্পূর্ণ পৃষ্ঠা স্বাভাবিক অনুপাতে দেখা যায় এবং কোনো পাশ বা লেখা কেটে না যায়
+    var fitMode by remember { mutableStateOf(PdfReaderFitMode.FIT_PAGE) }
+    // ৬. স্ক্রিনে একবার Tap করলে উপরের ও নিচের Toolbar Hide হবে এবং আবার Tap করলে ফিরে আসবে
+    var areToolbarsVisible by remember { mutableStateOf(true) }
     var zoomScale by remember { mutableFloatStateOf(1f) }
     var panOffsetX by remember { mutableFloatStateOf(0f) }
     var panOffsetY by remember { mutableFloatStateOf(0f) }
+    var swipeDragOffsetX by remember { mutableFloatStateOf(0f) }
     var isNightMode by remember { mutableStateOf(false) }
     var renderedBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var isRendering by remember { mutableStateOf(true) }
@@ -1553,6 +1624,7 @@ internal fun IslamicBookNativePdfReaderScreen(
         zoomScale = 1f
         panOffsetX = 0f
         panOffsetY = 0f
+        swipeDragOffsetX = 0f
     }
 
     LaunchedEffect(book.bookId, volumeNumber, currentPage, isNightMode) {
@@ -1587,8 +1659,9 @@ internal fun IslamicBookNativePdfReaderScreen(
                                 val renderH = (pageH * scale).toInt().coerceAtLeast(1)
                                 val rawBmp = Bitmap.createBitmap(renderW, renderH, Bitmap.Config.ARGB_8888)
                                 rawBmp.eraseColor(bgColor)
+                                // সতর্কতা: PDF-এর মূল পৃষ্ঠা, আরবি-বাংলা লেখা বা বিন্যাস পরিবর্তন না করে অবিকল রেন্ডার করা হচ্ছে
                                 page.render(rawBmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                                rendered = trimPdfOuterWhitespaceSymmetrically(rawBmp, bgColor)
+                                rendered = rawBmp
                             }
                         }
                     }
@@ -1610,160 +1683,208 @@ internal fun IslamicBookNativePdfReaderScreen(
         isRendering = false
     }
 
+    val banglaPageIndicatorText = remember(currentPage, totalPages) {
+        formatPdfPageIndicatorBangla(currentPage, totalPages)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(if (isNightMode) Color(0xFF111827) else Color.White)
+            .background(if (isNightMode) Color(0xFF111827) else Color(0xFFF4F7F5))
             .testTag("islamic_book_pdf_reader_screen")
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Top Reader Bar (hidden in Full Screen Mode to maximize visible area)
-            if (!isFullScreenMode) {
-                Row(
+            // ১, ৬ ও ৭. উপরের পরিচ্ছন্ন সবুজ-সোনালি Toolbar (Status Bar ও Display Cutout-এর নিচে নিরাপদ স্থানে, Tap করলে Hide/Show হয়)
+            if (areToolbarsVisible) {
+                Surface(
+                    color = Color.Transparent,
+                    shadowElevation = 4.dp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(LibDarkGreen)
-                        .padding(horizontal = 6.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(LibDarkGreen, LibDeepGreen)
+                            )
+                        )
+                        .testTag("pdf_reader_top_toolbar")
                 ) {
-                    IconButton(
-                        onClick = onBackToDetails,
-                        modifier = Modifier
-                            .size(38.dp)
-                            .testTag("pdf_reader_back_btn")
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "ফিরে যান",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        // Status Bar & Display Cutout Safe Spacer যেন ঘড়ি, নেটওয়ার্ক বা ব্যাটারি আইকন কখনো লেখার ওপর না পড়ে
+                        Spacer(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(topSafeInsetDp)
+                                .testTag("pdf_reader_status_bar_spacer")
                         )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = book.titleBangla,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "পৃষ্ঠা $currentPage / $totalPages • ${if (readingMode == PdfReaderScrollDirection.HORIZONTAL) "Horizontal" else "Vertical"} • ${if (fitMode == PdfReaderFitMode.FIT_WIDTH) "Fit Width" else "Fit Page"}",
-                            color = LibGold,
-                            fontSize = 10.5.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.testTag("pdf_reader_page_indicator")
-                        )
-                    }
-
-                    // Reading Mode Toggle (Horizontal / Vertical)
-                    IconButton(
-                        onClick = {
-                            readingMode = if (readingMode == PdfReaderScrollDirection.HORIZONTAL) {
-                                PdfReaderScrollDirection.VERTICAL
-                            } else {
-                                PdfReaderScrollDirection.HORIZONTAL
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 52.dp)
+                                .padding(
+                                    start = leftSafeInsetDp + 6.dp,
+                                    end = rightSafeInsetDp + 8.dp,
+                                    top = 4.dp,
+                                    bottom = 6.dp
+                                ),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(
+                                onClick = onBackToDetails,
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .testTag("pdf_reader_back_btn")
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "ফিরে যান",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(22.dp)
+                                )
                             }
-                        },
-                        modifier = Modifier
-                            .size(36.dp)
-                            .testTag("pdf_reader_reading_mode_btn")
-                    ) {
-                        Icon(
-                            imageVector = if (readingMode == PdfReaderScrollDirection.HORIZONTAL)
-                                Icons.Default.SwapHoriz
-                            else
-                                Icons.Default.SwapVert,
-                            contentDescription = "রিডিং মোড পরিবর্তন",
-                            tint = Color.White,
-                            modifier = Modifier.size(19.dp)
-                        )
-                    }
 
-                    // Fit to Width / Fit to Page Toggle
-                    IconButton(
-                        onClick = {
-                            fitMode = if (fitMode == PdfReaderFitMode.FIT_WIDTH) {
-                                PdfReaderFitMode.FIT_PAGE
-                            } else {
-                                PdfReaderFitMode.FIT_WIDTH
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 4.dp)
+                            ) {
+                                Text(
+                                    text = book.titleBangla,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.5.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.testTag("pdf_reader_book_title")
+                                )
+                                Text(
+                                    text = if (fitMode == PdfReaderFitMode.FIT_PAGE) {
+                                        "Fit Page • সম্পূর্ণ পৃষ্ঠা"
+                                    } else {
+                                        "Fit Width • প্রস্থ অনুযায়ী"
+                                    },
+                                    color = LibGold,
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.testTag("pdf_reader_fit_mode_label")
+                                )
                             }
-                            zoomScale = 1f
-                            panOffsetX = 0f
-                            panOffsetY = 0f
-                        },
-                        modifier = Modifier
-                            .size(36.dp)
-                            .testTag("pdf_reader_fit_mode_btn")
-                    ) {
-                        Icon(
-                            imageVector = if (fitMode == PdfReaderFitMode.FIT_WIDTH)
-                                Icons.Default.FitScreen
-                            else
-                                Icons.Default.AspectRatio,
-                            contentDescription = "ফিট মোড পরিবর্তন",
-                            tint = Color.White,
-                            modifier = Modifier.size(19.dp)
-                        )
-                    }
 
-                    // Bookmark Toggle
-                    IconButton(
-                        onClick = {
-                            bookmarks = bookManager.addOrRemoveBookmark(book.bookId, volumeNumber, currentPage)
-                        },
-                        modifier = Modifier
-                            .size(36.dp)
-                            .testTag("pdf_reader_bookmark_btn")
-                    ) {
-                        Icon(
-                            imageVector = if (isCurrentPageBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                            contentDescription = "বুকমার্ক করুন",
-                            tint = if (isCurrentPageBookmarked) LibGold else Color.White,
-                            modifier = Modifier.size(19.dp)
-                        )
-                    }
+                            // Fit Page / Fit Width Toggle Button
+                            Surface(
+                                color = LibDarkGreen.copy(alpha = 0.7f),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(0.8.dp, LibGold.copy(alpha = 0.75f)),
+                                modifier = Modifier
+                                    .padding(end = 4.dp)
+                                    .clickable {
+                                        fitMode = if (fitMode == PdfReaderFitMode.FIT_PAGE) {
+                                            PdfReaderFitMode.FIT_WIDTH
+                                        } else {
+                                            PdfReaderFitMode.FIT_PAGE
+                                        }
+                                        zoomScale = 1f
+                                        panOffsetX = 0f
+                                        panOffsetY = 0f
+                                    }
+                                    .testTag("pdf_reader_fit_mode_btn")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = if (fitMode == PdfReaderFitMode.FIT_PAGE)
+                                            Icons.Default.FitScreen
+                                        else
+                                            Icons.Default.AspectRatio,
+                                        contentDescription = "ফিট মোড পরিবর্তন",
+                                        tint = LibGold,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (fitMode == PdfReaderFitMode.FIT_PAGE) "Fit Page" else "Fit Width",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        softWrap = false,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
 
-                    // Night Mode Toggle
-                    IconButton(
-                        onClick = { isNightMode = !isNightMode },
-                        modifier = Modifier
-                            .size(36.dp)
-                            .testTag("pdf_reader_night_mode_btn")
-                    ) {
-                        Icon(
-                            imageVector = if (isNightMode) Icons.Default.LightMode else Icons.Default.DarkMode,
-                            contentDescription = "থিম পরিবর্তন",
-                            tint = Color.White,
-                            modifier = Modifier.size(19.dp)
-                        )
-                    }
+                            // Zoom In / Reset Toggle Button
+                            IconButton(
+                                onClick = {
+                                    if (zoomScale > 1.05f) {
+                                        zoomScale = 1f
+                                        panOffsetX = 0f
+                                        panOffsetY = 0f
+                                    } else {
+                                        zoomScale = 2.0f
+                                    }
+                                },
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .testTag("pdf_reader_zoom_btn")
+                            ) {
+                                Icon(
+                                    imageVector = if (zoomScale > 1.05f) Icons.Default.ZoomOut else Icons.Default.ZoomIn,
+                                    contentDescription = "জুম পরিবর্তন",
+                                    tint = if (zoomScale > 1.05f) LibGold else Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
 
-                    // Full Screen Mode Toggle
-                    IconButton(
-                        onClick = { isFullScreenMode = true },
-                        modifier = Modifier
-                            .size(36.dp)
-                            .testTag("pdf_reader_fullscreen_btn")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Fullscreen,
-                            contentDescription = "ফুল স্ক্রিন",
-                            tint = LibGold,
-                            modifier = Modifier.size(20.dp)
-                        )
+                            // Bookmark Toggle
+                            IconButton(
+                                onClick = {
+                                    bookmarks = bookManager.addOrRemoveBookmark(book.bookId, volumeNumber, currentPage)
+                                },
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .testTag("pdf_reader_bookmark_btn")
+                            ) {
+                                Icon(
+                                    imageVector = if (isCurrentPageBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                    contentDescription = "বুকমার্ক করুন",
+                                    tint = if (isCurrentPageBookmarked) LibGold else Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            // Night Mode Toggle
+                            IconButton(
+                                onClick = { isNightMode = !isNightMode },
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .testTag("pdf_reader_night_mode_btn")
+                            ) {
+                                Icon(
+                                    imageVector = if (isNightMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                    contentDescription = "থিম পরিবর্তন",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        HorizontalDivider(thickness = 1.dp, color = LibGold.copy(alpha = 0.45f))
                     }
                 }
             }
 
-            // Full-Bleed PDF Page Viewport (0.dp margin, unified conflict-free Vertical Scroll/Swipe + Horizontal Swipe + Pinch/Double-Tap Zoom)
+            // ২, ৪ ও ৬. PDF পৃষ্ঠা প্রদর্শনের মূল Viewport (ডিফল্টে Fit Page, ডানে-বামে Swipe-এ পেজ পরিবর্তন, Tap করলে Toolbar Hide/Show)
             BoxWithConstraints(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(0.dp)
+                    .padding(
+                        top = if (areToolbarsVisible) 4.dp else (topSafeInsetDp + 4.dp),
+                        bottom = if (areToolbarsVisible) 4.dp else (bottomSafeInsetDp + 4.dp),
+                        start = leftSafeInsetDp + 4.dp,
+                        end = rightSafeInsetDp + 4.dp
+                    )
                     .clipToBounds()
                     .testTag("pdf_reader_page_viewport"),
                 contentAlignment = Alignment.Center
@@ -1792,10 +1913,12 @@ internal fun IslamicBookNativePdfReaderScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .pointerInput(readingMode, totalPages, fitMode, unzoomedMaxScrollY) {
-                            val swipeThresholdPx = 38.dp.toPx()
-                            val tapSlopPx = 18.dp.toPx()
+                        .pointerInput(totalPages, fitMode, unzoomedMaxScrollY) {
+                            val swipeThresholdPx = 36.dp.toPx()
+                            val tapSlopPx = 16.dp.toPx()
                             val doubleTapSlopPx = 48.dp.toPx()
+                            // ৪. Android System Back Gesture-এর সাথে সংঘর্ষ এড়াতে বাম ও ডান প্রান্তের Edge Zone বাদ দেওয়া হয়েছে
+                            val systemBackEdgeZonePx = 20.dp.toPx()
                             var lastTapUpTimeMillis = -1L
                             var lastTapUpPosX = 0f
                             var lastTapUpPosY = 0f
@@ -1804,14 +1927,15 @@ internal fun IslamicBookNativePdfReaderScreen(
                                 val firstDown = awaitFirstDown(requireUnconsumed = false)
                                 val downX = firstDown.position.x
                                 val downY = firstDown.position.y
+                                val isSystemBackEdgeGesture = size.width > 160 &&
+                                    (downX < systemBackEdgeZonePx || downX > (size.width - systemBackEdgeZonePx))
+
                                 var lastPosX = downX
                                 var lastPosY = downY
                                 var lastEventUptimeMillis = firstDown.uptimeMillis
                                 var totalDragX = 0f
                                 var totalDragY = 0f
                                 var hadMultiTouch = false
-                                val wasAtTopBeforeDrag = panOffsetY >= unzoomedMaxScrollY - 6f
-                                val wasAtBottomBeforeDrag = panOffsetY <= -unzoomedMaxScrollY + 6f
 
                                 do {
                                     val event = awaitPointerEvent()
@@ -1819,6 +1943,7 @@ internal fun IslamicBookNativePdfReaderScreen(
                                     val activePointers = event.changes.count { it.pressed }
                                     if (activePointers >= 2) {
                                         hadMultiTouch = true
+                                        swipeDragOffsetX = 0f
                                         val zoomChange = event.calculateZoom()
                                         val panChange = event.calculatePan()
                                         val newScale = (zoomScale * zoomChange).coerceIn(1f, 4f)
@@ -1834,7 +1959,7 @@ internal fun IslamicBookNativePdfReaderScreen(
                                             panOffsetY = panOffsetY.coerceIn(-unzoomedMaxScrollY, unzoomedMaxScrollY)
                                         }
                                         event.changes.forEach { if (it.positionChanged()) it.consume() }
-                                    } else if (activePointers == 1 && !hadMultiTouch) {
+                                    } else if (activePointers == 1 && !hadMultiTouch && !isSystemBackEdgeGesture) {
                                         val change = event.changes.firstOrNull { it.pressed }
                                         if (change != null) {
                                             lastPosX = change.position.x
@@ -1852,25 +1977,32 @@ internal fun IslamicBookNativePdfReaderScreen(
                                             panOffsetX = (panOffsetX + panChange.x).coerceIn(-maxPanX, maxPanX)
                                             panOffsetY = (panOffsetY + panChange.y).coerceIn(-maxPanY, maxPanY)
                                             event.changes.forEach { if (it.positionChanged()) it.consume() }
+                                        } else if (abs(totalDragX) > abs(totalDragY) && abs(totalDragX) > tapSlopPx) {
+                                            // ৪. ডানে-বামে মসৃণ সোয়াইপ ফিডব্যাক
+                                            val maxPreviewShift = size.width * 0.22f
+                                            swipeDragOffsetX = (totalDragX * 0.35f).coerceIn(-maxPreviewShift, maxPreviewShift)
+                                            event.changes.forEach { if (it.positionChanged()) it.consume() }
                                         } else if (unzoomedMaxScrollY > 4f && abs(totalDragY) > abs(totalDragX)) {
-                                            // উপরে-নিচে স্ক্রল করার সময় লম্বা পৃষ্ঠা স্বাভাবিকভাবে স্ক্রল হবে
+                                            // Fit Width মোডে লম্বা পৃষ্ঠা উপরে-নিচে স্ক্রল করা যাবে (কিন্তু পেজ পরিবর্তন কেবল ডানে-বামে Swipe-এ হবে)
                                             panOffsetY = (panOffsetY + panChange.y).coerceIn(-unzoomedMaxScrollY, unzoomedMaxScrollY)
                                             event.changes.forEach { if (it.positionChanged()) it.consume() }
                                         }
                                     }
                                 } while (event.changes.any { it.pressed })
 
+                                swipeDragOffsetX = 0f
                                 val upTime = lastEventUptimeMillis
                                 val moveDist = kotlin.math.hypot(totalDragX.toDouble(), totalDragY.toDouble()).toFloat()
 
-                                if (!hadMultiTouch && moveDist < tapSlopPx) {
+                                if (!hadMultiTouch && !isSystemBackEdgeGesture && moveDist < tapSlopPx) {
                                     val dt = if (lastTapUpTimeMillis >= 0L) upTime - lastTapUpTimeMillis else -1L
                                     val tapDist = kotlin.math.hypot(
                                         (lastPosX - lastTapUpPosX).toDouble(),
                                         (lastPosY - lastTapUpPosY).toDouble()
                                     ).toFloat()
                                     if (dt in 0..400 && tapDist < doubleTapSlopPx) {
-                                        // Double-Tap Zoom toggle
+                                        // Double-Tap Zoom toggle (এবং প্রথম ট্যাপে পরিবর্তিত Toolbar দৃশ্যমানতা পূর্বাবস্থায় ফিরিয়ে আনা)
+                                        areToolbarsVisible = !areToolbarsVisible
                                         if (zoomScale > 1.05f) {
                                             zoomScale = 1f
                                             panOffsetX = 0f
@@ -1880,26 +2012,20 @@ internal fun IslamicBookNativePdfReaderScreen(
                                         }
                                         lastTapUpTimeMillis = -1L
                                     } else {
+                                        // ৬. স্ক্রিনে একবার Tap করলে উপরের ও নিচের Toolbar Hide হবে এবং আবার Tap করলে ফিরে আসবে
+                                        areToolbarsVisible = !areToolbarsVisible
                                         lastTapUpTimeMillis = upTime
                                         lastTapUpPosX = lastPosX
                                         lastTapUpPosY = lastPosY
                                     }
-                                } else if (!hadMultiTouch && zoomScale <= 1.05f) {
-                                    // ডানে-বামে সোয়াইপ এবং উপরে-নিচে স্ক্রল/সোয়াইপ উভয়ই স্বাভাবিকভাবে পরবর্তী ও আগের পৃষ্ঠায় নিয়ে যাবে
-                                    if (abs(totalDragX) >= abs(totalDragY) && abs(totalDragX) >= swipeThresholdPx) {
+                                } else if (!hadMultiTouch && !isSystemBackEdgeGesture && zoomScale <= 1.05f) {
+                                    // ৪. শুধু আঙুল দিয়ে ডানে-বামে Swipe করলেই আগের ও পরের পৃষ্ঠায় যাওয়া যাবে
+                                    if (abs(totalDragX) > abs(totalDragY) * 1.15f && abs(totalDragX) >= swipeThresholdPx) {
                                         if (totalDragX < 0f && currentPage < totalPages) {
                                             // ডান থেকে বামে Swipe -> পরবর্তী পৃষ্ঠা
                                             currentPage += 1
                                         } else if (totalDragX > 0f && currentPage > 1) {
                                             // বাম থেকে ডানে Swipe -> আগের পৃষ্ঠা
-                                            currentPage -= 1
-                                        }
-                                    } else if (abs(totalDragY) > abs(totalDragX) && abs(totalDragY) >= swipeThresholdPx) {
-                                        if (totalDragY < 0f && (wasAtBottomBeforeDrag || unzoomedMaxScrollY <= 4f) && currentPage < totalPages) {
-                                            // নিচ থেকে উপরে স্ক্রল/সোয়াইপ -> পরবর্তী পৃষ্ঠা
-                                            currentPage += 1
-                                        } else if (totalDragY > 0f && (wasAtTopBeforeDrag || unzoomedMaxScrollY <= 4f) && currentPage > 1) {
-                                            // উপর থেকে নিচে স্ক্রল/সোয়াইপ -> আগের পৃষ্ঠা
                                             currentPage -= 1
                                         }
                                     }
@@ -1922,7 +2048,7 @@ internal fun IslamicBookNativePdfReaderScreen(
                                 .graphicsLayer(
                                     scaleX = zoomScale,
                                     scaleY = zoomScale,
-                                    translationX = panOffsetX,
+                                    translationX = panOffsetX + swipeDragOffsetX,
                                     translationY = panOffsetY
                                 )
                                 .testTag("pdf_reader_rendered_page")
@@ -1937,128 +2063,56 @@ internal fun IslamicBookNativePdfReaderScreen(
                 }
             }
 
-            // Bottom Page Controls (Previous & Next Buttons remain active)
-            if (!isFullScreenMode) {
-                Row(
+            // ৩, ৫, ৬ ও ৭. নিচের সংক্ষিপ্ত ও পরিষ্কার Page Indicator (যেমন: ১ / ৫২৮) — কোনো পূর্ববর্তী/পরবর্তী বাটন ছাড়া এবং Navigation Bar-এর উপরে নিরাপদ স্থানে
+            if (areToolbarsVisible) {
+                Surface(
+                    color = LibDarkGreen,
+                    shadowElevation = 4.dp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(LibDarkGreen)
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .testTag("pdf_reader_bottom_bar")
                 ) {
-                    Button(
-                        onClick = { if (currentPage > 1) currentPage -= 1 },
-                        enabled = currentPage > 1,
-                        colors = ButtonDefaults.buttonColors(containerColor = LibDeepGreen),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                        modifier = Modifier
-                            .height(38.dp)
-                            .testTag("pdf_reader_prev_page_btn")
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Text("পূর্ববর্তী পৃষ্ঠা", fontSize = 12.sp, softWrap = false, maxLines = 1)
-                    }
-
-                    Text(
-                        text = "পৃষ্ঠা $currentPage / $totalPages (${(zoomScale * 100).toInt()}%)",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
-                        softWrap = false,
-                        maxLines = 1,
-                        modifier = Modifier.testTag("pdf_reader_bottom_page_zoom_text")
-                    )
-
-                    Button(
-                        onClick = { if (currentPage < totalPages) currentPage += 1 },
-                        enabled = currentPage < totalPages,
-                        colors = ButtonDefaults.buttonColors(containerColor = LibDeepGreen),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                        modifier = Modifier
-                            .height(38.dp)
-                            .testTag("pdf_reader_next_page_btn")
-                    ) {
-                        Text("পরবর্তী পৃষ্ঠা", fontSize = 12.sp, softWrap = false, maxLines = 1)
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(18.dp))
-                    }
-                }
-            }
-        }
-
-        // Floating Minimal Controls when in Full Screen Mode
-        if (isFullScreenMode) {
-            Surface(
-                color = LibDarkGreen.copy(alpha = 0.85f),
-                shape = RoundedCornerShape(18.dp),
-                border = BorderStroke(0.8.dp, LibGold),
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(8.dp)
-                    .clickable { isFullScreenMode = false }
-                    .testTag("pdf_reader_exit_fullscreen_btn")
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.FullscreenExit,
-                        contentDescription = "ফুল স্ক্রিন বন্ধ করুন",
-                        tint = LibGold,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "$currentPage/$totalPages",
-                        color = Color.White,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        softWrap = false,
-                        maxLines = 1,
-                        modifier = Modifier.testTag("pdf_reader_page_indicator")
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    color = LibDarkGreen.copy(alpha = 0.82f),
-                    shape = CircleShape,
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clickable(enabled = currentPage > 1) { if (currentPage > 1) currentPage -= 1 }
-                        .testTag("pdf_reader_prev_page_btn")
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                            contentDescription = "আগের পৃষ্ঠা",
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-                Surface(
-                    color = LibDarkGreen.copy(alpha = 0.82f),
-                    shape = CircleShape,
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clickable(enabled = currentPage < totalPages) { if (currentPage < totalPages) currentPage += 1 }
-                        .testTag("pdf_reader_next_page_btn")
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = "পরের পৃষ্ঠা",
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp)
+                        HorizontalDivider(thickness = 0.8.dp, color = LibGold.copy(alpha = 0.4f))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    start = leftSafeInsetDp + 16.dp,
+                                    end = rightSafeInsetDp + 16.dp,
+                                    top = 6.dp,
+                                    bottom = 6.dp
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Surface(
+                                color = LibDeepGreen,
+                                shape = RoundedCornerShape(16.dp),
+                                border = BorderStroke(1.dp, LibGold.copy(alpha = 0.8f)),
+                                modifier = Modifier.testTag("pdf_reader_bottom_page_indicator_pill")
+                            ) {
+                                Text(
+                                    text = banglaPageIndicatorText,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    softWrap = false,
+                                    maxLines = 1,
+                                    modifier = Modifier
+                                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                                        .testTag("pdf_reader_page_indicator")
+                                )
+                            }
+                        }
+                        // System Navigation Bar (Gesture Bar / Three-Button Navigation Bar) Safe Spacer
+                        Spacer(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(bottomSafeInsetDp)
+                                .testTag("pdf_reader_navigation_bar_spacer")
                         )
                     }
                 }

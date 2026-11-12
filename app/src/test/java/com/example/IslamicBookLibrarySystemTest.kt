@@ -6,6 +6,7 @@ import android.graphics.Color
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -287,7 +288,11 @@ class IslamicBookLibrarySystemTest {
     }
 
     @Test
-    fun test06_problem3_pdfReaderSwipeNavigation_fullScreenMode_andZeroSwipeZoomConflict() = runBlocking {
+    fun test06_problem3_pdfReaderSwipeNavigation_fitPageDefault_singleTapToolbarToggle_andNoBottomButtons(): Unit = runBlocking {
+        // Verify Bangla page indicator formatting (যেমন: ১ / ৫২৮)
+        assertEquals("১ / ৫২৮", formatPdfPageIndicatorBangla(1, 528))
+        assertEquals("১২ / ৩৪০", formatPdfPageIndicatorBangla(12, 340))
+
         val sampleBook = seedAdminUploadedBook(
             titleBangla = "সহিহ বুখারী",
             category = IslamicBookCategory.HADITH_SHARAH
@@ -315,52 +320,56 @@ class IslamicBookLibrarySystemTest {
         composeTestRule.onNodeWithTag("pdf_reader_rendered_page").assertIsDisplayed()
         assertEquals(1, bookManager.getLastReadPage(sampleBook.bookId, 1))
 
-        // 1. Right-to-Left Swipe (swipeLeft) -> Next Page (Page 2)
+        // Requirement 2: Default mode must be Fit Page ("Fit Page • সম্পূর্ণ পৃষ্ঠা")
+        composeTestRule.onNodeWithTag("pdf_reader_fit_mode_label", useUnmergedTree = true)
+            .assertIsDisplayed()
+            .assertTextContains("Fit Page", substring = true)
+
+        // Requirement 3 & 5: Bottom "পূর্ববর্তী পৃষ্ঠা" & "পরবর্তী পৃষ্ঠা" buttons must NOT exist; only clean Bangla Page Indicator exists
+        composeTestRule.onNodeWithTag("pdf_reader_prev_page_btn").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("pdf_reader_next_page_btn").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("pdf_reader_page_indicator", useUnmergedTree = true)
+            .assertIsDisplayed()
+            .assertTextContains("১ /", substring = true)
+
+        // Requirement 4: Right-to-Left Swipe (swipeLeft) -> Next Page (Page 2)
         composeTestRule.onNodeWithTag("pdf_reader_page_viewport").performTouchInput {
-            swipeLeft(startX = right * 0.85f, endX = left + width * 0.15f, durationMillis = 200)
+            swipeLeft(startX = right * 0.80f, endX = left + width * 0.20f, durationMillis = 200)
         }
         composeTestRule.waitForIdle()
         assertEquals("Right-to-Left swipe must advance to Page 2", 2, bookManager.getLastReadPage(sampleBook.bookId, 1))
+        composeTestRule.onNodeWithTag("pdf_reader_page_indicator", useUnmergedTree = true)
+            .assertTextContains("২ /", substring = true)
 
-        // 2. Left-to-Right Swipe (swipeRight) -> Previous Page (Page 1)
+        // Requirement 4: Left-to-Right Swipe (swipeRight) -> Previous Page (Page 1)
         composeTestRule.onNodeWithTag("pdf_reader_page_viewport").performTouchInput {
-            swipeRight(startX = left + width * 0.15f, endX = right * 0.85f, durationMillis = 200)
+            swipeRight(startX = left + width * 0.20f, endX = right * 0.80f, durationMillis = 200)
         }
         composeTestRule.waitForIdle()
         assertEquals("Left-to-Right swipe must return to Page 1", 1, bookManager.getLastReadPage(sampleBook.bookId, 1))
 
-        // 2b. Bottom-to-Top Vertical Scroll/Swipe (swipeUp) -> Next Page (Page 2) naturally without mode toggle
+        // Requirement 4: Vertical swipe must NOT change page (only Left-Right swipe changes page)
         composeTestRule.onNodeWithTag("pdf_reader_page_viewport").performTouchInput {
-            swipeUp(startY = bottom * 0.85f, endY = top + height * 0.15f, durationMillis = 200)
+            swipeUp(startY = bottom * 0.80f, endY = top + height * 0.20f, durationMillis = 200)
         }
         composeTestRule.waitForIdle()
-        assertEquals("Vertical Upward scroll/swipe must advance to Page 2", 2, bookManager.getLastReadPage(sampleBook.bookId, 1))
+        assertEquals("Vertical swipe must NOT flip pages; only Left-Right swipe flips pages", 1, bookManager.getLastReadPage(sampleBook.bookId, 1))
 
-        // 2c. Top-to-Bottom Vertical Scroll/Swipe (swipeDown) -> Previous Page (Page 1) naturally without mode toggle
+        // Requirement 4: Android System Back Gesture edge zone (startX within 20.dp of screen edge) must NOT conflict with or trigger page swipe
         composeTestRule.onNodeWithTag("pdf_reader_page_viewport").performTouchInput {
-            swipeDown(startY = top + height * 0.15f, endY = bottom * 0.85f, durationMillis = 200)
+            swipeLeft(startX = right - 4f, endX = left + width * 0.20f, durationMillis = 200)
         }
         composeTestRule.waitForIdle()
-        assertEquals("Vertical Downward scroll/swipe must return to Page 1", 1, bookManager.getLastReadPage(sampleBook.bookId, 1))
+        assertEquals("Edge back gesture must not trigger page flip", 1, bookManager.getLastReadPage(sampleBook.bookId, 1))
 
-        // 3. Previous and Next Page buttons also remain active and work
-        composeTestRule.onNodeWithTag("pdf_reader_next_page_btn").assertIsDisplayed().performClick()
-        composeTestRule.waitForIdle()
-        assertEquals("Next button must advance to Page 2", 2, bookManager.getLastReadPage(sampleBook.bookId, 1))
-
-        composeTestRule.onNodeWithTag("pdf_reader_prev_page_btn").assertIsDisplayed().performClick()
-        composeTestRule.waitForIdle()
-        assertEquals("Previous button must return to Page 1", 1, bookManager.getLastReadPage(sampleBook.bookId, 1))
-
-        // 4. Double-Tap Zoom -> zooms in to 225%, and while zoomed in, swiping pans the page WITHOUT flipping to Page 2!
+        // Requirement 2 & 4: Double-Tap Zoom -> zooms in to 225%, and while zoomed in, swiping pans the page WITHOUT flipping to Page 2!
         composeTestRule.onNodeWithTag("pdf_reader_page_viewport").performTouchInput {
             doubleClick()
         }
         composeTestRule.waitForIdle()
 
-        // Swipe left while zoomed in -> must pan, NOT flip to page 2
         composeTestRule.onNodeWithTag("pdf_reader_page_viewport").performTouchInput {
-            swipeLeft(startX = right * 0.85f, endX = left + width * 0.15f, durationMillis = 200)
+            swipeLeft(startX = right * 0.80f, endX = left + width * 0.20f, durationMillis = 200)
         }
         composeTestRule.waitForIdle()
         assertEquals(
@@ -375,17 +384,104 @@ class IslamicBookLibrarySystemTest {
         }
         composeTestRule.waitForIdle()
 
-        // 5. Fit Mode (Fit to Width <-> Fit to Page), Reading Mode (Horizontal <-> Vertical), and Full Screen Mode toggles
+        // Requirement 2: Fit Mode toggle (Fit Page <-> Fit Width) and Zoom button work
         composeTestRule.onNodeWithTag("pdf_reader_fit_mode_btn").assertIsDisplayed().performClick()
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag("pdf_reader_reading_mode_btn").assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithTag("pdf_reader_fit_mode_label", useUnmergedTree = true)
+            .assertTextContains("Fit Width", substring = true)
+
+        composeTestRule.onNodeWithTag("pdf_reader_fit_mode_btn").assertIsDisplayed().performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("pdf_reader_fit_mode_label", useUnmergedTree = true)
+            .assertTextContains("Fit Page", substring = true)
+
+        // Requirement 6: Single tap on PDF viewport hides Top & Bottom Toolbars; another single tap brings them back
+        composeTestRule.mainClock.advanceTimeBy(600)
+        composeTestRule.onNodeWithTag("pdf_reader_page_viewport").performTouchInput {
+            click(center)
+        }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("pdf_reader_top_toolbar").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("pdf_reader_bottom_bar").assertDoesNotExist()
+
+        composeTestRule.mainClock.advanceTimeBy(600)
+        composeTestRule.onNodeWithTag("pdf_reader_page_viewport").performTouchInput {
+            click(center)
+        }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("pdf_reader_top_toolbar").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("pdf_reader_bottom_bar").assertIsDisplayed()
+        Unit
+    }
+
+    @Test
+    fun test09_windowInsets_systemBars_displayCutout_threeButtonAndGestureNav_multiScreenSizeVerification(): Unit = runBlocking {
+        val sampleBook = seedAdminUploadedBook(
+            titleBangla = "হ্যারি পটার ও ইসলামিক সাহিত্য সংকলন",
+            category = IslamicBookCategory.ISLAMIC_HISTORY
+        )
+        bookManager.downloadBookSynchronously(sampleBook, 1)
+
+        var screenWidthDp by androidx.compose.runtime.mutableStateOf(360.dp)
+        var screenHeightDp by androidx.compose.runtime.mutableStateOf(640.dp)
+        var statusBarDp by androidx.compose.runtime.mutableStateOf(36.dp) // Punch-hole / Cutout Status Bar
+        var navBarDp by androidx.compose.runtime.mutableStateOf(48.dp)    // Three-Button Navigation Bar
+
+        composeTestRule.setContent {
+            Box(modifier = Modifier.width(screenWidthDp).height(screenHeightDp)) {
+                IslamicBookNativePdfReaderScreen(
+                    book = sampleBook,
+                    volumeNumber = 1,
+                    bookManager = bookManager,
+                    onBackToDetails = {},
+                    simulatedStatusBarHeightDp = statusBarDp,
+                    simulatedNavigationBarHeightDp = navBarDp
+                )
+            }
+        }
         composeTestRule.waitForIdle()
 
-        // Enter Full Screen Mode and verify exit button appears
-        composeTestRule.onNodeWithTag("pdf_reader_fullscreen_btn").assertIsDisplayed().performClick()
+        // 1. Compact Phone (360x640) + Three-Button Navigation (48.dp) + Cutout Status Bar (36.dp)
+        val backBtnBounds1 = composeTestRule.onNodeWithTag("pdf_reader_back_btn").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val titleBounds1 = composeTestRule.onNodeWithTag("pdf_reader_book_title").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val fitBtnBounds1 = composeTestRule.onNodeWithTag("pdf_reader_fit_mode_btn").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val pillBounds1 = composeTestRule.onNodeWithTag("pdf_reader_bottom_page_indicator_pill").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+
+        assertTrue("Top Back button must sit completely below Status Bar / Cutout (>= 36px)", backBtnBounds1.top >= 35f)
+        assertTrue("Book Title must sit completely below Status Bar / Cutout (>= 36px)", titleBounds1.top >= 35f)
+        assertTrue("Fit Mode button must sit completely below Status Bar / Cutout (>= 36px)", fitBtnBounds1.top >= 35f)
+        assertTrue(
+            "Bottom Page Indicator pill must sit completely above Three-Button Navigation Bar (<= 640 - 48 = 592px)",
+            pillBounds1.bottom <= (640f - 47f)
+        )
+
+        // 2. Standard Tall Phone (412x915) + Gesture Navigation (24.dp) + Status Bar (32.dp)
+        screenWidthDp = 412.dp
+        screenHeightDp = 915.dp
+        statusBarDp = 32.dp
+        navBarDp = 24.dp
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag("pdf_reader_exit_fullscreen_btn").assertIsDisplayed().performClick()
+
+        val backBtnBounds2 = composeTestRule.onNodeWithTag("pdf_reader_back_btn").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val pillBounds2 = composeTestRule.onNodeWithTag("pdf_reader_bottom_page_indicator_pill").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertTrue("Top Back button must sit below Gesture phone Status Bar (>= 32px)", backBtnBounds2.top >= 31f)
+        assertTrue(
+            "Bottom Page Indicator pill must sit above Gesture Navigation Bar (<= 915 - 24 = 891px)",
+            pillBounds2.bottom <= (915f - 23f)
+        )
+
+        // 3. Large Screen / Tablet (600x1024) + Three-Button Navigation (48.dp)
+        screenWidthDp = 600.dp
+        screenHeightDp = 1024.dp
+        statusBarDp = 28.dp
+        navBarDp = 48.dp
         composeTestRule.waitForIdle()
+
+        val pageBounds3 = composeTestRule.onNodeWithTag("pdf_reader_rendered_page").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val topToolbarBounds3 = composeTestRule.onNodeWithTag("pdf_reader_top_toolbar").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val bottomBarBounds3 = composeTestRule.onNodeWithTag("pdf_reader_bottom_bar").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertTrue("Rendered PDF page must never overlap Top Toolbar", pageBounds3.top >= topToolbarBounds3.bottom - 1f)
+        assertTrue("Rendered PDF page must never overlap Bottom Page Indicator Bar", pageBounds3.bottom <= bottomBarBounds3.top + 1f)
     }
 
     @Test
