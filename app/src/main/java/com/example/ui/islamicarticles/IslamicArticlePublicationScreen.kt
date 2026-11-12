@@ -57,6 +57,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -124,6 +125,10 @@ fun IslamicArticlePublicationScreen(
     var selectedArticleIdForReading by rememberSaveable { mutableStateOf<String?>(null) }
     var editingSubmissionId by rememberSaveable { mutableStateOf<String?>(null) }
     var lastSubmittedIdBanner by rememberSaveable { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(isCurrentUserAdmin) {
+        articleManager.syncFromFirestoreIfAvailable(isAdmin = isCurrentUserAdmin)
+    }
 
     // Register TopBar Back Button interceptor so single TopBar back arrow returns from sub-screens cleanly
     DisposableEffect(currentSubView, registerBackInterceptor) {
@@ -253,11 +258,14 @@ fun IslamicArticlePublicationScreen(
         }
 
         ArticleSubView.ADMIN_REVIEW_DASHBOARD -> {
+            val adminCombinedList = remember(allSubmissions, dynamicPublished) {
+                articleManager.getCombinedSubmissionsForAdminView()
+            }
             IslamicArticleAdminReviewFullScreen(
                 adminId = resolvedUserId,
                 adminEmail = currentUserEmail.ifBlank { AdminSecurityHelper.AUTHORIZED_ADMIN_EMAILS.first() },
                 adminPhone = currentUserPhone.ifBlank { AdminSecurityHelper.ADMIN_MOBILE_NUMBER },
-                allSubmissions = allSubmissions,
+                allSubmissions = adminCombinedList,
                 articleManager = articleManager,
                 onBackToMagazineHome = {
                     currentSubView = ArticleSubView.MAGAZINE_HOME
@@ -703,7 +711,10 @@ private fun EditorialMagazineHeroBanner(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 8.dp)
                 ) {
                     Surface(
                         color = MagazineGold.copy(alpha = 0.2f),

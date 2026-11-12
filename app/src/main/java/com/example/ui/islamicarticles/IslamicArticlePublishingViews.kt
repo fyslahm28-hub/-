@@ -303,7 +303,10 @@ fun IslamicArticleSubmissionFullScreen(
                         text = "৩. সম্পূর্ণ প্রবন্ধের লেখা (রচনা এডিটর) *",
                         color = EditorialDeepGreen,
                         fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 8.dp)
                     )
                     Surface(
                         color = if (showFormattedPreview) EditorialDeepGreen else EditorialSoftGreenBg,
@@ -826,7 +829,11 @@ fun AuthorSubmissionsDashboardSection(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 8.dp)
+                    ) {
                         Text(
                             text = "আমার জমা / লেখক ড্যাশবোর্ড",
                             color = EditorialDeepGreen,
@@ -845,7 +852,13 @@ fun AuthorSubmissionsDashboardSection(
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.testTag("author_dashboard_new_submit_btn")
                     ) {
-                        Text("নতুন প্রবন্ধ", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "নতুন প্রবন্ধ",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
                     }
                 }
 
@@ -1079,7 +1092,7 @@ fun IslamicArticleAdminReviewFullScreen(
             .testTag("article_admin_dashboard_screen"),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Admin Header Card
+        // Admin Header Card (Clean single-line header without redundant squished back button)
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -1089,42 +1102,39 @@ fun IslamicArticleAdminReviewFullScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Surface(
+                        color = EditorialGold.copy(alpha = 0.2f),
+                        shape = CircleShape
                     ) {
                         Icon(
                             imageVector = Icons.Default.AdminPanelSettings,
                             contentDescription = "অ্যাডমিন রিভিউ",
                             tint = EditorialGold,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Text(
-                            text = "অ্যাডমিন প্রবন্ধ যাচাই ও প্রকাশনা প্যানেল",
-                            color = Color.White,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold
+                            modifier = Modifier
+                                .padding(8.dp)
+                                .size(22.dp)
                         )
                     }
-                    OutlinedButton(
-                        onClick = onBackToMagazineHome,
-                        border = BorderStroke(1.dp, EditorialGold),
-                        modifier = Modifier.testTag("admin_dashboard_back_btn")
-                    ) {
-                        Text("মূল পাতায় ফিরুন", color = EditorialGold, fontSize = 12.sp)
-                    }
+                    Text(
+                        text = "অ্যাডমিন প্রবন্ধ যাচাই ও প্রকাশনা প্যানেল",
+                        color = Color.White,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
                 Text(
                     text = "কুরআন-হাদিস ও তথ্যসূত্র যাচাই করে প্রবন্ধ অনুমোদন ও প্রকাশ করুন। অনুমোদনহীন কোনো প্রবন্ধ পাবলিক পেজে প্রদর্শিত হবে না।",
                     color = Color(0xFFDDF3EC),
-                    fontSize = 12.sp
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp
                 )
             }
         }
@@ -1208,14 +1218,41 @@ fun IslamicArticleAdminReviewFullScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(1.dp, Color(0xFFD5E6DD))
             ) {
-                Text(
-                    text = "এই বিভাগে বর্তমানে কোনো প্রবন্ধ সাবমিশন নেই।",
-                    color = Color(0xFF6B7280),
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(20.dp)
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "এই বিভাগে বর্তমানে কোনো প্রবন্ধ সাবমিশন নেই।",
+                        color = EditorialDeepGreen,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "কোনো লেখক নতুন প্রবন্ধ জমা দিলে বা নির্দিষ্ট স্ট্যাটাসে প্রবন্ধ থাকলে তা এখানে প্রদর্শিত হবে।",
+                        color = Color(0xFF6B7280),
+                        fontSize = 12.sp
+                    )
+                    if (selectedStatusFilter != null && allSubmissions.isNotEmpty()) {
+                        OutlinedButton(
+                            onClick = { selectedStatusFilter = null },
+                            border = BorderStroke(1.dp, EditorialDeepGreen)
+                        ) {
+                            Text(
+                                text = "সকল ও প্রকাশিত প্রবন্ধ দেখুন (${allSubmissions.size})",
+                                color = EditorialDeepGreen,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
             }
         } else {
             filteredList.forEach { sub ->
@@ -1386,7 +1423,10 @@ private fun AdminSubmissionReviewCard(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.clickable { isReferencesVerified = !isReferencesVerified }
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 8.dp)
+                        .clickable { isReferencesVerified = !isReferencesVerified }
                 ) {
                     Checkbox(
                         checked = isReferencesVerified,
@@ -1415,9 +1455,10 @@ private fun AdminSubmissionReviewCard(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = if (isEditMode) "সম্পাদনা বন্ধ করুন" else "প্রবন্ধ সম্পাদনা",
+                        text = if (isEditMode) "সম্পাদনা বন্ধ" else "প্রবন্ধ সম্পাদনা",
                         color = EditorialDeepGreen,
-                        fontSize = 12.sp
+                        fontSize = 12.sp,
+                        maxLines = 1
                     )
                 }
             }

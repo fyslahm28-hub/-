@@ -368,6 +368,44 @@ class IslamicArticleManager(private val context: Context) {
         return AdminSecurityHelper.isAuthorizedAdminIdentity(email, phone)
     }
 
+    /**
+     * অ্যাডমিন রিভিউ প্যানেলের জন্য ইউজারদের সাবমিশন এবং ইতিমধ্যে প্রকাশিত (Published) প্রবন্ধগুলোর সমন্বিত তালিকা
+     */
+    fun getCombinedSubmissionsForAdminView(): List<IslamicArticleSubmission> {
+        val currentSubs = _allSubmissions.value
+        val existingSubIds = currentSubs.map { it.submissionId }.toSet()
+        val existingPubIds = currentSubs.mapNotNull { it.publishedArticleId.takeIf { id -> id.isNotBlank() } }.toSet()
+
+        val mappedPublished = getPublicPublishedArticles()
+            .filter { pub -> pub.submissionId !in existingSubIds && pub.articleId !in existingPubIds }
+            .map { pub ->
+                IslamicArticleSubmission(
+                    submissionId = pub.submissionId.ifBlank { "ART_SUB_${pub.articleId.uppercase(Locale.US)}" },
+                    authorId = pub.authorId,
+                    authorName = pub.authorName,
+                    authorBio = pub.authorBio,
+                    title = pub.title,
+                    category = pub.category,
+                    content = pub.content,
+                    coverImageUrl = pub.coverImageUrl,
+                    quranReferences = pub.quranReferences,
+                    hadithReferences = pub.hadithReferences,
+                    otherSourcesAndBibliography = pub.otherSourcesAndBibliography,
+                    isAuthenticityConfirmed = true,
+                    status = ArticleSubmissionStatus.PUBLISHED,
+                    adminComment = "সম্পাদনা পরিষদ কর্তৃক যাচাইকৃত ও প্রকাশিত প্রবন্ধ।",
+                    authorReplyNote = "",
+                    reviewedByAdminId = pub.approvedByAdminId.ifBlank { "admin_editorial" },
+                    isReferencesVerifiedByAdmin = true,
+                    publishedArticleId = pub.articleId,
+                    createdAtMillis = pub.publishedAtMillis,
+                    updatedAtMillis = pub.updatedAtMillis
+                )
+            }
+
+        return (currentSubs + mappedPublished).sortedByDescending { it.updatedAtMillis }
+    }
+
     fun getAllSubmissionsForAdmin(
         adminEmail: String?,
         adminPhone: String?,
@@ -376,10 +414,97 @@ class IslamicArticleManager(private val context: Context) {
         if (!isAuthorizedAdmin(adminEmail, adminPhone)) {
             return Result.failure(SecurityException("শুধুমাত্র অনুমোদিত অ্যাডমিন সকল সাবমিশন পর্যালোচনা করতে পারবেন।"))
         }
-        val list = _allSubmissions.value.let { all ->
+        val list = getCombinedSubmissionsForAdminView().let { all ->
             if (filterStatus == null) all else all.filter { it.status == filterStatus }
         }.sortedByDescending { it.updatedAtMillis }
         return Result.success(list)
+    }
+
+    fun syncFromFirestoreIfAvailable(isAdmin: Boolean = false) {
+        val db = getFirestoreOrNull() ?: return
+        db.collection("islamic_articles_published")
+            .get()
+            .addOnSuccessListener { snap ->
+                if (snap == null || snap.isEmpty) return@addOnSuccessListener
+                val fetched = snap.documents.mapNotNull { doc ->
+                    val articleId = doc.getString("articleId")?.takeIf { it.isNotBlank() } ?: doc.id
+                    val title = doc.getString("title")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                    val content = doc.getString("content")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                    val pubStatus = doc.getString("publicationStatus") ?: "PUBLISHED"
+                    val isApproved = doc.getBoolean("isAdminApproved") ?: true
+                    if (!isApproved || pubStatus != "PUBLISHED") return@mapNotNull null
+                    PublishedIslamicArticle(
+                        articleId = articleId,
+                        submissionId = doc.getString("submissionId").orEmpty(),
+                        authorId = doc.getString("authorId").orEmpty(),
+                        authorName = doc.getString("authorName").orEmpty(),
+                        authorBio = doc.getString("authorBio").orEmpty(),
+                        title = title,
+                        category = IslamicArticleCategory.fromId(doc.getString("category")),
+                        summary = doc.getString("summary")?.takeIf { it.isNotBlank() } ?: buildSummaryFromContent(content),
+                        content = content,
+                        coverImageUrl = doc.getString("coverImageUrl").orEmpty(),
+                        quranReferences = doc.getString("quranReferences").orEmpty(),
+                        hadithReferences = doc.getString("hadithReferences").orEmpty(),
+                        otherSourcesAndBibliography = doc.getString("otherSourcesAndBibliography").orEmpty(),
+                        scholarlyDifferenceNote = doc.getString("scholarlyDifferenceNote").orEmpty(),
+                        isFeatured = doc.getBoolean("isFeatured") ?: false,
+                        isPopular = doc.getBoolean("isPopular") ?: false,
+                        isNewRelease = doc.getBoolean("isNewRelease") ?: true,
+                        isReferencesVerified = doc.getBoolean("isReferencesVerified") ?: true,
+                        isAdminApproved = true,
+                        publicationStatus = "PUBLISHED",
+                        approvedByAdminId = doc.getString("approvedByAdminId").orEmpty()
+                    )
+                }
+                if (fetched.isNotEmpty()) {
+                    _dynamicPublishedArticles.update { current ->
+                        val byId = (current + fetched).associateBy { it.articleId }
+                        byId.values.toList()
+                    }
+                    persistDynamicPublishedArticles()
+                }
+            }
+
+        if (isAdmin) {
+            db.collection("islamic_article_submissions")
+                .get()
+                .addOnSuccessListener { snap ->
+                    if (snap == null || snap.isEmpty) return@addOnSuccessListener
+                    val fetchedSubs = snap.documents.mapNotNull { doc ->
+                        val subId = doc.getString("submissionId")?.takeIf { it.isNotBlank() } ?: doc.id
+                        val title = doc.getString("title")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                        val content = doc.getString("content")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                        IslamicArticleSubmission(
+                            submissionId = subId,
+                            authorId = doc.getString("authorId").orEmpty(),
+                            authorName = doc.getString("authorName").orEmpty(),
+                            authorBio = doc.getString("authorBio").orEmpty(),
+                            title = title,
+                            category = IslamicArticleCategory.fromId(doc.getString("category")),
+                            content = content,
+                            coverImageUrl = doc.getString("coverImageUrl").orEmpty(),
+                            quranReferences = doc.getString("quranReferences").orEmpty(),
+                            hadithReferences = doc.getString("hadithReferences").orEmpty(),
+                            otherSourcesAndBibliography = doc.getString("otherSourcesAndBibliography").orEmpty(),
+                            isAuthenticityConfirmed = doc.getBoolean("isAuthenticityConfirmed") ?: true,
+                            status = ArticleSubmissionStatus.fromId(doc.getString("status")),
+                            adminComment = doc.getString("adminComment").orEmpty(),
+                            authorReplyNote = doc.getString("authorReplyNote").orEmpty(),
+                            reviewedByAdminId = doc.getString("reviewedByAdminId").orEmpty(),
+                            isReferencesVerifiedByAdmin = doc.getBoolean("isReferencesVerifiedByAdmin") ?: false,
+                            publishedArticleId = doc.getString("publishedArticleId").orEmpty()
+                        )
+                    }
+                    if (fetchedSubs.isNotEmpty()) {
+                        _allSubmissions.update { current ->
+                            val byId = (fetchedSubs + current).associateBy { it.submissionId }
+                            byId.values.toList()
+                        }
+                        persistSubmissions()
+                    }
+                }
+        }
     }
 
     /**
@@ -401,7 +526,7 @@ class IslamicArticleManager(private val context: Context) {
         if (!isAuthorizedAdmin(adminEmail, adminPhone)) {
             return Result.failure(SecurityException("শুধুমাত্র অনুমোদিত অ্যাডমিন প্রবন্ধ সম্পাদনা করতে পারবেন।"))
         }
-        val existing = _allSubmissions.value.firstOrNull { it.submissionId == submissionId }
+        val existing = getCombinedSubmissionsForAdminView().firstOrNull { it.submissionId == submissionId }
             ?: return Result.failure(IllegalArgumentException("সাবমিশনটি পাওয়া যায়নি।"))
 
         val now = System.currentTimeMillis()
@@ -418,28 +543,38 @@ class IslamicArticleManager(private val context: Context) {
         )
 
         _allSubmissions.update { list ->
-            list.map { if (it.submissionId == submissionId) updated else it }
+            val existsInList = list.any { it.submissionId == submissionId }
+            if (existsInList) {
+                list.map { if (it.submissionId == submissionId) updated else it }
+            } else {
+                listOf(updated) + list
+            }
         }
         persistSubmissions()
         syncSubmissionToFirestore(updated, isNewCreate = false)
 
         // যদি প্রবন্ধটি ইতিমধ্যে প্রকাশিত হয়ে থাকে, তবে পাবলিক ক্যাটালগেও আপডেট হবে
         if (updated.status == ArticleSubmissionStatus.PUBLISHED && updated.publishedArticleId.isNotBlank()) {
+            val basePub = getPublicArticleById(updated.publishedArticleId)
+            val updatedPub = (basePub ?: PublishedIslamicArticle(articleId = updated.publishedArticleId)).copy(
+                submissionId = updated.submissionId,
+                authorId = updated.authorId,
+                authorName = updated.authorName,
+                authorBio = updated.authorBio,
+                title = updated.title,
+                category = updated.category,
+                summary = buildSummaryFromContent(updated.content),
+                content = updated.content,
+                quranReferences = updated.quranReferences,
+                hadithReferences = updated.hadithReferences,
+                otherSourcesAndBibliography = updated.otherSourcesAndBibliography,
+                isReferencesVerified = true,
+                isAdminApproved = true,
+                publicationStatus = "PUBLISHED",
+                updatedAtMillis = now
+            )
             _dynamicPublishedArticles.update { pubList ->
-                pubList.map { pub ->
-                    if (pub.articleId == updated.publishedArticleId) {
-                        pub.copy(
-                            title = updated.title,
-                            category = updated.category,
-                            summary = buildSummaryFromContent(updated.content),
-                            content = updated.content,
-                            quranReferences = updated.quranReferences,
-                            hadithReferences = updated.hadithReferences,
-                            otherSourcesAndBibliography = updated.otherSourcesAndBibliography,
-                            updatedAtMillis = now
-                        )
-                    } else pub
-                }
+                listOf(updatedPub) + pubList.filterNot { it.articleId == updated.publishedArticleId }
             }
             persistDynamicPublishedArticles()
         }
@@ -468,7 +603,7 @@ class IslamicArticleManager(private val context: Context) {
             return Result.failure(SecurityException("শুধুমাত্র অনুমোদিত অ্যাডমিন প্রবন্ধ যাচাই ও প্রকাশ করতে পারবেন।"))
         }
 
-        val existing = _allSubmissions.value.firstOrNull { it.submissionId == submissionId }
+        val existing = getCombinedSubmissionsForAdminView().firstOrNull { it.submissionId == submissionId }
             ?: return Result.failure(IllegalArgumentException("সাবমিশনটি খুঁজে পাওয়া যায়নি।"))
 
         if ((newStatus == ArticleSubmissionStatus.APPROVED || newStatus == ArticleSubmissionStatus.PUBLISHED) &&
@@ -496,7 +631,12 @@ class IslamicArticleManager(private val context: Context) {
         )
 
         _allSubmissions.update { list ->
-            list.map { if (it.submissionId == submissionId) updatedSubmission else it }
+            val existsInList = list.any { it.submissionId == submissionId }
+            if (existsInList) {
+                list.map { if (it.submissionId == submissionId) updatedSubmission else it }
+            } else {
+                listOf(updatedSubmission) + list
+            }
         }
         persistSubmissions()
         syncSubmissionToFirestore(updatedSubmission, isNewCreate = false)

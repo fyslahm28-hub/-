@@ -401,4 +401,43 @@ class IslamicArticlePublicationSystemTest {
         assertEquals("যাকাত আদায়ের শরয়ী নিসাব (৫২.৫ তোলা রুপা) ও আধুনিক মাসায়েল", newlyPublishedPublicArticle!!.title)
         assertTrue(newlyPublishedPublicArticle.isFeatured)
     }
+
+    /**
+     * টেস্ট ১২ (অ্যাডমিন প্যানেল UI বাগ ফিক্স):
+     * অ্যাডমিন প্যানেলে গেলে হেডার কার্ডে কোনো বিকৃত বা সংকুচিত Back বাটন থাকবে না
+     * এবং “সকল (12)” ও “প্রকাশিত (12)” ট্যাবে সকল প্রকাশিত প্রবন্ধ সঠিকভাবে প্রদর্শিত হবে।
+     */
+    @Test
+    fun test12_adminReviewDashboardUI_displaysCleanHeaderWithoutVerticalPillAndShowsAllPublishedArticles() {
+        composeTestRule.setContent {
+            MaterialTheme {
+                IslamicArticlePublicationScreen(
+                    currentUserId = "admin_super",
+                    currentUserName = "মাওলানা এডমিন",
+                    currentUserEmail = AdminSecurityHelper.AUTHORIZED_ADMIN_EMAILS.first(),
+                    currentUserPhone = AdminSecurityHelper.ADMIN_MOBILE_NUMBER
+                )
+            }
+        }
+
+        // Open Admin Review Dashboard
+        composeTestRule.onNodeWithTag("open_article_admin_dashboard_btn")
+            .assertIsDisplayed()
+            .performClick()
+
+        composeTestRule.onNodeWithTag("article_admin_dashboard_screen").assertIsDisplayed()
+        composeTestRule.onNodeWithText("অ্যাডমিন প্রবন্ধ যাচাই ও প্রকাশনা প্যানেল").assertIsDisplayed()
+
+        // Ensure the redundant squished back button inside the card does NOT exist
+        composeTestRule.onNodeWithTag("admin_dashboard_back_btn").assertDoesNotExist()
+
+        // Verify "সকল (12)" and "প্রকাশিত (12)" filter chips show the 12 published articles
+        composeTestRule.onNodeWithTag("admin_tab_ALL")
+            .assertIsDisplayed()
+            .assertTextContains("সকল (12)", substring = true)
+
+        val firstPublishedId = IslamicArticleVerifiedCatalog.verifiedArticles.first().submissionId
+        composeTestRule.onNodeWithTag("admin_submission_card_$firstPublishedId").assertIsDisplayed()
+    }
 }
+
