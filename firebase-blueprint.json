@@ -433,6 +433,83 @@
         "details": { "type": "string", "required": true },
         "createdAt": { "type": "timestamp", "required": true }
       }
+    },
+    "ArticleAuthorProfile": {
+      "description": "Islamic Article Author profile bound to the user's Firebase Auth UID.",
+      "properties": {
+        "userId": { "type": "string", "required": true },
+        "authorName": { "type": "string", "required": true },
+        "shortBio": { "type": "string", "required": true },
+        "designationOrQualification": { "type": "string", "required": false },
+        "institutionName": { "type": "string", "required": false },
+        "isVerifiedAuthor": { "type": "boolean", "required": true },
+        "createdAt": { "type": "timestamp", "required": true },
+        "updatedAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "IslamicArticleSubmission": {
+      "description": "Islamic article submitted by an authenticated user with verified Quran/Hadith references, bibliography, and Admin review workflow.",
+      "properties": {
+        "submissionId": { "type": "string", "required": true },
+        "authorId": { "type": "string", "required": true },
+        "authorName": { "type": "string", "required": true },
+        "authorBio": { "type": "string", "required": true },
+        "title": { "type": "string", "required": true },
+        "categoryId": { "type": "string", "required": true },
+        "content": { "type": "string", "required": true },
+        "coverImageUrl": { "type": "string", "required": false },
+        "quranReferences": { "type": "string", "required": true },
+        "hadithReferences": { "type": "string", "required": true },
+        "otherSourcesAndBibliography": { "type": "string", "required": true },
+        "isAuthenticityConfirmed": { "type": "boolean", "required": true },
+        "status": { "type": "string", "required": true, "enum": ["SUBMITTED", "UNDER_REVIEW", "MORE_INFO_REQUIRED", "APPROVED", "PUBLISHED", "REJECTED"] },
+        "adminComment": { "type": "string", "required": false },
+        "authorReplyNote": { "type": "string", "required": false },
+        "reviewedByAdminId": { "type": "string", "required": false },
+        "isReferencesVerifiedByAdmin": { "type": "boolean", "required": false },
+        "publishedArticleId": { "type": "string", "required": false },
+        "createdAt": { "type": "timestamp", "required": true },
+        "updatedAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "PublishedIslamicArticle": {
+      "description": "Public Islamic Article published only after Admin verification of Quran/Hadith references and scholarly sources.",
+      "properties": {
+        "articleId": { "type": "string", "required": true },
+        "submissionId": { "type": "string", "required": false },
+        "authorId": { "type": "string", "required": true },
+        "authorName": { "type": "string", "required": true },
+        "authorBio": { "type": "string", "required": true },
+        "title": { "type": "string", "required": true },
+        "categoryId": { "type": "string", "required": true },
+        "summary": { "type": "string", "required": true },
+        "content": { "type": "string", "required": true },
+        "coverImageUrl": { "type": "string", "required": false },
+        "quranReferences": { "type": "string", "required": true },
+        "hadithReferences": { "type": "string", "required": true },
+        "otherSourcesAndBibliography": { "type": "string", "required": true },
+        "scholarlyDifferenceNote": { "type": "string", "required": false },
+        "isFeatured": { "type": "boolean", "required": true },
+        "isPopular": { "type": "boolean", "required": false },
+        "isReferencesVerified": { "type": "boolean", "required": true },
+        "isAdminApproved": { "type": "boolean", "required": true },
+        "publicationStatus": { "type": "string", "required": true, "enum": ["PUBLISHED", "SUSPENDED", "REMOVED"] },
+        "approvedByAdminId": { "type": "string", "required": true },
+        "publishedDateTextBangla": { "type": "string", "required": true },
+        "publishedAt": { "type": "timestamp", "required": true },
+        "updatedAt": { "type": "timestamp", "required": true }
+      }
+    },
+    "ArticleBookmarkReceipt": {
+      "description": "Saved/bookmarked Islamic article under a user's private article_bookmarks subcollection.",
+      "properties": {
+        "userId": { "type": "string", "required": true },
+        "articleId": { "type": "string", "required": true },
+        "title": { "type": "string", "required": true },
+        "categoryId": { "type": "string", "required": true },
+        "authorName": { "type": "string", "required": true },
+        "createdAt": { "type": "timestamp", "required": true }
+      }
     }
   },
   "collections": [
@@ -449,6 +526,11 @@
     {
       "path": "/users/{userId}/bookmarks/{bookmarkId}",
       "entity": "BookmarkItem",
+      "access": "Strict owner-only read, create, and delete."
+    },
+    {
+      "path": "/users/{userId}/article_bookmarks/{articleId}",
+      "entity": "ArticleBookmarkReceipt",
       "access": "Strict owner-only read, create, and delete."
     },
     {
@@ -545,6 +627,21 @@
       "path": "/islamic_book_audit_logs/{logId}",
       "entity": "IslamicBookAuditLog",
       "access": "Create-only immutable audit log for authenticated actors; actors can read their own logs and admins can read all logs."
+    },
+    {
+      "path": "/article_authors/{userId}",
+      "entity": "ArticleAuthorProfile",
+      "access": "Strict owner and admin read/write access for Islamic Article Author profiles."
+    },
+    {
+      "path": "/islamic_article_submissions/{submissionId}",
+      "entity": "IslamicArticleSubmission",
+      "access": "Strict author-owner and admin read/list access; authors can submit and revise their own articles; only verified admins can approve, reject, or publish."
+    },
+    {
+      "path": "/islamic_articles_published/{articleId}",
+      "entity": "PublishedIslamicArticle",
+      "access": "Authenticated users can read and list ONLY admin-approved and PUBLISHED Islamic articles; only verified admins can create, update, suspend, or remove public articles."
     }
   ]
 }

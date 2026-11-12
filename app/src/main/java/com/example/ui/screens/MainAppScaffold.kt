@@ -574,6 +574,7 @@ fun MainAppScaffold(
             MainDestination.PRAYER_SCHEDULE -> "নামাজের সময়সূচী"
             MainDestination.TILAWAT -> "তিলাওয়াত"
             MainDestination.ISLAMIC_BOOK_LIBRARY -> "ইসলামিক বই লাইব্রেরি"
+            MainDestination.ISLAMIC_ARTICLE_PUBLICATION -> "ইসলামিক প্রবন্ধ ও জ্ঞানচর্চা"
             MainDestination.AJKER_SMORON -> "আজকের স্মরণ"
             MainDestination.APP_SETTINGS -> "অ্যাপ সেটিংস"
             MainDestination.ABOUT_APP -> "অ্যাপ সম্পর্কে"
@@ -601,10 +602,16 @@ fun MainAppScaffold(
         var islamicBookBackInterceptor by remember {
             mutableStateOf<(() -> Boolean)?>(null)
         }
+        var islamicArticleBackInterceptor by remember {
+            mutableStateOf<(() -> Boolean)?>(null)
+        }
         LaunchedEffect(currentDestination) {
             if (currentDestination != MainDestination.ISLAMIC_BOOK_LIBRARY) {
                 islamicBookSubView = com.example.ui.islamicbooks.LibrarySubView.CATALOG_HOME
                 islamicBookBackInterceptor = null
+            }
+            if (currentDestination != MainDestination.ISLAMIC_ARTICLE_PUBLICATION) {
+                islamicArticleBackInterceptor = null
             }
         }
         val isIslamicBookFullScreenReader =
@@ -628,6 +635,10 @@ fun MainAppScaffold(
                                 islamicBookBackInterceptor?.invoke() == true
                             ) {
                                 // Sub-screen back navigation handled inside IslamicBookLibraryScreen
+                            } else if (currentDestination == MainDestination.ISLAMIC_ARTICLE_PUBLICATION &&
+                                islamicArticleBackInterceptor?.invoke() == true
+                            ) {
+                                // Sub-screen back navigation handled inside IslamicArticlePublicationScreen
                             } else {
                                 viewModel.navigateBack()
                             }
@@ -1442,6 +1453,26 @@ fun MainAppScaffold(
                                 onNavigateBackHome = { viewModel.navigateBack() },
                                 onSubViewChanged = { subView -> islamicBookSubView = subView },
                                 onRegisterBackInterceptor = { interceptor -> islamicBookBackInterceptor = interceptor }
+                            )
+                        }
+
+                        MainDestination.ISLAMIC_ARTICLE_PUBLICATION -> {
+                            val currentUserProf = (userProfileState as? UiState.Success)?.data
+                            val authorBioText = buildString {
+                                val desig = currentUserProf?.designation?.takeIf { it.isNotBlank() } ?: "আলেম ও গবেষক"
+                                val dist = currentUserProf?.district?.takeIf { it.isNotBlank() } ?: "বাংলাদেশ"
+                                append("$desig • $dist")
+                            }
+                            com.example.ui.islamicarticles.IslamicArticlePublicationScreen(
+                                currentUserId = viewModel.currentUserId,
+                                currentUserName = currentUserProf?.fullName?.takeIf { it.isNotBlank() }
+                                    ?: viewModel.currentUserDisplayName.ifBlank { "মাওলানা লেখক" },
+                                currentUserBio = authorBioText,
+                                currentUserEmail = viewModel.currentUserEmail,
+                                currentUserPhone = currentUserProf?.contactInfo?.takeIf { it.isNotBlank() }
+                                    ?: viewModel.currentUserPhone,
+                                isAdmin = isAdminState,
+                                registerBackInterceptor = { interceptor -> islamicArticleBackInterceptor = interceptor }
                             )
                         }
 

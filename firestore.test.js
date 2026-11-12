@@ -1234,5 +1234,213 @@ test("Islamic Book Library & Self-Publishing: Contributor account isolation, man
   );
 });
 
+test("Islamic Article & Knowledge Cultivation System: Author profile isolation, submission authenticity gate, cross-author privacy, Admin review & publication gate, and article bookmarks", async () => {
+  const unauthDb = testEnv.unauthenticatedContext().firestore();
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID, {
+    email: "author_alice@gmail.com",
+  }).firestore();
+  const bobDb = testEnv.authenticatedContext(BOB_UID, {
+    email: "author_bob@gmail.com",
+  }).firestore();
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID_1, {
+    email: "foysalahamad102@gmail.com",
+    email_verified: true,
+    role: "SUPER_ADMIN",
+  }).firestore();
+
+  const ts = nowDate();
+
+  // 1. Author profile (/article_authors/{userId})
+  await assertSucceeds(
+    aliceDb.collection("article_authors").doc(ALICE_UID).set({
+      userId: ALICE_UID,
+      authorName: "মাওলানা আব্দুল্লাহ আল-মামুন",
+      shortBio: "উস্তাযুল হাদিস ও ফিকহ গবেষক, জামিয়া রাহমানিয়া ঢাকা।",
+      designationOrQualification: "দাওরায়ে হাদিস ও ইফতা",
+      institutionName: "জামিয়া রাহমানিয়া ঢাকা",
+      isVerifiedAuthor: false,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+
+  // Bob cannot read or overwrite Alice's author profile
+  await assertFails(bobDb.collection("article_authors").doc(ALICE_UID).get());
+  await assertFails(
+    bobDb.collection("article_authors").doc(ALICE_UID).update({
+      shortBio: "অননুমোদিত পরিবর্তন",
+      updatedAt: nowDate(),
+    })
+  );
+
+  // 2. Article Submission (/islamic_article_submissions/{submissionId})
+  const baseArticleSub = {
+    submissionId: "ART_SUB_2026_1001",
+    authorId: ALICE_UID,
+    authorName: "মাওলানা আব্দুল্লাহ আল-মামুন",
+    authorBio: "উস্তাযুল হাদিস ও ফিকহ গবেষক, জামিয়া রাহমানিয়া ঢাকা।",
+    title: "ইসলামে হালাল উপার্জনের গুরুত্ব ও সমকালীন দিকনির্দেশনা",
+    categoryId: "FIQH_MASAIL",
+    content: "## ভূমিকা\nইসলামে হালাল রিযিক অন্বেষণ করা ফরয ইবাদতের পর অন্যতম গুরুত্বপূর্ণ দায়িত্ব।",
+    coverImageUrl: "",
+    quranReferences: "সূরা আল-বাকারা: আয়াত ১৬৮, ১৭২; সূরা আল-মুমিনুন: আয়াত ৫১",
+    hadithReferences: "সহীহ বুখারী, হাদিস নং ২০৭২; সহীহ মুসলিম, হাদিস নং ১০১৫",
+    otherSourcesAndBibliography: "ফাতহুল বারী (৪/৩০৩), আল-বাহরুর রায়েক (৮/১৯০), ফাতাওয়া শামী (৬/৪২২)",
+    isAuthenticityConfirmed: true,
+    status: "SUBMITTED",
+    adminComment: "",
+    authorReplyNote: "",
+    reviewedByAdminId: "",
+    isReferencesVerifiedByAdmin: false,
+    publishedArticleId: "",
+    createdAt: ts,
+    updatedAt: ts,
+  };
+
+  // Rejects if isAuthenticityConfirmed is false or if author tries to self-approve (status: PUBLISHED)
+  await assertFails(
+    aliceDb.collection("islamic_article_submissions").doc("ART_SUB_2026_1001").set({
+      ...baseArticleSub,
+      isAuthenticityConfirmed: false,
+    })
+  );
+  await assertFails(
+    aliceDb.collection("islamic_article_submissions").doc("ART_SUB_2026_1001").set({
+      ...baseArticleSub,
+      status: "PUBLISHED",
+    })
+  );
+
+  // Valid submission by Alice succeeds
+  await assertSucceeds(
+    aliceDb.collection("islamic_article_submissions").doc("ART_SUB_2026_1001").set(baseArticleSub)
+  );
+
+  // Cross-author isolation: Bob CANNOT read, list, or modify Alice's submission
+  await assertFails(
+    bobDb.collection("islamic_article_submissions").doc("ART_SUB_2026_1001").get()
+  );
+  await assertFails(
+    bobDb.collection("islamic_article_submissions").where("authorId", "==", ALICE_UID).get()
+  );
+  await assertFails(
+    bobDb.collection("islamic_article_submissions").doc("ART_SUB_2026_1001").update({
+      title: "হ্যাকড প্রবন্ধ",
+      updatedAt: nowDate(),
+    })
+  );
+
+  // Alice CAN read and list her own submissions
+  await assertSucceeds(
+    aliceDb.collection("islamic_article_submissions").where("authorId", "==", ALICE_UID).get()
+  );
+
+  // 3. Admin Review Workflow: Admin marks MORE_INFO_REQUIRED -> Alice revises & resubmits -> Admin marks PUBLISHED
+  await assertSucceeds(
+    adminDb.collection("islamic_article_submissions").doc("ART_SUB_2026_1001").update({
+      status: "MORE_INFO_REQUIRED",
+      adminComment: "অনুগ্রহ করে ফাতাওয়া শামীর পৃষ্ঠা ও অধ্যায় সুনির্দিষ্টভাবে উল্লেখ করুন।",
+      reviewedByAdminId: ADMIN_UID_1,
+      updatedAt: nowDate(),
+    })
+  );
+
+  await assertSucceeds(
+    aliceDb.collection("islamic_article_submissions").doc("ART_SUB_2026_1001").update({
+      otherSourcesAndBibliography: "ফাতহুল বারী (৪/৩০৩), রদ্দুল মুহতার / ফাতাওয়া শামী (কিতাবুল হাযর ওয়াল ইবাহাহ, ৬/৪২২)",
+      authorReplyNote: "ফাতাওয়া শামীর অধ্যায় ও পৃষ্ঠা যুক্ত করা হয়েছে।",
+      status: "SUBMITTED",
+      updatedAt: nowDate(),
+    })
+  );
+
+  await assertSucceeds(
+    adminDb.collection("islamic_article_submissions").doc("ART_SUB_2026_1001").update({
+      status: "PUBLISHED",
+      isReferencesVerifiedByAdmin: true,
+      publishedArticleId: "pub_art_1001",
+      adminComment: "কুরআন-হাদিস ও ফিকহি তথ্যসূত্র যাচাই সম্পন্ন। পাবলিক প্রবন্ধ বিভাগে প্রকাশিত।",
+      reviewedByAdminId: ADMIN_UID_1,
+      updatedAt: nowDate(),
+    })
+  );
+
+  // 4. Public Published Articles Gate (/islamic_articles_published/{articleId})
+  const pubArticlePayload = {
+    articleId: "pub_art_1001",
+    submissionId: "ART_SUB_2026_1001",
+    authorId: ALICE_UID,
+    authorName: "মাওলানা আব্দুল্লাহ আল-মামুন",
+    authorBio: "উস্তাযুল হাদিস ও ফিকহ গবেষক, জামিয়া রাহমানিয়া ঢাকা।",
+    title: "ইসলামে হালাল উপার্জনের গুরুত্ব ও সমকালীন দিকনির্দেশনা",
+    categoryId: "FIQH_MASAIL",
+    summary: "কুরআন ও সুন্নাহর আলোকে হালাল উপার্জনের ফযিলত ও সমকালীন ব্যবসা-বাণিজ্যের শরয়ী নীতিমালা।",
+    content: "## ভূমিকা\nইসলামে হালাল রিযিক অন্বেষণ করা ফরয ইবাদতের পর অন্যতম গুরুত্বপূর্ণ দায়িত্ব।",
+    coverImageUrl: "",
+    quranReferences: "সূরা আল-বাকারা: আয়াত ১৬৮, ১৭২; সূরা আল-মুমিনুন: আয়াত ৫১",
+    hadithReferences: "সহীহ বুখারী, হাদিস নং ২০৭২; সহীহ মুসলিম, হাদিস নং ১০১৫",
+    otherSourcesAndBibliography: "ফাতহুল বারী (৪/৩০৩), রদ্দুল মুহতার / ফাতাওয়া শামী (কিতাবুল হাযর ওয়াল ইবাহাহ, ৬/৪২২)",
+    scholarlyDifferenceNote: "সমকালীন ডিজিটাল লেনদেনের খুঁটিনাটি বিষয়ে ফুকাহায়ে কেরামের মধ্যে শর্তসাপেক্ষ মতপার্থক্য রয়েছে।",
+    isFeatured: true,
+    isPopular: true,
+    isReferencesVerified: true,
+    isAdminApproved: true,
+    publicationStatus: "PUBLISHED",
+    approvedByAdminId: ADMIN_UID_1,
+    publishedDateTextBangla: "১২ নভেম্বর ২০২৬",
+    publishedAt: nowDate(),
+    updatedAt: nowDate(),
+  };
+
+  // Non-admin CANNOT publish directly to /islamic_articles_published
+  await assertFails(
+    aliceDb.collection("islamic_articles_published").doc("pub_art_1001").set(pubArticlePayload)
+  );
+
+  // Admin publishes to /islamic_articles_published
+  await assertSucceeds(
+    adminDb.collection("islamic_articles_published").doc("pub_art_1001").set(pubArticlePayload)
+  );
+
+  // Readers (Bob) can query and read approved & PUBLISHED articles, and bookmark them
+  await assertSucceeds(
+    bobDb
+      .collection("islamic_articles_published")
+      .where("isAdminApproved", "==", true)
+      .where("publicationStatus", "==", "PUBLISHED")
+      .get()
+  );
+  await assertSucceeds(
+    bobDb.collection("islamic_articles_published").doc("pub_art_1001").get()
+  );
+  await assertFails(
+    unauthDb.collection("islamic_articles_published").doc("pub_art_1001").get()
+  );
+
+  // 5. Per-User Article Bookmarks (/users/{userId}/article_bookmarks/{articleId})
+  await assertSucceeds(
+    bobDb
+      .collection("users")
+      .doc(BOB_UID)
+      .collection("article_bookmarks")
+      .doc("pub_art_1001")
+      .set({
+        userId: BOB_UID,
+        articleId: "pub_art_1001",
+        title: "ইসলামে হালাল উপার্জনের গুরুত্ব ও সমকালীন দিকনির্দেশনা",
+        categoryId: "FIQH_MASAIL",
+        authorName: "মাওলানা আব্দুল্লাহ আল-মামুন",
+        createdAt: nowDate(),
+      })
+  );
+  await assertSucceeds(
+    bobDb.collection("users").doc(BOB_UID).collection("article_bookmarks").get()
+  );
+  await assertFails(
+    aliceDb.collection("users").doc(BOB_UID).collection("article_bookmarks").get()
+  );
+});
+
+
 
 

@@ -2723,5 +2723,118 @@ class QawmiRepositoryRuleTest : FirestoreEmulatorTestBase() {
             assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED, fsEx?.code)
         }
     }
+
+    @Test
+    fun islamicArticlePublication_authorIsolation_authenticityGate_andAdminPublication_compliesWithSecurityRules() = runBlocking {
+        val aliceUid = signInTestUser("article_author_alice_${UUID.randomUUID()}@test.com")
+        val nowTs = com.google.firebase.Timestamp.now()
+
+        // 1. Author Alice creates her profile in /article_authors/{aliceUid}
+        firestore.collection("article_authors").document(aliceUid).set(
+            mapOf(
+                "userId" to aliceUid,
+                "authorName" to "মাওলানা আব্দুল্লাহ আল-মানসুর",
+                "shortBio" to "মুহাদ্দিস ও তাফসির গবেষক",
+                "designationOrQualification" to "দাওরায়ে হাদিস ও ইফতা",
+                "institutionName" to "দারুল উলুম হাটহাজারী",
+                "isVerifiedAuthor" to false,
+                "createdAt" to nowTs,
+                "updatedAt" to nowTs
+            )
+        ).awaitWithTimeout()
+
+        // 2. Submission with isAuthenticityConfirmed == false is rejected by security rules
+        val baseSubmission = mapOf(
+            "submissionId" to "ART_SUB_2026_INVALID",
+            "authorId" to aliceUid,
+            "authorName" to "মাওলানা আব্দুল্লাহ আল-মানসুর",
+            "authorBio" to "মুহাদ্দিস ও তাফসির গবেষক",
+            "title" to "কুরআনুল কারীমের তাদাব্বুর ও ঈমান বৃদ্ধির উপায়",
+            "category" to "QURAN_TAFSIR",
+            "content" to "## ভূমিকা\nমহান আল্লাহ তাআলা মানবজাতির হিদায়াতের জন্য আল-কুরআন নাযিল করেছেন এবং এর আয়াতসমূহ নিয়ে চিন্তা-গবেষণা করার নির্দেশ দিয়েছেন।",
+            "coverImageUrl" to "preset_cover_quran_tadabbur",
+            "quranReferences" to "সূরা সোয়াদ (৩৮), আয়াত: ২৯",
+            "hadithReferences" to "সহীহ বুখারী, হাদিস নং: ৫০২৭",
+            "otherSourcesAndBibliography" to "তাফসিরে ইবনে কাসির, খণ্ড ৪",
+            "isAuthenticityConfirmed" to false,
+            "status" to "SUBMITTED",
+            "adminComment" to "",
+            "authorReplyNote" to "",
+            "reviewedByAdminId" to "",
+            "isReferencesVerifiedByAdmin" to false,
+            "publishedArticleId" to "",
+            "createdAt" to nowTs,
+            "updatedAt" to nowTs
+        )
+
+        try {
+            firestore.collection("islamic_article_submissions").document("ART_SUB_2026_INVALID")
+                .set(baseSubmission)
+                .awaitWithTimeout()
+            fail("Article submission with isAuthenticityConfirmed == false must be rejected")
+        } catch (e: Exception) {
+            val fsEx = findFirestoreException(e)
+            assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED, fsEx?.code)
+        }
+
+        // 3. Valid submission with isAuthenticityConfirmed == true and status == SUBMITTED succeeds
+        val validSubId = "ART_SUB_2026_${UUID.randomUUID().toString().take(6)}"
+        firestore.collection("islamic_article_submissions").document(validSubId)
+            .set(baseSubmission + ("submissionId" to validSubId) + ("isAuthenticityConfirmed" to true))
+            .awaitWithTimeout()
+
+        // 4. Another user Bob CANNOT read or update Alice's submission, nor publish directly to /islamic_articles_published
+        val bobUid = signInTestUser("article_author_bob_${UUID.randomUUID()}@test.com")
+        assertTrue(bobUid != aliceUid)
+
+        try {
+            firestore.collection("islamic_article_submissions").document(validSubId)
+                .get(com.google.firebase.firestore.Source.SERVER)
+                .awaitWithTimeout()
+            fail("Bob must not be allowed to read Alice's private article submission")
+        } catch (e: Exception) {
+            val fsEx = findFirestoreException(e)
+            assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED, fsEx?.code)
+        }
+
+        try {
+            firestore.collection("islamic_articles_published").document("forged_art_1").set(
+                mapOf(
+                    "articleId" to "forged_art_1",
+                    "submissionId" to validSubId,
+                    "authorId" to bobUid,
+                    "authorName" to "বব",
+                    "authorBio" to "লেখক",
+                    "title" to "অননুমোদিত প্রবন্ধ",
+                    "category" to "QURAN_TAFSIR",
+                    "summary" to "অননুমোদিত প্রবন্ধ প্রকাশের চেষ্টা।",
+                    "content" to "অননুমোদিত প্রবন্ধ প্রকাশের চেষ্টা যা অ্যাডমিন ছাড়া সম্ভব নয়।",
+                    "isReferencesVerified" to true,
+                    "isAdminApproved" to true,
+                    "publicationStatus" to "PUBLISHED",
+                    "publishedAt" to nowTs,
+                    "updatedAt" to nowTs
+                )
+            ).awaitWithTimeout()
+            fail("Non-admin must not be able to write to islamic_articles_published")
+        } catch (e: Exception) {
+            val fsEx = findFirestoreException(e)
+            assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED, fsEx?.code)
+        }
+
+        // 5. Bob can save his own article bookmark in /users/{bobUid}/article_bookmarks/{articleId}
+        firestore.collection("users").document(bobUid)
+            .collection("article_bookmarks").document("art_pub_quran_tadabbur_01")
+            .set(
+                mapOf(
+                    "userId" to bobUid,
+                    "articleId" to "art_pub_quran_tadabbur_01",
+                    "title" to "কুরআনুল কারীমের তাদাব্বুর",
+                    "category" to "QURAN_TAFSIR",
+                    "authorName" to "মাওলানা মুফতি আব্দুল্লাহ আল-মানসুর",
+                    "savedAt" to nowTs
+                )
+            ).awaitWithTimeout()
+    }
 }
 

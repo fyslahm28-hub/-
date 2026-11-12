@@ -216,6 +216,7 @@ fun IslamicAndEssentialServicesSection(
             "hadith" -> showHadithKitabLibrary = true
             "tilawat" -> onNavigate(MainDestination.TILAWAT)
             "islamic_books" -> onNavigate(MainDestination.ISLAMIC_BOOK_LIBRARY)
+            "articles" -> onNavigate(MainDestination.ISLAMIC_ARTICLE_PUBLICATION)
             "prayer_times", "islamic_calendar" -> onOpenPrayerTimes()
             "bookmarks" -> onNavigate(MainDestination.BOOKMARKS)
             "support" -> onNavigate(MainDestination.HELP_AND_SUPPORT)

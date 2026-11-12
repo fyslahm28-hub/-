@@ -565,6 +565,99 @@ service cloud.firestore {
              isValidTimestamp(data.createdAt);
     }
 
+    function isValidArticleCategoryId(catId) {
+      return catId is string && catId in [
+        'QURAN_TAFSIR', 'HADITH_SUNNAH', 'AQIDAH_IMAN', 'FIQH_MASAIL',
+        'TAZKIYAH_AKHLAQ', 'SEERAH_NABI', 'SAHABA_LIVES', 'ISLAMIC_HISTORY',
+        'FAMILY_SOCIAL', 'CONTEMPORARY_ISSUES', 'QAWMI_EDUCATION_RESEARCH',
+        'DAWAH_DEENI_KHEDMOT'
+      ];
+    }
+
+    function isValidArticleAuthorProfile(data, userId) {
+      let desigVal = data.get('designationOrQualification', '');
+      let instVal = data.get('institutionName', '');
+      return data.userId is string && data.userId == userId &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 150 &&
+             data.shortBio is string && data.shortBio.size() >= 1 && data.shortBio.size() <= 1500 &&
+             (desigVal is string && desigVal.size() <= 200) &&
+             (instVal is string && instVal.size() <= 200) &&
+             data.isVerifiedAuthor is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidIslamicArticleSubmission(data, submissionId) {
+      let coverVal = data.get('coverImageUrl', '');
+      let adminCommentVal = data.get('adminComment', '');
+      let authorReplyVal = data.get('authorReplyNote', '');
+      let reviewedByVal = data.get('reviewedByAdminId', '');
+      let refVerVal = data.get('isReferencesVerifiedByAdmin', false);
+      let pubArtIdVal = data.get('publishedArticleId', '');
+      return data.submissionId is string && data.submissionId == submissionId &&
+             data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 150 &&
+             data.authorBio is string && data.authorBio.size() >= 1 && data.authorBio.size() <= 1500 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 300 &&
+             isValidArticleCategoryId(data.categoryId) &&
+             data.content is string && data.content.size() >= 1 && data.content.size() <= 60000 &&
+             (coverVal is string && coverVal.size() <= 250000) &&
+             data.quranReferences is string && data.quranReferences.size() <= 4000 &&
+             data.hadithReferences is string && data.hadithReferences.size() <= 4000 &&
+             data.otherSourcesAndBibliography is string && data.otherSourcesAndBibliography.size() <= 4000 &&
+             data.isAuthenticityConfirmed is bool && data.isAuthenticityConfirmed == true &&
+             data.status is string && data.status in [
+               'SUBMITTED', 'UNDER_REVIEW', 'MORE_INFO_REQUIRED',
+               'APPROVED', 'PUBLISHED', 'REJECTED'
+             ] &&
+             (adminCommentVal is string && adminCommentVal.size() <= 2000) &&
+             (authorReplyVal is string && authorReplyVal.size() <= 2000) &&
+             (reviewedByVal is string && reviewedByVal.size() <= 128) &&
+             (refVerVal is bool) &&
+             (pubArtIdVal is string && pubArtIdVal.size() <= 128) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidPublishedIslamicArticle(data, articleId) {
+      let subIdVal = data.get('submissionId', '');
+      let coverVal = data.get('coverImageUrl', '');
+      let diffNoteVal = data.get('scholarlyDifferenceNote', '');
+      let isPopVal = data.get('isPopular', false);
+      return data.articleId is string && data.articleId == articleId &&
+             (subIdVal is string && subIdVal.size() <= 128) &&
+             data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 150 &&
+             data.authorBio is string && data.authorBio.size() >= 1 && data.authorBio.size() <= 1500 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 300 &&
+             isValidArticleCategoryId(data.categoryId) &&
+             data.summary is string && data.summary.size() >= 1 && data.summary.size() <= 1000 &&
+             data.content is string && data.content.size() >= 1 && data.content.size() <= 60000 &&
+             (coverVal is string && coverVal.size() <= 250000) &&
+             data.quranReferences is string && data.quranReferences.size() <= 4000 &&
+             data.hadithReferences is string && data.hadithReferences.size() <= 4000 &&
+             data.otherSourcesAndBibliography is string && data.otherSourcesAndBibliography.size() <= 4000 &&
+             (diffNoteVal is string && diffNoteVal.size() <= 2000) &&
+             data.isFeatured is bool &&
+             (isPopVal is bool) &&
+             data.isReferencesVerified is bool &&
+             data.isAdminApproved is bool &&
+             data.publicationStatus is string && data.publicationStatus in ['PUBLISHED', 'SUSPENDED', 'REMOVED'] &&
+             data.approvedByAdminId is string && data.approvedByAdminId.size() >= 1 && data.approvedByAdminId.size() <= 128 &&
+             data.publishedDateTextBangla is string && data.publishedDateTextBangla.size() >= 1 && data.publishedDateTextBangla.size() <= 100 &&
+             isValidTimestamp(data.publishedAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidArticleBookmarkReceipt(data, userId, articleId) {
+      return data.userId is string && data.userId == userId &&
+             data.articleId is string && data.articleId == articleId &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 300 &&
+             isValidArticleCategoryId(data.categoryId) &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 150 &&
+             isValidTimestamp(data.createdAt);
+    }
+
     // 4. Collection Rules
 
     // Admins Registry (সার্ভার-সাইড অ্যাডমিন পরিচয় ও অ্যাক্সেস)
@@ -679,6 +772,29 @@ service cloud.firestore {
 
         allow update: if false;
         allow delete: if isSignedIn() && isValidId(userId) && isValidId(bookmarkId) && request.auth.uid == userId;
+      }
+
+      // Per-User Islamic Article Bookmarks Subcollection (/users/{userId}/article_bookmarks/{articleId})
+      match /article_bookmarks/{articleId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(articleId) && request.auth.uid == userId;
+        allow list: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(articleId) &&
+                         request.auth.uid == userId &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().articleId == articleId &&
+                         incoming().keys().hasAll([
+                           'userId', 'articleId', 'title', 'categoryId', 'authorName', 'createdAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'articleId', 'title', 'categoryId', 'authorName', 'createdAt'
+                         ]) &&
+                         isValidArticleBookmarkReceipt(incoming(), userId, articleId);
+
+        allow update: if false;
+        allow delete: if isSignedIn() && isValidId(userId) && isValidId(articleId) && request.auth.uid == userId;
       }
 
       // Per-User Notification Read Receipts (নোটিফিকেশন পঠিত অবস্থা)
@@ -1579,6 +1695,147 @@ service cloud.firestore {
                        isValidIslamicBookAuditLog(incoming(), logId);
 
       allow update, delete: if false;
+    }
+
+    // Islamic Article Author Profile (/article_authors/{userId})
+    match /article_authors/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().userId == request.auth.uid &&
+                       (incoming().isVerifiedAuthor == false || isAdmin()) &&
+                       incoming().keys().hasAll([
+                         'userId', 'authorName', 'shortBio', 'isVerifiedAuthor', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'authorName', 'shortBio', 'designationOrQualification',
+                         'institutionName', 'isVerifiedAuthor', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidArticleAuthorProfile(incoming(), userId);
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidArticleAuthorProfile(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt && (
+                         (request.auth.uid == userId &&
+                          incoming().isVerifiedAuthor == existing().isVerifiedAuthor &&
+                          incoming().diff(existing()).affectedKeys().hasOnly([
+                            'authorName', 'shortBio', 'designationOrQualification',
+                            'institutionName', 'updatedAt'
+                          ])) ||
+                         (isAdmin() &&
+                          incoming().diff(existing()).affectedKeys().hasOnly([
+                            'isVerifiedAuthor', 'updatedAt'
+                          ]))
+                       );
+
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // Islamic Article Submissions (/islamic_article_submissions/{submissionId})
+    match /islamic_article_submissions/{submissionId} {
+      allow get: if isSignedIn() && isValidId(submissionId) && (
+        resource == null ||
+        existing().authorId == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.authorId == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow create: if isSignedIn() &&
+                       isValidId(submissionId) &&
+                       incoming().authorId == request.auth.uid &&
+                       incoming().status == 'SUBMITTED' &&
+                       incoming().keys().hasAll([
+                         'submissionId', 'authorId', 'authorName', 'authorBio',
+                         'title', 'categoryId', 'content', 'quranReferences',
+                         'hadithReferences', 'otherSourcesAndBibliography',
+                         'isAuthenticityConfirmed', 'status', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'submissionId', 'authorId', 'authorName', 'authorBio',
+                         'title', 'categoryId', 'content', 'coverImageUrl',
+                         'quranReferences', 'hadithReferences', 'otherSourcesAndBibliography',
+                         'isAuthenticityConfirmed', 'status', 'adminComment',
+                         'authorReplyNote', 'reviewedByAdminId',
+                         'isReferencesVerifiedByAdmin', 'publishedArticleId',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidIslamicArticleSubmission(incoming(), submissionId);
+
+      allow update: if isSignedIn() &&
+                       isValidId(submissionId) &&
+                       isValidIslamicArticleSubmission(incoming(), submissionId) &&
+                       incoming().submissionId == existing().submissionId &&
+                       incoming().authorId == existing().authorId &&
+                       incoming().createdAt == existing().createdAt && (
+                         // Author can revise and resubmit their own article when SUBMITTED or MORE_INFO_REQUIRED
+                         (request.auth.uid == existing().authorId &&
+                          existing().status in ['SUBMITTED', 'MORE_INFO_REQUIRED'] &&
+                          incoming().status == 'SUBMITTED' &&
+                          incoming().diff(existing()).affectedKeys().hasOnly([
+                            'authorName', 'authorBio', 'title', 'categoryId',
+                            'content', 'coverImageUrl', 'quranReferences',
+                            'hadithReferences', 'otherSourcesAndBibliography',
+                            'authorReplyNote', 'status', 'updatedAt'
+                          ])) ||
+                         // Verified Admin can review, edit, verify references, request info, approve, reject, or publish
+                         (isAdmin() &&
+                          incoming().diff(existing()).affectedKeys().hasOnly([
+                            'authorName', 'authorBio', 'title', 'categoryId',
+                            'content', 'coverImageUrl', 'quranReferences',
+                            'hadithReferences', 'otherSourcesAndBibliography',
+                            'status', 'adminComment', 'reviewedByAdminId',
+                            'isReferencesVerifiedByAdmin', 'publishedArticleId',
+                            'updatedAt'
+                          ]))
+                       );
+
+      allow delete: if isAdmin() && isValidId(submissionId);
+    }
+
+    // Public Published Islamic Articles (/islamic_articles_published/{articleId})
+    match /islamic_articles_published/{articleId} {
+      allow get: if isSignedIn() && isValidId(articleId) && (
+        resource == null ||
+        (existing().isAdminApproved == true && existing().publicationStatus == 'PUBLISHED') ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        (resource.data.isAdminApproved == true && resource.data.publicationStatus == 'PUBLISHED') ||
+        isAdmin()
+      );
+
+      allow create, update: if isAdmin() &&
+                               isValidId(articleId) &&
+                               incoming().keys().hasAll([
+                                 'articleId', 'authorId', 'authorName', 'authorBio',
+                                 'title', 'categoryId', 'summary', 'content',
+                                 'quranReferences', 'hadithReferences',
+                                 'otherSourcesAndBibliography', 'isFeatured',
+                                 'isReferencesVerified', 'isAdminApproved',
+                                 'publicationStatus', 'approvedByAdminId',
+                                 'publishedDateTextBangla', 'publishedAt', 'updatedAt'
+                               ]) &&
+                               incoming().keys().hasOnly([
+                                 'articleId', 'submissionId', 'authorId', 'authorName',
+                                 'authorBio', 'title', 'categoryId', 'summary',
+                                 'content', 'coverImageUrl', 'quranReferences',
+                                 'hadithReferences', 'otherSourcesAndBibliography',
+                                 'scholarlyDifferenceNote', 'isFeatured', 'isPopular',
+                                 'isReferencesVerified', 'isAdminApproved',
+                                 'publicationStatus', 'approvedByAdminId',
+                                 'publishedDateTextBangla', 'publishedAt', 'updatedAt'
+                               ]) &&
+                               isValidPublishedIslamicArticle(incoming(), articleId);
+
+      allow delete: if isAdmin() && isValidId(articleId);
     }
   }
 }
