@@ -42,6 +42,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -218,25 +219,6 @@ fun AuthorPublisherSelfPublishingPortalScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    IconButton(
-                        onClick = {
-                            if (activeTab != SelfPublishingPortalTab.MY_DASHBOARD) {
-                                activeTab = SelfPublishingPortalTab.MY_DASHBOARD
-                            } else {
-                                onBackToLibrary()
-                            }
-                        },
-                        modifier = Modifier
-                            .size(48.dp)
-                            .testTag("portal_back_btn")
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "লাইব্রেরিতে ফিরে যান",
-                            tint = Color.White
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(6.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "লেখক, অনুবাদক ও প্রকাশক পোর্টাল",
@@ -1319,16 +1301,7 @@ fun AdminBookApprovalDashboardScreen(
         ) {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
-                        onClick = onBackToLibrary,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .testTag("admin_dashboard_back_btn")
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "ফিরে যান", tint = Color.White)
-                    }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "অ্যাডমিন বুক অনুমোদন ড্যাশবোর্ড",
                             color = Color.White,
@@ -2069,8 +2042,11 @@ fun InlineSelectedPdfPreviewSection(
                                 totalPages = count
                                 val idx = (previewPage - 1).coerceIn(0, count - 1)
                                 renderer.openPage(idx).use { page ->
-                                    val targetW = (page.width * 2).coerceIn(600, 1200)
-                                    val targetH = (page.height * 2).coerceIn(800, 1600)
+                                    val pageW = page.width.coerceAtLeast(1)
+                                    val pageH = page.height.coerceAtLeast(1)
+                                    val scale = (1400f / pageW.toFloat()).coerceIn(1.5f, 3.0f)
+                                    val targetW = (pageW * scale).toInt().coerceAtLeast(1)
+                                    val targetH = (pageH * scale).toInt().coerceAtLeast(1)
                                     val bmp = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
                                     bmp.eraseColor(android.graphics.Color.WHITE)
                                     page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
@@ -2084,11 +2060,20 @@ fun InlineSelectedPdfPreviewSection(
             }
             if (rendered == null) {
                 totalPages = uploadProgress.detectedPageCount.coerceAtLeast(1)
-                val fallbackBmp = Bitmap.createBitmap(600, 800, Bitmap.Config.ARGB_8888)
+                val fallbackBmp = Bitmap.createBitmap(595, 842, Bitmap.Config.ARGB_8888)
                 fallbackBmp.eraseColor(android.graphics.Color.WHITE)
                 rendered = fallbackBmp
             }
             pageBitmap = rendered
+        }
+    }
+
+    val bmp = pageBitmap
+    val pageAspectRatio = remember(bmp) {
+        if (bmp != null && bmp.width > 0 && bmp.height > 0) {
+            (bmp.width.toFloat() / bmp.height.toFloat()).coerceIn(0.5f, 1.4f)
+        } else {
+            595f / 842f
         }
     }
 
@@ -2114,29 +2099,41 @@ fun InlineSelectedPdfPreviewSection(
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp,
                     color = PortalDarkGreen,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
-                Text(
-                    text = "পৃষ্ঠা $previewPage / $totalPages",
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = PortalDeepGreen,
-                    modifier = Modifier.testTag("submission_pdf_preview_page_indicator")
-                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Surface(
+                    color = PortalMintBg,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(0.8.dp, PortalDeepGreen.copy(alpha = 0.3f))
+                ) {
+                    Text(
+                        text = "পৃষ্ঠা $previewPage / $totalPages",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PortalDeepGreen,
+                        softWrap = false,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                            .testTag("submission_pdf_preview_page_indicator")
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(220.dp)
+                    .aspectRatio(pageAspectRatio)
                     .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFFF3F4F6))
+                    .background(Color.White)
                     .border(0.75.dp, Color(0xFFD1D5DB), RoundedCornerShape(6.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                val bmp = pageBitmap
                 if (bmp != null) {
                     Image(
                         bitmap = bmp.asImageBitmap(),
@@ -2155,7 +2152,7 @@ fun InlineSelectedPdfPreviewSection(
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -2171,7 +2168,7 @@ fun InlineSelectedPdfPreviewSection(
                         .testTag("submission_pdf_preview_prev_btn")
                 ) {
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Text("আগের পৃষ্ঠা", fontSize = 11.sp)
+                    Text("আগের পৃষ্ঠা", fontSize = 11.sp, softWrap = false, maxLines = 1)
                 }
 
                 OutlinedButton(
@@ -2182,7 +2179,7 @@ fun InlineSelectedPdfPreviewSection(
                         .height(34.dp)
                         .testTag("submission_pdf_preview_next_btn")
                 ) {
-                    Text("পরের পৃষ্ঠা", fontSize = 11.sp)
+                    Text("পরের পৃষ্ঠা", fontSize = 11.sp, softWrap = false, maxLines = 1)
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(16.dp))
                 }
             }

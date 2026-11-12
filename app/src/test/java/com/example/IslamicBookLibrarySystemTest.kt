@@ -329,6 +329,20 @@ class IslamicBookLibrarySystemTest {
         composeTestRule.waitForIdle()
         assertEquals("Left-to-Right swipe must return to Page 1", 1, bookManager.getLastReadPage(sampleBook.bookId, 1))
 
+        // 2b. Bottom-to-Top Vertical Scroll/Swipe (swipeUp) -> Next Page (Page 2) naturally without mode toggle
+        composeTestRule.onNodeWithTag("pdf_reader_page_viewport").performTouchInput {
+            swipeUp(startY = bottom * 0.85f, endY = top + height * 0.15f, durationMillis = 200)
+        }
+        composeTestRule.waitForIdle()
+        assertEquals("Vertical Upward scroll/swipe must advance to Page 2", 2, bookManager.getLastReadPage(sampleBook.bookId, 1))
+
+        // 2c. Top-to-Bottom Vertical Scroll/Swipe (swipeDown) -> Previous Page (Page 1) naturally without mode toggle
+        composeTestRule.onNodeWithTag("pdf_reader_page_viewport").performTouchInput {
+            swipeDown(startY = top + height * 0.15f, endY = bottom * 0.85f, durationMillis = 200)
+        }
+        composeTestRule.waitForIdle()
+        assertEquals("Vertical Downward scroll/swipe must return to Page 1", 1, bookManager.getLastReadPage(sampleBook.bookId, 1))
+
         // 3. Previous and Next Page buttons also remain active and work
         composeTestRule.onNodeWithTag("pdf_reader_next_page_btn").assertIsDisplayed().performClick()
         composeTestRule.waitForIdle()
@@ -373,4 +387,125 @@ class IslamicBookLibrarySystemTest {
         composeTestRule.onNodeWithTag("pdf_reader_exit_fullscreen_btn").assertIsDisplayed().performClick()
         composeTestRule.waitForIdle()
     }
+
+    @Test
+    fun test07_urgentFix1_bookDetailsPdfPreviewAndLastReadPage_noVerticalTextBreak_preservesAspectRatio() = runBlocking {
+        // 1. Verify symmetric whitespace trimming preserves exact PDF page aspect ratio even when ink is only on one side
+        val asymmetricPage = Bitmap.createBitmap(600, 800, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(Color.WHITE)
+            // Put dark text pixels only in a narrow strip on the right side
+            for (y in 100..200) {
+                for (x in 450..500) {
+                    setPixel(x, y, Color.BLACK)
+                }
+            }
+        }
+        val trimmedPage = trimPdfOuterWhitespaceSymmetrically(asymmetricPage, Color.WHITE)
+        val originalRatio = asymmetricPage.width.toFloat() / asymmetricPage.height.toFloat()
+        val trimmedRatio = trimmedPage.width.toFloat() / trimmedPage.height.toFloat()
+        assertEquals(
+            "Symmetric PDF trimming must preserve the exact original page aspect ratio without shifting or breaking text",
+            originalRatio,
+            trimmedRatio,
+            0.01f
+        )
+
+        // 2. Verify Book Details page displays last read page badge horizontally (never broken vertically) and renders full PDF preview
+        val sampleBook = seedAdminUploadedBook(
+            titleBangla = "ফাজায়েলে আমল",
+            category = IslamicBookCategory.TAZKIYAH_AKHLAQ
+        )
+        bookManager.downloadBookSynchronously(sampleBook, 1)
+
+        composeTestRule.setContent {
+            Box(modifier = Modifier.width(412.dp).height(1800.dp)) {
+                IslamicBookLibraryScreen(
+                    currentUserId = "reader_user_1",
+                    isAdmin = false
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("islamic_book_card_${sampleBook.bookId}").assertIsDisplayed().performClick()
+        composeTestRule.waitForIdle()
+
+        val badgeNode = composeTestRule.onNodeWithTag("book_details_last_read_page_badge").assertIsDisplayed()
+        val badgeBounds = badgeNode.fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "Last read page badge must be rendered horizontally on a single line (width > height * 2), never broken vertically",
+            badgeBounds.width > badgeBounds.height * 2f
+        )
+
+        // Wait until Book Details PDF Page Preview renders
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            composeTestRule.onAllNodesWithTag("book_details_pdf_preview_image").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeTestRule.onNodeWithTag("book_details_pdf_preview_card").assertIsDisplayed()
+        val previewImageBounds = composeTestRule.onNodeWithTag("book_details_pdf_preview_image")
+            .assertIsDisplayed()
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val previewAspect = previewImageBounds.width / previewImageBounds.height
+        assertEquals(
+            "Book details PDF preview must preserve natural portrait page aspect ratio (~0.707)",
+            595f / 842f,
+            previewAspect,
+            0.05f
+        )
+
+        val pageIndicatorBounds = composeTestRule.onNodeWithTag("book_details_pdf_preview_page_indicator")
+            .assertIsDisplayed()
+            .fetchSemanticsNode()
+            .boundsInRoot
+        assertTrue(
+            "PDF preview page number indicator must be horizontal (width > height), never vertical",
+            pageIndicatorBounds.width > pageIndicatorBounds.height
+        )
+    }
+
+    @Test
+    fun test08_urgentFix2_noDoubleBackButtonOnBookDetailsOrLibrary_andSingleTopBarBackNavigatesCorrectly() {
+        val sampleBook = seedAdminUploadedBook(
+            titleBangla = "কিতাবুত তাওহীদ",
+            category = IslamicBookCategory.AQIDAH_IMAN
+        )
+        var currentSubView = LibrarySubView.CATALOG_HOME
+        var registeredBackHandler: (() -> Boolean)? = null
+
+        composeTestRule.setContent {
+            Box(modifier = Modifier.width(412.dp).height(1000.dp)) {
+                IslamicBookLibraryScreen(
+                    currentUserId = "reader_user_1",
+                    isAdmin = false,
+                    onSubViewChanged = { currentSubView = it },
+                    onRegisterBackInterceptor = { registeredBackHandler = it }
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // On CATALOG_HOME, redundant secondary back button must NOT exist
+        composeTestRule.onNodeWithTag("islamic_book_library_back_btn").assertDoesNotExist()
+        assertEquals(LibrarySubView.CATALOG_HOME, currentSubView)
+
+        // Open Book Details
+        composeTestRule.onNodeWithTag("islamic_book_card_${sampleBook.bookId}").assertIsDisplayed().performClick()
+        composeTestRule.waitForIdle()
+
+        // Verify we are on Book Details screen and the redundant second Back Button ('book_details_back_btn') does NOT exist
+        composeTestRule.onNodeWithTag("islamic_book_details_screen").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("book_details_back_btn").assertDoesNotExist()
+        assertEquals(LibrarySubView.BOOK_DETAILS, currentSubView)
+
+        // Verify the single Top App Bar back interceptor navigates cleanly back from BOOK_DETAILS to CATALOG_HOME
+        assertNotNull("Back interceptor must be registered for the main Top App Bar Back Button", registeredBackHandler)
+        val consumed = registeredBackHandler!!.invoke()
+        composeTestRule.waitForIdle()
+
+        assertTrue("Back interceptor must consume back click on BOOK_DETAILS", consumed)
+        assertEquals("Back interceptor must return to CATALOG_HOME", LibrarySubView.CATALOG_HOME, currentSubView)
+        composeTestRule.onNodeWithTag("islamic_book_library_root").assertIsDisplayed()
+    }
 }
+

@@ -595,22 +595,48 @@ fun MainAppScaffold(
         val hideBottomBarForActiveChatKeyboard =
             currentDestination == MainDestination.MESSAGES && isKeyboardOpen
 
+        var islamicBookSubView by remember {
+            mutableStateOf(com.example.ui.islamicbooks.LibrarySubView.CATALOG_HOME)
+        }
+        var islamicBookBackInterceptor by remember {
+            mutableStateOf<(() -> Boolean)?>(null)
+        }
+        LaunchedEffect(currentDestination) {
+            if (currentDestination != MainDestination.ISLAMIC_BOOK_LIBRARY) {
+                islamicBookSubView = com.example.ui.islamicbooks.LibrarySubView.CATALOG_HOME
+                islamicBookBackInterceptor = null
+            }
+        }
+        val isIslamicBookFullScreenReader =
+            currentDestination == MainDestination.ISLAMIC_BOOK_LIBRARY &&
+                islamicBookSubView == com.example.ui.islamicbooks.LibrarySubView.PDF_READER
+
         Scaffold(
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             containerColor = QawmiSoftBg,
             topBar = {
-                QawmiTopBar(
-                    title = topBarTitle,
-                    showTwinEmblems = currentDestination == MainDestination.HOME,
-                    unreadNotificationCount = unreadNotificationsCount,
-                    onMenuClick = { scope.launch { drawerState.open() } },
-                    onNotificationClick = { viewModel.navigateTo(MainDestination.NOTIFICATIONS) },
-                    showBackButton = !isRootTab,
-                    onBackClick = { viewModel.navigateBack() }
-                )
+                if (!isIslamicBookFullScreenReader) {
+                    QawmiTopBar(
+                        title = topBarTitle,
+                        showTwinEmblems = currentDestination == MainDestination.HOME,
+                        unreadNotificationCount = unreadNotificationsCount,
+                        onMenuClick = { scope.launch { drawerState.open() } },
+                        onNotificationClick = { viewModel.navigateTo(MainDestination.NOTIFICATIONS) },
+                        showBackButton = !isRootTab,
+                        onBackClick = {
+                            if (currentDestination == MainDestination.ISLAMIC_BOOK_LIBRARY &&
+                                islamicBookBackInterceptor?.invoke() == true
+                            ) {
+                                // Sub-screen back navigation handled inside IslamicBookLibraryScreen
+                            } else {
+                                viewModel.navigateBack()
+                            }
+                        }
+                    )
+                }
             },
             bottomBar = {
-                if (!hideBottomBarForActiveChatKeyboard) {
+                if (!hideBottomBarForActiveChatKeyboard && !isIslamicBookFullScreenReader) {
                     QawmiBottomNavBar(
                         currentDestination = currentDestination,
                         unreadMessagesCount = unreadDirectMessagesCount,
@@ -1413,7 +1439,9 @@ fun MainAppScaffold(
                                 currentUserPhone = currentUserProf?.contactInfo.orEmpty(),
                                 currentUserEmail = viewModel.currentUserEmail,
                                 isAdmin = isAdminState,
-                                onNavigateBackHome = { viewModel.navigateBack() }
+                                onNavigateBackHome = { viewModel.navigateBack() },
+                                onSubViewChanged = { subView -> islamicBookSubView = subView },
+                                onRegisterBackInterceptor = { interceptor -> islamicBookBackInterceptor = interceptor }
                             )
                         }
 

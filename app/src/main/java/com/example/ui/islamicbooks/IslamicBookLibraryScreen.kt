@@ -61,7 +61,7 @@ private val LibCreamCard = Color(0xFFFCFBF7)
 private val LibGold = Color(0xFFC99A2E)
 private val LibGoldLight = Color(0xFFFFF8E6)
 
-private enum class LibrarySubView {
+enum class LibrarySubView {
     CATALOG_HOME,
     BOOK_DETAILS,
     PDF_READER,
@@ -80,7 +80,9 @@ fun IslamicBookLibraryScreen(
     currentUserPhone: String = "01700000000",
     currentUserEmail: String = "",
     isAdmin: Boolean = false,
-    onNavigateBackHome: () -> Unit = {}
+    onNavigateBackHome: () -> Unit = {},
+    onSubViewChanged: (LibrarySubView) -> Unit = {},
+    onRegisterBackInterceptor: ((() -> Boolean)?) -> Unit = {}
 ) {
     val context = LocalContext.current
     val bookManager = remember { IslamicBookManager.getInstance(context) }
@@ -97,6 +99,38 @@ fun IslamicBookLibraryScreen(
 
     val downloadProgressMap by bookManager.downloadProgressMap.collectAsState()
     val dynamicCatalog by bookManager.dynamicCatalogBooks.collectAsState()
+
+    LaunchedEffect(currentSubView) {
+        onSubViewChanged(currentSubView)
+    }
+
+    DisposableEffect(currentSubView) {
+        onRegisterBackInterceptor {
+            when (currentSubView) {
+                LibrarySubView.PDF_READER -> {
+                    currentSubView = LibrarySubView.BOOK_DETAILS
+                    true
+                }
+                LibrarySubView.BOOK_DETAILS -> {
+                    pendingAutoOpenReaderAfterDownload = false
+                    currentSubView = LibrarySubView.CATALOG_HOME
+                    true
+                }
+                LibrarySubView.SELF_PUBLISHING_PORTAL -> {
+                    currentSubView = LibrarySubView.CATALOG_HOME
+                    true
+                }
+                LibrarySubView.ADMIN_APPROVAL_DASHBOARD -> {
+                    currentSubView = LibrarySubView.CATALOG_HOME
+                    true
+                }
+                LibrarySubView.CATALOG_HOME -> false
+            }
+        }
+        onDispose {
+            onRegisterBackInterceptor(null)
+        }
+    }
 
     // ২. ডাউনলোড সম্পূর্ণ হওয়ার পরেই স্বয়ংক্রিয়ভাবে PDF Reader খুলবে
     LaunchedEffect(selectedBook?.bookId, selectedVolumeNumber, downloadProgressMap, pendingAutoOpenReaderAfterDownload) {
@@ -209,6 +243,7 @@ fun IslamicBookLibraryScreen(
                     isPendingAutoOpenReader = pendingAutoOpenReaderAfterDownload,
                     lastReadPage = bookManager.getLastReadPage(book.bookId, selectedVolumeNumber),
                     bookmarks = bookManager.getBookmarks(book.bookId, selectedVolumeNumber),
+                    bookManager = bookManager,
                     onStartOrResumeDownload = {
                         bookManager.startOrResumeDownload(book, selectedVolumeNumber)
                     },
@@ -233,10 +268,6 @@ fun IslamicBookLibraryScreen(
                             pendingAutoOpenReaderAfterDownload = true
                             bookManager.startOrResumeDownload(book, selectedVolumeNumber)
                         }
-                    },
-                    onBackToCatalog = {
-                        pendingAutoOpenReaderAfterDownload = false
-                        currentSubView = LibrarySubView.CATALOG_HOME
                     }
                 )
             } else {
@@ -282,20 +313,6 @@ fun IslamicBookLibraryScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                IconButton(
-                                    onClick = onNavigateBackHome,
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .testTag("islamic_book_library_back_btn")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = "হোমে ফিরে যান",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(6.dp))
                                 Surface(
                                     color = LibGold.copy(alpha = 0.22f),
                                     shape = RoundedCornerShape(6.dp),
@@ -844,12 +861,12 @@ private fun IslamicBookDetailsFullScreenView(
     isPendingAutoOpenReader: Boolean,
     lastReadPage: Int,
     bookmarks: List<IslamicBookBookmark>,
+    bookManager: IslamicBookManager,
     onStartOrResumeDownload: () -> Unit,
     onRetryDownload: () -> Unit,
     onPauseDownload: () -> Unit,
     onCancelDownload: () -> Unit,
-    onOpenPdfReader: () -> Unit,
-    onBackToCatalog: () -> Unit
+    onOpenPdfReader: () -> Unit
 ) {
     val isDownloaded = downloadProgress.state == IslamicBookDownloadState.DOWNLOADED
 
@@ -860,7 +877,7 @@ private fun IslamicBookDetailsFullScreenView(
             .testTag("islamic_book_details_screen"),
         contentPadding = PaddingValues(bottom = 28.dp)
     ) {
-        // Header
+        // Header (No duplicate Back Button here — the Top App Bar already provides the single Back Button)
         item {
             Box(
                 modifier = Modifier
@@ -869,29 +886,14 @@ private fun IslamicBookDetailsFullScreenView(
                     .padding(16.dp)
             ) {
                 Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(
-                            onClick = onBackToCatalog,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .testTag("book_details_back_btn")
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "লাইব্রেরিতে ফিরে যান",
-                                tint = Color.White
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "গ্রন্থ পরিচিতি ও ডাউনলোড কেন্দ্র",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp
-                        )
-                    }
+                    Text(
+                        text = "গ্রন্থ পরিচিতি ও ডাউনলোড কেন্দ্র",
+                        color = LibGoldLight,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     Row(
                         verticalAlignment = Alignment.Top,
@@ -982,7 +984,7 @@ private fun IslamicBookDetailsFullScreenView(
             }
         }
 
-        // Download & Offline Reader Control Card
+        // Download & Offline Reader Control Card (Fixed layout so neither title nor page number ever wraps vertically!)
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -1000,18 +1002,44 @@ private fun IslamicBookDetailsFullScreenView(
                     ) {
                         Text(
                             text = if (isDownloaded)
-                                "অফলাইনে ডাউনলোড সম্পন্ন ✓ (ইন্টারনেট ছাড়াই পাঠযোগ্য)"
+                                "অফলাইনে ডাউনলোড সম্পন্ন ✓"
                             else
                                 "পিডিএফ ডাউনলোড ও পঠন নিয়ন্ত্রণ",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
-                            color = LibDarkGreen
+                            color = LibDarkGreen,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            color = LibMintBg,
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(0.8.dp, LibDeepGreen.copy(alpha = 0.3f)),
+                            modifier = Modifier
+                                .widthIn(min = 125.dp)
+                                .testTag("book_details_last_read_page_badge")
+                        ) {
+                            Text(
+                                text = "সর্বশেষ পঠিত পৃষ্ঠা: $lastReadPage",
+                                fontSize = 11.5.sp,
+                                color = LibDeepGreen,
+                                fontWeight = FontWeight.Bold,
+                                softWrap = false,
+                                maxLines = 1,
+                                modifier = Modifier
+                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    if (isDownloaded) {
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "সর্বশেষ পঠিত পৃষ্ঠা: $lastReadPage",
+                            text = "বইটি আপনার ডিভাইসে সংরক্ষিত আছে — ইন্টারনেট ছাড়াই পূর্ণ স্ক্রিনে পড়তে পারবেন।",
                             fontSize = 12.sp,
-                            color = LibDeepGreen,
-                            fontWeight = FontWeight.SemiBold
+                            color = LibDeepGreen
                         )
                     }
 
@@ -1072,7 +1100,9 @@ private fun IslamicBookDetailsFullScreenView(
                                         "ডাউনলোড হচ্ছে (${downloadProgress.progressPercent}%)..."
                                     else -> "ডাউনলোড ও পড়ুন"
                                 },
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
 
@@ -1088,7 +1118,9 @@ private fun IslamicBookDetailsFullScreenView(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     if (downloadProgress.state == IslamicBookDownloadState.PAUSED) "Resume ডাউনলোড"
-                                    else "ডাউনলোড করুন"
+                                    else "ডাউনলোড করুন",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -1108,7 +1140,7 @@ private fun IslamicBookDetailsFullScreenView(
                                     .weight(1f)
                                     .testTag("book_download_pause_btn")
                             ) {
-                                Text("Pause", fontSize = 11.5.sp)
+                                Text("Pause", fontSize = 11.5.sp, softWrap = false, maxLines = 1)
                             }
                             OutlinedButton(
                                 onClick = onStartOrResumeDownload,
@@ -1117,7 +1149,7 @@ private fun IslamicBookDetailsFullScreenView(
                                     .weight(1f)
                                     .testTag("book_download_resume_btn")
                             ) {
-                                Text("Resume", fontSize = 11.5.sp)
+                                Text("Resume", fontSize = 11.5.sp, softWrap = false, maxLines = 1)
                             }
                             OutlinedButton(
                                 onClick = onRetryDownload,
@@ -1126,7 +1158,7 @@ private fun IslamicBookDetailsFullScreenView(
                                     .weight(1f)
                                     .testTag("book_download_retry_btn")
                             ) {
-                                Text("Retry", fontSize = 11.5.sp)
+                                Text("Retry", fontSize = 11.5.sp, softWrap = false, maxLines = 1)
                             }
                             OutlinedButton(
                                 onClick = onCancelDownload,
@@ -1135,11 +1167,24 @@ private fun IslamicBookDetailsFullScreenView(
                                     .weight(1f)
                                     .testTag("book_download_cancel_btn")
                             ) {
-                                Text("Cancel", fontSize = 11.5.sp)
+                                Text("Cancel", fontSize = 11.5.sp, softWrap = false, maxLines = 1)
                             }
                         }
                     }
                 }
+            }
+        }
+
+        // ১. বইয়ের বিস্তারিত পেজে PDF পৃষ্ঠা প্রিভিউ (আসল পেজের অনুপাত ও লেআউট অক্ষুণ্ণ রেখে সম্পূর্ণ পৃষ্ঠা প্রদর্শন)
+        if (isDownloaded) {
+            item {
+                BookDetailsPdfPagePreviewCard(
+                    book = book,
+                    volumeNumber = selectedVolumeNumber,
+                    initialPreviewPage = lastReadPage.coerceAtLeast(1),
+                    bookManager = bookManager,
+                    onOpenFullScreenReader = onOpenPdfReader
+                )
             }
         }
 
@@ -1255,6 +1300,207 @@ private fun IslamicBookDetailsFullScreenView(
     }
 }
 
+@Composable
+private fun BookDetailsPdfPagePreviewCard(
+    book: IslamicBookCatalogItem,
+    volumeNumber: Int,
+    initialPreviewPage: Int,
+    bookManager: IslamicBookManager,
+    onOpenFullScreenReader: () -> Unit
+) {
+    var previewPage by remember(book.bookId, volumeNumber) {
+        mutableIntStateOf(initialPreviewPage.coerceAtLeast(1))
+    }
+    var totalPages by remember(book.bookId, volumeNumber) {
+        mutableIntStateOf(book.pageCount.coerceAtLeast(1))
+    }
+    var previewBitmap by remember(book.bookId, volumeNumber) {
+        mutableStateOf<Bitmap?>(
+            Bitmap.createBitmap(595, 842, Bitmap.Config.ARGB_8888).apply {
+                eraseColor(android.graphics.Color.WHITE)
+            }
+        )
+    }
+
+    LaunchedEffect(book.bookId, volumeNumber, previewPage) {
+        val associatedPath = bookManager.getAssociatedPdfFilePathForBook(book.bookId, volumeNumber)
+        val pdfFile = if (associatedPath != null) File(associatedPath) else bookManager.getBookPdfFile(book.bookId, volumeNumber)
+        if (bookManager.isValidPdfFile(pdfFile)) {
+            var rendered: Bitmap? = null
+            try {
+                ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)?.use { pfd ->
+                    PdfRenderer(pfd).use { renderer ->
+                        val nativeCount = renderer.pageCount
+                        if (nativeCount > 0) {
+                            totalPages = nativeCount
+                            val safeIndex = (previewPage - 1).coerceIn(0, nativeCount - 1)
+                            renderer.openPage(safeIndex).use { page ->
+                                val pageW = page.width.coerceAtLeast(1)
+                                val pageH = page.height.coerceAtLeast(1)
+                                val scale = (1400f / pageW.toFloat()).coerceIn(1.5f, 3.0f)
+                                val renderW = (pageW * scale).toInt().coerceAtLeast(1)
+                                val renderH = (pageH * scale).toInt().coerceAtLeast(1)
+                                val rawBmp = Bitmap.createBitmap(renderW, renderH, Bitmap.Config.ARGB_8888)
+                                rawBmp.eraseColor(android.graphics.Color.WHITE)
+                                page.render(rawBmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                                rendered = trimPdfOuterWhitespaceSymmetrically(rawBmp, android.graphics.Color.WHITE)
+                            }
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+            }
+
+            if (rendered == null) {
+                val fallbackCount = bookManager.detectPdfPageCount(pdfFile)
+                    .coerceAtLeast(book.pageCount)
+                    .coerceAtLeast(1)
+                totalPages = fallbackCount
+                val fallbackBmp = Bitmap.createBitmap(595, 842, Bitmap.Config.ARGB_8888)
+                fallbackBmp.eraseColor(android.graphics.Color.WHITE)
+                rendered = fallbackBmp
+            }
+            previewBitmap = rendered
+        }
+    }
+
+    val bmp = previewBitmap
+    val pageAspectRatio = remember(bmp) {
+        if (bmp != null && bmp.width > 0 && bmp.height > 0) {
+            (bmp.width.toFloat() / bmp.height.toFloat()).coerceIn(0.5f, 1.4f)
+        } else {
+            595f / 842f
+        }
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, LibDeepGreen.copy(alpha = 0.3f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .testTag("book_details_pdf_preview_card")
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "PDF পৃষ্ঠা প্রিভিউ",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = LibDarkGreen,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Surface(
+                    color = LibMintBg,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(0.8.dp, LibDeepGreen.copy(alpha = 0.35f)),
+                    modifier = Modifier
+                        .widthIn(min = 96.dp)
+                        .testTag("book_details_pdf_preview_page_indicator")
+                ) {
+                    Text(
+                        text = "পৃষ্ঠা $previewPage / $totalPages",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = LibDeepGreen,
+                        softWrap = false,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(pageAspectRatio)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.White)
+                    .border(0.8.dp, Color(0xFFD1D5DB), RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (bmp != null) {
+                    Image(
+                        bitmap = bmp.asImageBitmap(),
+                        contentDescription = "${book.titleBangla} প্রিভিউ পৃষ্ঠা $previewPage",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clickable { onOpenFullScreenReader() }
+                            .testTag("book_details_pdf_preview_image")
+                    )
+                } else {
+                    Text(
+                        text = "পৃষ্ঠা প্রিভিউ লোড হচ্ছে...",
+                        fontSize = 12.sp,
+                        color = LibDeepGreen
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = { if (previewPage > 1) previewPage -= 1 },
+                    enabled = previewPage > 1,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier
+                        .height(36.dp)
+                        .testTag("book_details_pdf_preview_prev_btn")
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Text("আগের পৃষ্ঠা", fontSize = 11.5.sp, softWrap = false, maxLines = 1)
+                }
+
+                TextButton(
+                    onClick = onOpenFullScreenReader,
+                    modifier = Modifier.testTag("book_details_pdf_preview_fullscreen_btn")
+                ) {
+                    Text(
+                        text = "পূর্ণ স্ক্রিনে পড়ুন",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = LibDeepGreen,
+                        softWrap = false,
+                        maxLines = 1
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = { if (previewPage < totalPages) previewPage += 1 },
+                    enabled = previewPage < totalPages,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier
+                        .height(36.dp)
+                        .testTag("book_details_pdf_preview_next_btn")
+                ) {
+                    Text("পরের পৃষ্ঠা", fontSize = 11.5.sp, softWrap = false, maxLines = 1)
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+    }
+}
+
 enum class PdfReaderScrollDirection {
     HORIZONTAL,
     VERTICAL
@@ -1268,9 +1514,9 @@ enum class PdfReaderFitMode {
 /**
  * ৩. অ্যাপের নিজস্ব ফুল-স্ক্রিন নেটিভ পিডিএফ রিডার:
  * - ডান থেকে বামে Swipe করলে পরবর্তী পৃষ্ঠা, বাম থেকে ডানে Swipe করলে আগের পৃষ্ঠা
- * - Vertical ও Horizontal Reading Mode
+ * - আঙুল দিয়ে উপরে-নিচে স্ক্রল ও সোয়াইপ করে স্বাভাবিকভাবে পরবর্তী ও আগের পৃষ্ঠায় যাওয়া যায়
  * - Previous ও Next Button কার্যকর
- * - সম্পূর্ণ স্ক্রিন ব্যবহার (কোনো সাইড মার্জিন বা বড় বর্ডার নেই) এবং অতিরিক্ত সাদা অংশ ট্রিম করে বড় ও পরিষ্কার লেখা প্রদর্শন
+ * - সম্পূর্ণ স্ক্রিন ব্যবহার এবং আসল পেজের অনুপাত ঠিক রেখে অতিরিক্ত সাদা অংশ সুষমভাবে কমিয়ে বড় ও পরিষ্কার লেখা প্রদর্শন
  * - Fit to Width, Fit to Page, Pinch to Zoom ও Double Tap Zoom
  * - Full Screen Mode এবং Swipe ও Zoom-এর মধ্যে শূন্য সংঘর্ষ (Zero Gesture Conflict)
  */
@@ -1312,51 +1558,54 @@ internal fun IslamicBookNativePdfReaderScreen(
     LaunchedEffect(book.bookId, volumeNumber, currentPage, isNightMode) {
         isRendering = true
         bookManager.saveLastReadPage(book.bookId, volumeNumber, currentPage)
-        withContext(Dispatchers.IO) {
-            val associatedPath = bookManager.getAssociatedPdfFilePathForBook(book.bookId, volumeNumber)
-            var pdfFile: File = if (associatedPath != null) File(associatedPath) else bookManager.getBookPdfFile(book.bookId, volumeNumber)
-            if (!bookManager.isValidPdfFile(pdfFile)) {
-                pdfFile = bookManager.downloadBookSynchronously(book, volumeNumber)
+        val associatedPath = bookManager.getAssociatedPdfFilePathForBook(book.bookId, volumeNumber)
+        var pdfFile: File = if (associatedPath != null) File(associatedPath) else bookManager.getBookPdfFile(book.bookId, volumeNumber)
+        if (!bookManager.isValidPdfFile(pdfFile)) {
+            pdfFile = withContext(Dispatchers.IO) {
+                bookManager.downloadBookSynchronously(book, volumeNumber)
             }
-            if (bookManager.isValidPdfFile(pdfFile)) {
-                val bgColor = if (isNightMode) {
-                    android.graphics.Color.parseColor("#111827")
-                } else {
-                    android.graphics.Color.WHITE
-                }
-                var rendered: Bitmap? = null
-                try {
-                    ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)?.use { pfd ->
-                        PdfRenderer(pfd).use { renderer ->
-                            val nativeCount = renderer.pageCount
-                            if (nativeCount > 0) {
-                                totalPages = nativeCount
-                                val safeIndex = (currentPage - 1).coerceIn(0, nativeCount - 1)
-                                renderer.openPage(safeIndex).use { page ->
-                                    val renderW = (page.width * 2).coerceIn(1080, 1800)
-                                    val renderH = (page.height * 2).coerceIn(1440, 2400)
-                                    val rawBmp = Bitmap.createBitmap(renderW, renderH, Bitmap.Config.ARGB_8888)
-                                    rawBmp.eraseColor(bgColor)
-                                    page.render(rawBmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                                    rendered = trimPdfOuterWhitespace(rawBmp, bgColor)
-                                }
+        }
+        if (bookManager.isValidPdfFile(pdfFile)) {
+            val bgColor = if (isNightMode) {
+                android.graphics.Color.parseColor("#111827")
+            } else {
+                android.graphics.Color.WHITE
+            }
+            var rendered: Bitmap? = null
+            try {
+                ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)?.use { pfd ->
+                    PdfRenderer(pfd).use { renderer ->
+                        val nativeCount = renderer.pageCount
+                        if (nativeCount > 0) {
+                            totalPages = nativeCount
+                            val safeIndex = (currentPage - 1).coerceIn(0, nativeCount - 1)
+                            renderer.openPage(safeIndex).use { page ->
+                                val pageW = page.width.coerceAtLeast(1)
+                                val pageH = page.height.coerceAtLeast(1)
+                                val scale = (1600f / pageW.toFloat()).coerceIn(2.0f, 3.5f)
+                                val renderW = (pageW * scale).toInt().coerceAtLeast(1)
+                                val renderH = (pageH * scale).toInt().coerceAtLeast(1)
+                                val rawBmp = Bitmap.createBitmap(renderW, renderH, Bitmap.Config.ARGB_8888)
+                                rawBmp.eraseColor(bgColor)
+                                page.render(rawBmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                                rendered = trimPdfOuterWhitespaceSymmetrically(rawBmp, bgColor)
                             }
                         }
                     }
-                } catch (_: Exception) {
                 }
-
-                if (rendered == null) {
-                    val fallbackCount = bookManager.detectPdfPageCount(pdfFile)
-                        .coerceAtLeast(book.pageCount)
-                        .coerceAtLeast(1)
-                    totalPages = fallbackCount
-                    val fallbackBmp = Bitmap.createBitmap(600, 800, Bitmap.Config.ARGB_8888)
-                    fallbackBmp.eraseColor(bgColor)
-                    rendered = fallbackBmp
-                }
-                renderedBitmap = rendered
+            } catch (_: Exception) {
             }
+
+            if (rendered == null) {
+                val fallbackCount = bookManager.detectPdfPageCount(pdfFile)
+                    .coerceAtLeast(book.pageCount)
+                    .coerceAtLeast(1)
+                totalPages = fallbackCount
+                val fallbackBmp = Bitmap.createBitmap(595, 842, Bitmap.Config.ARGB_8888)
+                fallbackBmp.eraseColor(bgColor)
+                rendered = fallbackBmp
+            }
+            renderedBitmap = rendered
         }
         isRendering = false
     }
@@ -1403,6 +1652,8 @@ internal fun IslamicBookNativePdfReaderScreen(
                             text = "পৃষ্ঠা $currentPage / $totalPages • ${if (readingMode == PdfReaderScrollDirection.HORIZONTAL) "Horizontal" else "Vertical"} • ${if (fitMode == PdfReaderFitMode.FIT_WIDTH) "Fit Width" else "Fit Page"}",
                             color = LibGold,
                             fontSize = 10.5.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.testTag("pdf_reader_page_indicator")
                         )
                     }
@@ -1507,74 +1758,135 @@ internal fun IslamicBookNativePdfReaderScreen(
                 }
             }
 
-            // Full-Bleed PDF Page Viewport (0.dp side margin, 0.dp border, conflict-free Swipe + Pinch-to-Zoom + Double-Tap Zoom)
-            Box(
+            // Full-Bleed PDF Page Viewport (0.dp margin, unified conflict-free Vertical Scroll/Swipe + Horizontal Swipe + Pinch/Double-Tap Zoom)
+            BoxWithConstraints(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
                     .padding(0.dp)
                     .clipToBounds()
-                    .testTag("pdf_reader_page_viewport")
-                    .pointerInput(Unit) {
-                        detectTapGestures(
-                            onDoubleTap = {
-                                if (zoomScale > 1.05f) {
-                                    zoomScale = 1f
-                                    panOffsetX = 0f
-                                    panOffsetY = 0f
-                                } else {
-                                    zoomScale = 2.25f
-                                }
-                            }
-                        )
+                    .testTag("pdf_reader_page_viewport"),
+                contentAlignment = Alignment.Center
+            ) {
+                val bmp = renderedBitmap
+                val viewportW = constraints.maxWidth.toFloat().coerceAtLeast(1f)
+                val viewportH = constraints.maxHeight.toFloat().coerceAtLeast(1f)
+                val bmpAspect = remember(bmp) {
+                    if (bmp != null && bmp.width > 0 && bmp.height > 0) {
+                        (bmp.width.toFloat() / bmp.height.toFloat()).coerceIn(0.45f, 1.8f)
+                    } else {
+                        595f / 842f
                     }
-                    .pointerInput(readingMode, totalPages) {
-                        val swipeThresholdPx = 42.dp.toPx()
-                        awaitEachGesture {
-                            awaitFirstDown(requireUnconsumed = false)
-                            var totalDragX = 0f
-                            var totalDragY = 0f
-                            var hadMultiTouch = false
+                }
+                val basePageHeightPx = remember(viewportW, viewportH, bmpAspect, fitMode) {
+                    if (fitMode == PdfReaderFitMode.FIT_WIDTH) {
+                        viewportW / bmpAspect
+                    } else {
+                        minOf(viewportH, viewportW / bmpAspect)
+                    }
+                }
+                val unzoomedMaxScrollY = remember(basePageHeightPx, viewportH) {
+                    ((basePageHeightPx - viewportH) / 2f).coerceAtLeast(0f)
+                }
 
-                            do {
-                                val event = awaitPointerEvent()
-                                val activePointers = event.changes.count { it.pressed }
-                                if (activePointers >= 2) {
-                                    hadMultiTouch = true
-                                    val zoomChange = event.calculateZoom()
-                                    val panChange = event.calculatePan()
-                                    val newScale = (zoomScale * zoomChange).coerceIn(1f, 4f)
-                                    zoomScale = newScale
-                                    if (newScale > 1.02f) {
-                                        val maxPanX = (size.width * (newScale - 1f)) / 2f
-                                        val maxPanY = (size.height * (newScale - 1f)) / 2f
-                                        panOffsetX = (panOffsetX + panChange.x).coerceIn(-maxPanX, maxPanX)
-                                        panOffsetY = (panOffsetY + panChange.y).coerceIn(-maxPanY, maxPanY)
-                                    } else {
-                                        panOffsetX = 0f
-                                        panOffsetY = 0f
-                                    }
-                                    event.changes.forEach { if (it.positionChanged()) it.consume() }
-                                } else if (activePointers == 1 && !hadMultiTouch) {
-                                    val panChange = event.calculatePan()
-                                    if (zoomScale > 1.05f) {
-                                        // জুম অবস্থায় প্যান করবে, পেজ সোয়াইপের সাথে কখনোই সংঘর্ষ করবে না
-                                        val maxPanX = (size.width * (zoomScale - 1f)) / 2f
-                                        val maxPanY = (size.height * (zoomScale - 1f)) / 2f
-                                        panOffsetX = (panOffsetX + panChange.x).coerceIn(-maxPanX, maxPanX)
-                                        panOffsetY = (panOffsetY + panChange.y).coerceIn(-maxPanY, maxPanY)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(readingMode, totalPages, fitMode, unzoomedMaxScrollY) {
+                            val swipeThresholdPx = 38.dp.toPx()
+                            val tapSlopPx = 18.dp.toPx()
+                            val doubleTapSlopPx = 48.dp.toPx()
+                            var lastTapUpTimeMillis = -1L
+                            var lastTapUpPosX = 0f
+                            var lastTapUpPosY = 0f
+
+                            awaitEachGesture {
+                                val firstDown = awaitFirstDown(requireUnconsumed = false)
+                                val downX = firstDown.position.x
+                                val downY = firstDown.position.y
+                                var lastPosX = downX
+                                var lastPosY = downY
+                                var lastEventUptimeMillis = firstDown.uptimeMillis
+                                var totalDragX = 0f
+                                var totalDragY = 0f
+                                var hadMultiTouch = false
+                                val wasAtTopBeforeDrag = panOffsetY >= unzoomedMaxScrollY - 6f
+                                val wasAtBottomBeforeDrag = panOffsetY <= -unzoomedMaxScrollY + 6f
+
+                                do {
+                                    val event = awaitPointerEvent()
+                                    event.changes.firstOrNull()?.let { lastEventUptimeMillis = it.uptimeMillis }
+                                    val activePointers = event.changes.count { it.pressed }
+                                    if (activePointers >= 2) {
+                                        hadMultiTouch = true
+                                        val zoomChange = event.calculateZoom()
+                                        val panChange = event.calculatePan()
+                                        val newScale = (zoomScale * zoomChange).coerceIn(1f, 4f)
+                                        zoomScale = newScale
+                                        if (newScale > 1.02f) {
+                                            val maxPanX = (size.width * (newScale - 1f)) / 2f
+                                            val scaledPageH = maxOf(size.height.toFloat(), basePageHeightPx) * newScale
+                                            val maxPanY = ((scaledPageH - size.height) / 2f).coerceAtLeast(0f)
+                                            panOffsetX = (panOffsetX + panChange.x).coerceIn(-maxPanX, maxPanX)
+                                            panOffsetY = (panOffsetY + panChange.y).coerceIn(-maxPanY, maxPanY)
+                                        } else {
+                                            panOffsetX = 0f
+                                            panOffsetY = panOffsetY.coerceIn(-unzoomedMaxScrollY, unzoomedMaxScrollY)
+                                        }
                                         event.changes.forEach { if (it.positionChanged()) it.consume() }
-                                    } else {
+                                    } else if (activePointers == 1 && !hadMultiTouch) {
+                                        val change = event.changes.firstOrNull { it.pressed }
+                                        if (change != null) {
+                                            lastPosX = change.position.x
+                                            lastPosY = change.position.y
+                                        }
+                                        val panChange = event.calculatePan()
                                         totalDragX += panChange.x
                                         totalDragY += panChange.y
-                                    }
-                                }
-                            } while (event.changes.any { it.pressed })
 
-                            // জুম না থাকলে (zoomScale <= 1.05f) এবং এক আঙুলে সোয়াইপ করা হলে পৃষ্ঠা পরিবর্তন হবে
-                            if (!hadMultiTouch && zoomScale <= 1.05f) {
-                                if (readingMode == PdfReaderScrollDirection.HORIZONTAL) {
-                                    if (abs(totalDragX) > abs(totalDragY) && abs(totalDragX) >= swipeThresholdPx) {
+                                        if (zoomScale > 1.05f) {
+                                            // জুম অবস্থায় প্যান করবে, পেজ সোয়াইপের সাথে কখনোই সংঘর্ষ করবে না
+                                            val maxPanX = (size.width * (zoomScale - 1f)) / 2f
+                                            val scaledPageH = maxOf(size.height.toFloat(), basePageHeightPx) * zoomScale
+                                            val maxPanY = ((scaledPageH - size.height) / 2f).coerceAtLeast(0f)
+                                            panOffsetX = (panOffsetX + panChange.x).coerceIn(-maxPanX, maxPanX)
+                                            panOffsetY = (panOffsetY + panChange.y).coerceIn(-maxPanY, maxPanY)
+                                            event.changes.forEach { if (it.positionChanged()) it.consume() }
+                                        } else if (unzoomedMaxScrollY > 4f && abs(totalDragY) > abs(totalDragX)) {
+                                            // উপরে-নিচে স্ক্রল করার সময় লম্বা পৃষ্ঠা স্বাভাবিকভাবে স্ক্রল হবে
+                                            panOffsetY = (panOffsetY + panChange.y).coerceIn(-unzoomedMaxScrollY, unzoomedMaxScrollY)
+                                            event.changes.forEach { if (it.positionChanged()) it.consume() }
+                                        }
+                                    }
+                                } while (event.changes.any { it.pressed })
+
+                                val upTime = lastEventUptimeMillis
+                                val moveDist = kotlin.math.hypot(totalDragX.toDouble(), totalDragY.toDouble()).toFloat()
+
+                                if (!hadMultiTouch && moveDist < tapSlopPx) {
+                                    val dt = if (lastTapUpTimeMillis >= 0L) upTime - lastTapUpTimeMillis else -1L
+                                    val tapDist = kotlin.math.hypot(
+                                        (lastPosX - lastTapUpPosX).toDouble(),
+                                        (lastPosY - lastTapUpPosY).toDouble()
+                                    ).toFloat()
+                                    if (dt in 0..400 && tapDist < doubleTapSlopPx) {
+                                        // Double-Tap Zoom toggle
+                                        if (zoomScale > 1.05f) {
+                                            zoomScale = 1f
+                                            panOffsetX = 0f
+                                            panOffsetY = 0f
+                                        } else {
+                                            zoomScale = 2.25f
+                                        }
+                                        lastTapUpTimeMillis = -1L
+                                    } else {
+                                        lastTapUpTimeMillis = upTime
+                                        lastTapUpPosX = lastPosX
+                                        lastTapUpPosY = lastPosY
+                                    }
+                                } else if (!hadMultiTouch && zoomScale <= 1.05f) {
+                                    // ডানে-বামে সোয়াইপ এবং উপরে-নিচে স্ক্রল/সোয়াইপ উভয়ই স্বাভাবিকভাবে পরবর্তী ও আগের পৃষ্ঠায় নিয়ে যাবে
+                                    if (abs(totalDragX) >= abs(totalDragY) && abs(totalDragX) >= swipeThresholdPx) {
                                         if (totalDragX < 0f && currentPage < totalPages) {
                                             // ডান থেকে বামে Swipe -> পরবর্তী পৃষ্ঠা
                                             currentPage += 1
@@ -1582,45 +1894,46 @@ internal fun IslamicBookNativePdfReaderScreen(
                                             // বাম থেকে ডানে Swipe -> আগের পৃষ্ঠা
                                             currentPage -= 1
                                         }
-                                    }
-                                } else {
-                                    if (abs(totalDragY) > abs(totalDragX) && abs(totalDragY) >= swipeThresholdPx) {
-                                        if (totalDragY < 0f && currentPage < totalPages) {
-                                            // নিচ থেকে উপরে Swipe -> পরবর্তী পৃষ্ঠা (Vertical Mode)
+                                    } else if (abs(totalDragY) > abs(totalDragX) && abs(totalDragY) >= swipeThresholdPx) {
+                                        if (totalDragY < 0f && (wasAtBottomBeforeDrag || unzoomedMaxScrollY <= 4f) && currentPage < totalPages) {
+                                            // নিচ থেকে উপরে স্ক্রল/সোয়াইপ -> পরবর্তী পৃষ্ঠা
                                             currentPage += 1
-                                        } else if (totalDragY > 0f && currentPage > 1) {
-                                            // উপর থেকে নিচে Swipe -> আগের পৃষ্ঠা (Vertical Mode)
+                                        } else if (totalDragY > 0f && (wasAtTopBeforeDrag || unzoomedMaxScrollY <= 4f) && currentPage > 1) {
+                                            // উপর থেকে নিচে স্ক্রল/সোয়াইপ -> আগের পৃষ্ঠা
                                             currentPage -= 1
                                         }
                                     }
                                 }
                             }
-                        }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                val bmp = renderedBitmap
-                if (bmp != null) {
-                    Image(
-                        bitmap = bmp.asImageBitmap(),
-                        contentDescription = "${book.titleBangla} পৃষ্ঠা $currentPage",
-                        contentScale = if (fitMode == PdfReaderFitMode.FIT_WIDTH) {
-                            ContentScale.FillWidth
-                        } else {
-                            ContentScale.Fit
                         },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer(
-                                scaleX = zoomScale,
-                                scaleY = zoomScale,
-                                translationX = panOffsetX,
-                                translationY = panOffsetY
-                            )
-                            .testTag("pdf_reader_rendered_page")
-                    )
-                } else if (isRendering) {
-                    CircularProgressIndicator(color = LibDeepGreen)
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (bmp != null) {
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = "${book.titleBangla} পৃষ্ঠা $currentPage",
+                            contentScale = if (fitMode == PdfReaderFitMode.FIT_WIDTH) {
+                                ContentScale.FillWidth
+                            } else {
+                                ContentScale.Fit
+                            },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer(
+                                    scaleX = zoomScale,
+                                    scaleY = zoomScale,
+                                    translationX = panOffsetX,
+                                    translationY = panOffsetY
+                                )
+                                .testTag("pdf_reader_rendered_page")
+                        )
+                    } else if (isRendering) {
+                        Text(
+                            text = "পৃষ্ঠা লোড হচ্ছে...",
+                            fontSize = 13.sp,
+                            color = LibDeepGreen
+                        )
+                    }
                 }
             }
 
@@ -1644,7 +1957,7 @@ internal fun IslamicBookNativePdfReaderScreen(
                             .testTag("pdf_reader_prev_page_btn")
                     ) {
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Text("পূর্ববর্তী পৃষ্ঠা", fontSize = 12.sp)
+                        Text("পূর্ববর্তী পৃষ্ঠা", fontSize = 12.sp, softWrap = false, maxLines = 1)
                     }
 
                     Text(
@@ -1652,6 +1965,8 @@ internal fun IslamicBookNativePdfReaderScreen(
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
+                        softWrap = false,
+                        maxLines = 1,
                         modifier = Modifier.testTag("pdf_reader_bottom_page_zoom_text")
                     )
 
@@ -1664,7 +1979,7 @@ internal fun IslamicBookNativePdfReaderScreen(
                             .height(38.dp)
                             .testTag("pdf_reader_next_page_btn")
                     ) {
-                        Text("পরবর্তী পৃষ্ঠা", fontSize = 12.sp)
+                        Text("পরবর্তী পৃষ্ঠা", fontSize = 12.sp, softWrap = false, maxLines = 1)
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(18.dp))
                     }
                 }
@@ -1699,6 +2014,8 @@ internal fun IslamicBookNativePdfReaderScreen(
                         color = Color.White,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
+                        softWrap = false,
+                        maxLines = 1,
                         modifier = Modifier.testTag("pdf_reader_page_indicator")
                     )
                 }
@@ -1751,10 +2068,11 @@ internal fun IslamicBookNativePdfReaderScreen(
 }
 
 /**
- * PDF পৃষ্ঠার চারপাশের অতিরিক্ত ফাঁকা সাদা মার্জিন স্বয়ংক্রিয়ভাবে ছেঁটে ফেলে (Auto-trim outer margins),
- * যেন PDF-এর লেখাগুলো স্ক্রিনের পুরো জায়গা জুড়ে বড় ও পরিষ্কারভাবে দেখা যায়।
+ * PDF পৃষ্ঠার আসল অনুপাত (Aspect Ratio) এবং মাঝখানের অ্যালাইনমেন্ট অক্ষুণ্ণ রেখে
+ * কেবল চারপাশের অতিরিক্ত সমান সাদা বর্ডার সুষমভাবে (Symmetrically & Proportionally) কমানো হয়,
+ * যেন কোনো লেখা একদিকে সরে না যায় বা ভেঙে না যায় এবং পড়ার জায়গা সর্বোচ্চ ব্যবহার হয়।
  */
-private fun trimPdfOuterWhitespace(source: Bitmap, backgroundColor: Int): Bitmap {
+internal fun trimPdfOuterWhitespaceSymmetrically(source: Bitmap, backgroundColor: Int): Bitmap {
     return try {
         val w = source.width
         val h = source.height
@@ -1779,16 +2097,26 @@ private fun trimPdfOuterWhitespace(source: Bitmap, backgroundColor: Int): Bitmap
 
         if (maxX <= minX || maxY <= minY) return source
 
-        val pad = 12
-        val cropLeft = (minX - pad).coerceAtLeast(0)
-        val cropTop = (minY - pad).coerceAtLeast(0)
-        val cropRight = (maxX + pad).coerceAtMost(w)
-        val cropBottom = (maxY + pad).coerceAtMost(h)
-        val cropW = cropRight - cropLeft
-        val cropH = cropBottom - cropTop
+        val pad = 16
+        val safeLeftMargin = (minX - pad).coerceAtLeast(0)
+        val safeRightMargin = (w - 1 - maxX - pad).coerceAtLeast(0)
+        val safeTopMargin = (minY - pad).coerceAtLeast(0)
+        val safeBottomMargin = (h - 1 - maxY - pad).coerceAtLeast(0)
 
-        if (cropW >= w * 0.4f && cropH >= h * 0.4f && (cropW < w - 16 || cropH < h - 16)) {
-            Bitmap.createBitmap(source, cropLeft, cropTop, cropW, cropH)
+        // দুই পাশে এবং উপরে-নিচে সমান অনুপাতে (Symmetric & Aspect-Ratio Preserving) ট্রিম করা হবে
+        val symX = minOf(safeLeftMargin, safeRightMargin)
+        val symY = minOf(safeTopMargin, safeBottomMargin)
+        val ratioX = symX.toFloat() / w.toFloat()
+        val ratioY = symY.toFloat() / h.toFloat()
+        val uniformTrimRatio = minOf(ratioX, ratioY).coerceIn(0f, 0.08f)
+
+        val trimX = (w * uniformTrimRatio).toInt()
+        val trimY = (h * uniformTrimRatio).toInt()
+        val cropW = w - (trimX * 2)
+        val cropH = h - (trimY * 2)
+
+        if (trimX >= 6 && trimY >= 6 && cropW >= (w * 0.8f).toInt() && cropH >= (h * 0.8f).toInt()) {
+            Bitmap.createBitmap(source, trimX, trimY, cropW, cropH)
         } else {
             source
         }
