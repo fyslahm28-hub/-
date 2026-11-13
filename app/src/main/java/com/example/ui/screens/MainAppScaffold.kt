@@ -575,6 +575,7 @@ fun MainAppScaffold(
             MainDestination.TILAWAT -> "তিলাওয়াত"
             MainDestination.ISLAMIC_BOOK_LIBRARY -> "ইসলামিক বই লাইব্রেরি"
             MainDestination.ISLAMIC_ARTICLE_PUBLICATION -> "ইসলামিক প্রবন্ধ ও জ্ঞানচর্চা"
+            MainDestination.ASMAUL_HUSNA -> "আসমাউল হুসনা"
             MainDestination.AJKER_SMORON -> "আজকের স্মরণ"
             MainDestination.APP_SETTINGS -> "অ্যাপ সেটিংস"
             MainDestination.ABOUT_APP -> "অ্যাপ সম্পর্কে"
@@ -605,6 +606,9 @@ fun MainAppScaffold(
         var islamicArticleBackInterceptor by remember {
             mutableStateOf<(() -> Boolean)?>(null)
         }
+        var asmaulHusnaBackInterceptor by remember {
+            mutableStateOf<(() -> Boolean)?>(null)
+        }
         LaunchedEffect(currentDestination) {
             if (currentDestination != MainDestination.ISLAMIC_BOOK_LIBRARY) {
                 islamicBookSubView = com.example.ui.islamicbooks.LibrarySubView.CATALOG_HOME
@@ -612,6 +616,9 @@ fun MainAppScaffold(
             }
             if (currentDestination != MainDestination.ISLAMIC_ARTICLE_PUBLICATION) {
                 islamicArticleBackInterceptor = null
+            }
+            if (currentDestination != MainDestination.ASMAUL_HUSNA) {
+                asmaulHusnaBackInterceptor = null
             }
         }
         val isIslamicBookFullScreenReader =
@@ -639,6 +646,10 @@ fun MainAppScaffold(
                                 islamicArticleBackInterceptor?.invoke() == true
                             ) {
                                 // Sub-screen back navigation handled inside IslamicArticlePublicationScreen
+                            } else if (currentDestination == MainDestination.ASMAUL_HUSNA &&
+                                asmaulHusnaBackInterceptor?.invoke() == true
+                            ) {
+                                // Sub-screen back navigation handled inside AsmaulHusnaScreen
                             } else {
                                 viewModel.navigateBack()
                             }
@@ -1473,6 +1484,12 @@ fun MainAppScaffold(
                                     ?: viewModel.currentUserPhone,
                                 isAdmin = isAdminState,
                                 registerBackInterceptor = { interceptor -> islamicArticleBackInterceptor = interceptor }
+                            )
+                        }
+
+                        MainDestination.ASMAUL_HUSNA -> {
+                            com.example.ui.asmaulhusna.AsmaulHusnaScreen(
+                                registerBackInterceptor = { interceptor -> asmaulHusnaBackInterceptor = interceptor }
                             )
                         }
 
