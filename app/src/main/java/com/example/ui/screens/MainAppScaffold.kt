@@ -576,6 +576,7 @@ fun MainAppScaffold(
             MainDestination.ISLAMIC_BOOK_LIBRARY -> "ইসলামিক বই লাইব্রেরি"
             MainDestination.ISLAMIC_ARTICLE_PUBLICATION -> "ইসলামিক প্রবন্ধ ও জ্ঞানচর্চা"
             MainDestination.ASMAUL_HUSNA -> "আসমাউল হুসনা"
+            MainDestination.QURAN_LEARNING -> "কুরআন শিক্ষা"
             MainDestination.AJKER_SMORON -> "আজকের স্মরণ"
             MainDestination.APP_SETTINGS -> "অ্যাপ সেটিংস"
             MainDestination.ABOUT_APP -> "অ্যাপ সম্পর্কে"
@@ -609,6 +610,9 @@ fun MainAppScaffold(
         var asmaulHusnaBackInterceptor by remember {
             mutableStateOf<(() -> Boolean)?>(null)
         }
+        var quranLearningBackInterceptor by remember {
+            mutableStateOf<(() -> Boolean)?>(null)
+        }
         LaunchedEffect(currentDestination) {
             if (currentDestination != MainDestination.ISLAMIC_BOOK_LIBRARY) {
                 islamicBookSubView = com.example.ui.islamicbooks.LibrarySubView.CATALOG_HOME
@@ -619,6 +623,9 @@ fun MainAppScaffold(
             }
             if (currentDestination != MainDestination.ASMAUL_HUSNA) {
                 asmaulHusnaBackInterceptor = null
+            }
+            if (currentDestination != MainDestination.QURAN_LEARNING) {
+                quranLearningBackInterceptor = null
             }
         }
         val isIslamicBookFullScreenReader =
@@ -650,6 +657,10 @@ fun MainAppScaffold(
                                 asmaulHusnaBackInterceptor?.invoke() == true
                             ) {
                                 // Sub-screen back navigation handled inside AsmaulHusnaScreen
+                            } else if (currentDestination == MainDestination.QURAN_LEARNING &&
+                                quranLearningBackInterceptor?.invoke() == true
+                            ) {
+                                // Sub-screen back navigation handled inside QuranLearningAcademyScreen
                             } else {
                                 viewModel.navigateBack()
                             }
@@ -1490,6 +1501,12 @@ fun MainAppScaffold(
                         MainDestination.ASMAUL_HUSNA -> {
                             com.example.ui.asmaulhusna.AsmaulHusnaScreen(
                                 registerBackInterceptor = { interceptor -> asmaulHusnaBackInterceptor = interceptor }
+                            )
+                        }
+
+                        MainDestination.QURAN_LEARNING -> {
+                            com.example.ui.quranlearning.QuranLearningAcademyScreen(
+                                registerBackInterceptor = { interceptor -> quranLearningBackInterceptor = interceptor }
                             )
                         }
 
