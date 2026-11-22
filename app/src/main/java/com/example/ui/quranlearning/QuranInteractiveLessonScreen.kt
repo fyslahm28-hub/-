@@ -1,7 +1,5 @@
 package com.example.ui.quranlearning
 
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
@@ -34,12 +32,16 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -48,6 +50,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -68,7 +72,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.HindSiliguriFontFamily
-import java.util.Locale
 
 private val FeedbackCorrectGreen = Color(0xFF0F6B4B)
 private val FeedbackWrongCoral = Color(0xFFC0392B)
@@ -84,7 +87,8 @@ fun QuranInteractiveLessonScreen(
     storage: QuranLearningStorageManager,
     onNavigateToNextLesson: (String) -> Unit,
     onRetryMistakes: (QuranLesson, Set<Int>) -> Unit,
-    onExitToPath: () -> Unit
+    onExitToPath: () -> Unit,
+    audioControllerOverride: QuranLearningAudioController? = null
 ) {
     val context = LocalContext.current
 
@@ -104,69 +108,27 @@ fun QuranInteractiveLessonScreen(
     val mistakeStepIndices = remember(lesson.id, retryStepIndices) { mutableStateListOf<Int>() }
     var completionResult by remember(lesson.id, retryStepIndices) { mutableStateOf<LessonCompletionResult?>(null) }
 
-    // নিরাপদ আরবি উচ্চারণ অডিও প্লেয়ার (Play / Pause / Replay — কেবল verifiedAudioText থাকলেই প্রদর্শিত)
-    var ttsReady by remember { mutableStateOf(false) }
-    var ttsArabicAvailable by remember { mutableStateOf(false) }
-    var isSpeaking by remember { mutableStateOf(false) }
-    var audioStatusNote by remember { mutableStateOf<String?>(null) }
+    // নির্ভরযোগ্য একক-ইনস্ট্যান্স অডিও কন্ট্রোলার (MediaPlayer + AudioFocus + Offline Cache + Arabic TTS)
+    val audioController = remember(context, audioControllerOverride) {
+        audioControllerOverride ?: QuranLearningAudioController.create(context)
+    }
+    val playbackState by audioController.playbackState.collectAsState()
+    val volumeMutedHint by audioController.volumeMutedHint.collectAsState()
 
-    val ttsRef = remember { mutableStateOf<TextToSpeech?>(null) }
-    DisposableEffect(context) {
-        var engine: TextToSpeech? = null
-        try {
-            engine = TextToSpeech(context.applicationContext) { status ->
-                if (status == TextToSpeech.SUCCESS) {
-                    val res = engine?.setLanguage(Locale.forLanguageTag("ar-SA"))
-                    ttsReady = true
-                    ttsArabicAvailable = res != TextToSpeech.LANG_MISSING_DATA &&
-                        res != TextToSpeech.LANG_NOT_SUPPORTED
-                    engine?.setSpeechRate(0.76f)
-                    engine?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                        override fun onStart(utteranceId: String?) {
-                            isSpeaking = true
-                        }
-                        override fun onDone(utteranceId: String?) {
-                            isSpeaking = false
-                        }
-                        @Deprecated("Deprecated in Java")
-                        override fun onError(utteranceId: String?) {
-                            isSpeaking = false
-                        }
-                    })
-                }
-            }
-            ttsRef.value = engine
-        } catch (_: Throwable) {
-            ttsReady = false
-            ttsArabicAvailable = false
-        }
+    // পাঠ, ধাপ বা সমাপ্তি স্ক্রিনে গেলে আগের অডিও স্বয়ংক্রিয়ভাবে বন্ধ হবে
+    LaunchedEffect(lesson.id, currentStepIndex, completionResult != null) {
+        audioController.stop()
+    }
+
+    // স্ক্রিন থেকে বের হলে অডিও রিসোর্স নিরাপদে মুক্ত হবে
+    DisposableEffect(audioController, audioControllerOverride) {
         onDispose {
-            try {
-                engine?.stop()
-                engine?.shutdown()
-            } catch (_: Throwable) {
+            if (audioControllerOverride == null) {
+                audioController.release()
+            } else {
+                audioController.stop()
             }
         }
-    }
-
-    fun playVerifiedAudio(arabicText: String) {
-        val engine = ttsRef.value
-        if (engine != null && ttsReady && ttsArabicAvailable) {
-            audioStatusNote = null
-            isSpeaking = true
-            engine.speak(arabicText, TextToSpeech.QUEUE_FLUSH, null, "quran_step_${System.currentTimeMillis()}")
-        } else {
-            isSpeaking = false
-            audioStatusNote = "আপনার ডিভাইসে আরবি ভয়েস ডেটা নেই; প্রদত্ত বাংলা উচ্চারণ ও উস্তাদের নির্দেশনা অনুসরণ করুন।"
-        }
-    }
-
-    fun pauseAudio() {
-        try {
-            ttsRef.value?.stop()
-        } catch (_: Throwable) {
-        }
-        isSpeaking = false
     }
 
     // সমাপ্তি পুরস্কার স্ক্রিন দেখাও
@@ -207,8 +169,7 @@ fun QuranInteractiveLessonScreen(
     }
 
     fun advanceToNextStep() {
-        pauseAudio()
-        audioStatusNote = null
+        audioController.stop()
         if (currentStepIndex < activeSteps.lastIndex) {
             currentStepIndex += 1
         } else {
@@ -243,7 +204,7 @@ fun QuranInteractiveLessonScreen(
             ) {
                 IconButton(
                     onClick = {
-                        pauseAudio()
+                        audioController.stop()
                         onExitToPath()
                     },
                     modifier = Modifier
@@ -312,26 +273,30 @@ fun QuranInteractiveLessonScreen(
                     when (step) {
                         is QuranLessonStep.TeachingCard -> {
                             TeachingStepContent(
+                                lessonId = lesson.id,
                                 step = step,
                                 sourceReference = lesson.sourceReference,
                                 palette = palette,
-                                isSpeaking = isSpeaking,
-                                audioStatusNote = audioStatusNote,
-                                onPlay = { text -> playVerifiedAudio(text) },
-                                onPause = { pauseAudio() },
+                                playbackState = playbackState,
+                                volumeMutedHint = volumeMutedHint,
+                                onPlayOrPause = { source -> audioController.onPlayOrPauseTapped(source) },
+                                onReplay = { source -> audioController.onReplayTapped(source) },
+                                onRetry = { source -> audioController.onRetryTapped(source) },
                                 onContinue = { advanceToNextStep() }
                             )
                         }
 
                         is QuranLessonStep.SelectOption -> {
                             SelectOptionStepContent(
+                                lessonId = lesson.id,
                                 step = step,
                                 evaluated = stepEvaluated,
                                 palette = palette,
-                                isSpeaking = isSpeaking,
-                                audioStatusNote = audioStatusNote,
-                                onPlay = { text -> playVerifiedAudio(text) },
-                                onPause = { pauseAudio() },
+                                playbackState = playbackState,
+                                volumeMutedHint = volumeMutedHint,
+                                onPlayOrPause = { source -> audioController.onPlayOrPauseTapped(source) },
+                                onReplay = { source -> audioController.onReplayTapped(source) },
+                                onRetry = { source -> audioController.onRetryTapped(source) },
                                 onSubmit = { isCorrect ->
                                     submitEvaluation(isCorrect, step.feedbackExplanationBangla)
                                 }
@@ -467,14 +432,35 @@ fun QuranInteractiveLessonScreen(
 
 @Composable
 private fun VerifiedAudioControlBar(
-    arabicText: String,
-    isSpeaking: Boolean,
-    audioStatusNote: String?,
+    audioSource: VerifiedQuranAudioSource,
+    playbackState: QuranAudioPlaybackState,
+    volumeMutedHint: Boolean,
     palette: QuranAcademyPalette,
-    onPlay: (String) -> Unit,
-    onPause: () -> Unit
+    onPlayOrPause: (VerifiedQuranAudioSource) -> Unit,
+    onReplay: (VerifiedQuranAudioSource) -> Unit,
+    onRetry: (VerifiedQuranAudioSource) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    val isLoading = playbackState is QuranAudioPlaybackState.Loading &&
+        playbackState.activeKey == audioSource.audioKey
+    val isPlaying = playbackState is QuranAudioPlaybackState.Playing &&
+        playbackState.activeKey == audioSource.audioKey
+    val isPaused = playbackState is QuranAudioPlaybackState.Paused &&
+        playbackState.activeKey == audioSource.audioKey
+    val activeError = (playbackState as? QuranAudioPlaybackState.Error)
+        ?.takeIf { it.activeKey == audioSource.audioKey }
+
+    val primaryButtonLabel = when {
+        isLoading -> "লোড হচ্ছে..."
+        isPlaying -> {
+            val canPause = (playbackState as QuranAudioPlaybackState.Playing).canPauseResume
+            if (canPause) "বিরতি (Pause)" else "থামান"
+        }
+        isPaused -> "চালিয়ে যান (Resume)"
+        audioSource.isVerifiedAyahRecitation -> "তিলাওয়াত শুনুন"
+        else -> "উচ্চারণ শুনুন"
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -483,7 +469,8 @@ private fun VerifiedAudioControlBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Button(
-                onClick = { if (isSpeaking) onPause() else onPlay(arabicText) },
+                onClick = { onPlayOrPause(audioSource) },
+                enabled = !isLoading,
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = AcademyPrimaryGreen,
@@ -494,22 +481,56 @@ private fun VerifiedAudioControlBar(
                     .height(48.dp)
                     .testTag("audio_play_pause_btn")
             ) {
-                Icon(
-                    imageVector = if (isSpeaking) Icons.Default.Pause else Icons.AutoMirrored.Filled.VolumeUp,
-                    contentDescription = if (isSpeaking) "বিরতি" else "শুনুন",
-                    modifier = Modifier.size(20.dp)
-                )
+                when {
+                    isLoading -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .size(18.dp)
+                                .testTag("audio_loading_indicator"),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    }
+
+                    isPlaying -> {
+                        val canPause = (playbackState as QuranAudioPlaybackState.Playing).canPauseResume
+                        Icon(
+                            imageVector = if (canPause) Icons.Default.Pause else Icons.Default.Stop,
+                            contentDescription = if (canPause) "বিরতি" else "থামান",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    isPaused -> {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "চালিয়ে যান",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    else -> {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                            contentDescription = "শুনুন",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = if (isSpeaking) "বিরতি (Pause)" else "উচ্চারণ শুনুন",
+                    text = primaryButtonLabel,
                     fontFamily = HindSiliguriFontFamily,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.5.sp
+                    fontSize = 13.5.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
             OutlinedButton(
-                onClick = { onPlay(arabicText) },
+                onClick = { onReplay(audioSource) },
+                enabled = !isLoading,
                 shape = RoundedCornerShape(12.dp),
                 border = BorderStroke(1.dp, AcademyGold),
                 modifier = Modifier
@@ -533,29 +554,131 @@ private fun VerifiedAudioControlBar(
             }
         }
 
-        if (audioStatusNote != null) {
+        // অডিও চালু বা বিরতিতে থাকলে সোর্স ও প্লেয়িং স্ট্যাটাস নির্দেশক
+        if (isPlaying || isPaused) {
+            val statusLabel = when (playbackState) {
+                is QuranAudioPlaybackState.Playing -> "চলছে: ${playbackState.sourceLabelBangla}"
+                is QuranAudioPlaybackState.Paused -> "বিরতিতে: ${playbackState.sourceLabelBangla}"
+                else -> ""
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("audio_playing_indicator"),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(if (isPlaying) AcademyPrimaryGreen else AcademyGold)
+                )
+                Text(
+                    text = statusLabel,
+                    fontFamily = HindSiliguriFontFamily,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 11.5.sp,
+                    color = palette.accentGreen,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        // ডিভাইসের মিডিয়া ভলিউম শূন্য থাকলে সহায়ক সতর্কতা
+        if (volumeMutedHint && (isPlaying || isLoading)) {
             Text(
-                text = audioStatusNote,
+                text = "ডিভাইসের মিডিয়া ভলিউম বন্ধ আছে — শুনতে ভলিউম বাড়ান।",
                 fontFamily = HindSiliguriFontFamily,
                 fontSize = 11.5.sp,
                 lineHeight = 16.sp,
-                color = palette.mutedColor
+                color = AcademyGold,
+                modifier = Modifier.testTag("audio_volume_muted_hint")
             )
+        }
+
+        // নেটওয়ার্ক / সার্ভার / ভয়েস ডেটা ত্রুটি বার্তা ও পুনরায় চেষ্টা (Retry) বাটন
+        if (activeError != null) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = FeedbackWrongCoral.copy(alpha = 0.10f),
+                border = BorderStroke(1.dp, FeedbackWrongCoral.copy(alpha = 0.45f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("audio_error_banner")
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ErrorOutline,
+                            contentDescription = "অডিও ত্রুটি",
+                            tint = FeedbackWrongCoral,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = activeError.messageBangla,
+                            fontFamily = HindSiliguriFontFamily,
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp,
+                            color = palette.titleColor,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    if (activeError.canRetry) {
+                        OutlinedButton(
+                            onClick = { onRetry(audioSource) },
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, FeedbackWrongCoral),
+                            modifier = Modifier
+                                .height(48.dp)
+                                .testTag("audio_retry_btn")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "আবার চেষ্টা করুন",
+                                tint = FeedbackWrongCoral,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "আবার চেষ্টা করুন",
+                                fontFamily = HindSiliguriFontFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 12.5.sp,
+                                color = FeedbackWrongCoral
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
 private fun TeachingStepContent(
+    lessonId: String,
     step: QuranLessonStep.TeachingCard,
     sourceReference: String,
     palette: QuranAcademyPalette,
-    isSpeaking: Boolean,
-    audioStatusNote: String?,
-    onPlay: (String) -> Unit,
-    onPause: () -> Unit,
+    playbackState: QuranAudioPlaybackState,
+    volumeMutedHint: Boolean,
+    onPlayOrPause: (VerifiedQuranAudioSource) -> Unit,
+    onReplay: (VerifiedQuranAudioSource) -> Unit,
+    onRetry: (VerifiedQuranAudioSource) -> Unit,
     onContinue: () -> Unit
 ) {
+    val resolvedAudioSource = remember(lessonId, step.verifiedAudioText) {
+        QuranLearningAudioCatalog.resolveAudioSource(lessonId, step.verifiedAudioText)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -624,14 +747,15 @@ private fun TeachingStepContent(
         }
 
         // যাচাইকৃত অডিও থাকলেই কেবল অডিও প্লেয়ার দেখানো হবে (কোনো ভুয়া অডিও বাটন নয়)
-        if (step.verifiedAudioText != null) {
+        if (resolvedAudioSource != null) {
             VerifiedAudioControlBar(
-                arabicText = step.verifiedAudioText,
-                isSpeaking = isSpeaking,
-                audioStatusNote = audioStatusNote,
+                audioSource = resolvedAudioSource,
+                playbackState = playbackState,
+                volumeMutedHint = volumeMutedHint,
                 palette = palette,
-                onPlay = onPlay,
-                onPause = onPause
+                onPlayOrPause = onPlayOrPause,
+                onReplay = onReplay,
+                onRetry = onRetry
             )
         }
 
@@ -760,16 +884,21 @@ private fun TeachingStepContent(
 
 @Composable
 private fun SelectOptionStepContent(
+    lessonId: String,
     step: QuranLessonStep.SelectOption,
     evaluated: Boolean,
     palette: QuranAcademyPalette,
-    isSpeaking: Boolean,
-    audioStatusNote: String?,
-    onPlay: (String) -> Unit,
-    onPause: () -> Unit,
+    playbackState: QuranAudioPlaybackState,
+    volumeMutedHint: Boolean,
+    onPlayOrPause: (VerifiedQuranAudioSource) -> Unit,
+    onReplay: (VerifiedQuranAudioSource) -> Unit,
+    onRetry: (VerifiedQuranAudioSource) -> Unit,
     onSubmit: (Boolean) -> Unit
 ) {
     var selectedIdx by remember(step.stepId) { mutableIntStateOf(-1) }
+    val resolvedAudioSource = remember(lessonId, step.verifiedAudioText) {
+        QuranLearningAudioCatalog.resolveAudioSource(lessonId, step.verifiedAudioText)
+    }
 
     Column(
         modifier = Modifier
@@ -816,14 +945,15 @@ private fun SelectOptionStepContent(
             }
         }
 
-        if (step.verifiedAudioText != null) {
+        if (resolvedAudioSource != null) {
             VerifiedAudioControlBar(
-                arabicText = step.verifiedAudioText,
-                isSpeaking = isSpeaking,
-                audioStatusNote = audioStatusNote,
+                audioSource = resolvedAudioSource,
+                playbackState = playbackState,
+                volumeMutedHint = volumeMutedHint,
                 palette = palette,
-                onPlay = onPlay,
-                onPause = onPause
+                onPlayOrPause = onPlayOrPause,
+                onReplay = onReplay,
+                onRetry = onRetry
             )
         }
 
