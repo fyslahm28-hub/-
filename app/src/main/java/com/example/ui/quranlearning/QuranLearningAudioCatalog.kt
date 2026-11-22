@@ -244,6 +244,33 @@ object QuranLearningAudioCatalog {
         }
     }
 
+    private const val ARABIC_SPEECH_PRIMARY_BASE =
+        "https://translate.google.com/translate_tts?ie=UTF-8&tl=ar&client=tw-ob&q="
+    private const val ARABIC_SPEECH_BACKUP_BASE =
+        "https://translate.googleapis.com/translate_tts?ie=UTF-8&tl=ar&client=gtx&q="
+    private const val MAX_SPEECH_URL_CHARS = 180
+
+    private fun clipForSpeechUrl(sanitizedArabic: String): String {
+        if (sanitizedArabic.length <= MAX_SPEECH_URL_CHARS) return sanitizedArabic
+        val cut = sanitizedArabic.substring(0, MAX_SPEECH_URL_CHARS)
+        val lastSpace = cut.lastIndexOf(' ')
+        return if (lastSpace > 40) cut.substring(0, lastSpace).trim() else cut.trim()
+    }
+
+    fun buildArabicSpeechPrimaryUrl(sanitizedArabic: String): String? {
+        val clipped = clipForSpeechUrl(sanitizedArabic)
+        if (clipped.isBlank()) return null
+        val encoded = java.net.URLEncoder.encode(clipped, "UTF-8").replace("+", "%20")
+        return "$ARABIC_SPEECH_PRIMARY_BASE$encoded"
+    }
+
+    fun buildArabicSpeechBackupUrl(sanitizedArabic: String): String? {
+        val clipped = clipForSpeechUrl(sanitizedArabic)
+        if (clipped.isBlank()) return null
+        val encoded = java.net.URLEncoder.encode(clipped, "UTF-8").replace("+", "%20")
+        return "$ARABIC_SPEECH_BACKUP_BASE$encoded"
+    }
+
     /**
      * নির্দিষ্ট পাঠ ও আরবি টেক্সটের জন্য যাচাইকৃত অডিও সোর্স নির্ণয় করে।
      * যদি rawArabicText null/খালি হয় বা কোনো বিশুদ্ধ আরবি অক্ষর না থাকে তবে null ফেরত দেয়।
@@ -276,11 +303,11 @@ object QuranLearningAudioCatalog {
             val key = "speech_${lessonId ?: "step"}_$stableHash"
             VerifiedQuranAudioSource(
                 audioKey = key,
-                primaryMp3Url = null,
-                fallbackMp3Url = null,
+                primaryMp3Url = buildArabicSpeechPrimaryUrl(sanitizedSpeech),
+                fallbackMp3Url = buildArabicSpeechBackupUrl(sanitizedSpeech),
                 sanitizedArabicSpeechText = sanitizedSpeech,
                 isVerifiedAyahRecitation = false,
-                sourceLabelBangla = "আরবি উচ্চারণ ভয়েস"
+                sourceLabelBangla = "আরবি উচ্চারণ অডিও"
             )
         }
     }

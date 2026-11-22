@@ -291,11 +291,27 @@ class QuranLearningAudioPlaybackTest {
     }
 
     @Test
-    fun test05_switchingLessonsStopsPreviousAudio_andOfflineTtsWorksForLetters() {
+    fun test05_switchingLessonsStopsPreviousAudio_andOfflineTtsFallbackWorksForLetters() {
         val fakePlayer = FakeMediaPlayerEngine()
         val fakeSpeech = FakeArabicSpeechEngine(ready = true)
         val fakeFocus = FakeAudioFocusController()
-        val fakeDownloader = FakeAudioDownloader(cachedFile = dummyMp3File, networkConnected = false)
+        val ayahLesson = QuranLearningAudioCatalog.resolveAudioSource(
+            "primary_m10_l02",
+            "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ"
+        )!!
+        val letterLesson = QuranLearningAudioCatalog.resolveAudioSource(
+            "primary_m01_l01",
+            "ا  ب  ت"
+        )!!
+
+        // Offline: Ayah lesson is cached locally, Letter lesson is NOT cached -> falls back to offline Arabic TTS
+        val fakeDownloader = object : QuranAudioDownloader {
+            override fun isNetworkConnected(): Boolean = false
+            override fun getCachedAudioFile(cacheKey: String): File? =
+                if (cacheKey == ayahLesson.audioKey) dummyMp3File else null
+            override suspend fun downloadToCache(url: String, cacheKey: String): AudioDownloadOutcome =
+                AudioDownloadOutcome.NoNetwork
+        }
 
         val controller = QuranLearningAudioController(
             mediaPlayerEngine = fakePlayer,
@@ -306,20 +322,12 @@ class QuranLearningAudioPlaybackTest {
             mainDispatcher = Dispatchers.Unconfined
         )
 
-        // Start Lesson 1 (cached MP3 offline)
-        val ayahLesson = QuranLearningAudioCatalog.resolveAudioSource(
-            "primary_m10_l02",
-            "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ"
-        )!!
+        // Start Ayah lesson (cached MP3 offline)
         controller.onPlayOrPauseTapped(ayahLesson)
         assertTrue(controller.playbackState.value is QuranAudioPlaybackState.Playing)
         assertEquals(1, fakePlayer.activeInstances)
 
-        // Switch immediately to Letter lesson (offline Arabic TTS)
-        val letterLesson = QuranLearningAudioCatalog.resolveAudioSource(
-            "primary_m01_l01",
-            "ا  ب  ت"
-        )!!
+        // Switch immediately to Letter lesson (offline, not cached -> falls back to Arabic TTS)
         controller.onPlayOrPauseTapped(letterLesson)
 
         // Previous MP3 player must be stopped & released before TTS plays
@@ -331,6 +339,50 @@ class QuranLearningAudioPlaybackTest {
         // Completion resets to Idle
         fakeSpeech.simulateDone()
         assertEquals(QuranAudioPlaybackState.Idle, controller.playbackState.value)
+        controller.release()
+    }
+
+    @Test
+    fun test08_letterLessonAlifBaTa_playsViaMp3EvenWhenDeviceHasNoArabicTtsPack() {
+        val letterSource = QuranLearningAudioCatalog.resolveAudioSource(
+            lessonId = "primary_m01_l01",
+            rawArabicText = "ا  ب  ت"
+        )
+        assertNotNull(letterSource)
+        assertTrue(letterSource!!.hasRemoteMp3)
+        assertTrue(letterSource.primaryMp3Url!!.startsWith("https://translate.google.com/translate_tts"))
+        assertTrue(letterSource.fallbackMp3Url!!.startsWith("https://translate.googleapis.com/translate_tts"))
+
+        val fakePlayer = FakeMediaPlayerEngine()
+        // Device has NO Arabic TTS pack installed (exact Redmi/Xiaomi scenario)
+        val noDeviceTts = FakeArabicSpeechEngine(ready = false)
+        val fakeDownloader = FakeAudioDownloader(
+            cachedFile = null,
+            networkConnected = true,
+            customDownload = { _, _ -> AudioDownloadOutcome.Success(dummyMp3File, fromCache = false) }
+        )
+
+        val controller = QuranLearningAudioController(
+            mediaPlayerEngine = fakePlayer,
+            speechEngine = noDeviceTts,
+            focusController = FakeAudioFocusController(),
+            downloader = fakeDownloader,
+            ioDispatcher = Dispatchers.Unconfined,
+            mainDispatcher = Dispatchers.Unconfined
+        )
+
+        controller.onPlayOrPauseTapped(letterSource)
+        val state = controller.playbackState.value
+        assertTrue("Expected Playing state via MP3 even without device Arabic TTS, got $state", state is QuranAudioPlaybackState.Playing)
+        assertTrue((state as QuranAudioPlaybackState.Playing).canPauseResume)
+        assertEquals(1, fakePlayer.playCallCount)
+
+        // Pause & Resume work on letter lesson too
+        controller.onPlayOrPauseTapped(letterSource)
+        assertTrue(controller.playbackState.value is QuranAudioPlaybackState.Paused)
+        controller.onPlayOrPauseTapped(letterSource)
+        assertTrue(controller.playbackState.value is QuranAudioPlaybackState.Playing)
+
         controller.release()
     }
 

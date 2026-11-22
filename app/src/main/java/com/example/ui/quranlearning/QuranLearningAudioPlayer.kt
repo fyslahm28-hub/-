@@ -303,70 +303,109 @@ class AndroidQuranArabicSpeechEngine(
     private var onErrorCallback: ((String) -> Unit)? = null
 
     init {
+        initializeEngine(preferredEnginePackage = null, allowGoogleFallback = true)
+    }
+
+    private fun initializeEngine(preferredEnginePackage: String?, allowGoogleFallback: Boolean) {
         try {
             var created: TextToSpeech? = null
-            created = TextToSpeech(appContext) { status ->
+            val listener = TextToSpeech.OnInitListener { status ->
                 if (isShutdown) {
+                    try {
+                        created?.shutdown()
+                    } catch (_: Throwable) {
+                    }
                     if (!initDeferred.isCompleted) initDeferred.complete(false)
-                    return@TextToSpeech
+                    return@OnInitListener
                 }
                 val engine = created
-                if (status == TextToSpeech.SUCCESS && engine != null) {
-                    arabicAvailable = configureBestArabicVoice(engine)
-                    if (arabicAvailable) {
-                        try {
-                            engine.setSpeechRate(0.72f)
-                            engine.setPitch(1.0f)
-                            engine.setAudioAttributes(
-                                AudioAttributes.Builder()
-                                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                                    .build()
-                            )
-                            engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                                override fun onStart(utteranceId: String?) {
-                                    if (utteranceId == activeUtteranceId) {
-                                        mainHandler.post { onStartCallback?.invoke() }
-                                    }
-                                }
-
-                                override fun onDone(utteranceId: String?) {
-                                    if (utteranceId == activeUtteranceId) {
-                                        mainHandler.post { onDoneCallback?.invoke() }
-                                    }
-                                }
-
-                                @Deprecated("Deprecated in Java")
-                                override fun onError(utteranceId: String?) {
-                                    if (utteranceId == activeUtteranceId) {
-                                        mainHandler.post {
-                                            onErrorCallback?.invoke("আরবি ভয়েস প্লেব্যাক সম্পন্ন হয়নি।")
-                                        }
-                                    }
-                                }
-
-                                override fun onError(utteranceId: String?, errorCode: Int) {
-                                    if (utteranceId == activeUtteranceId) {
-                                        mainHandler.post {
-                                            onErrorCallback?.invoke("আরবি ভয়েস ত্রুটি (কোড: $errorCode)।")
-                                        }
-                                    }
-                                }
-                            })
-                        } catch (_: Throwable) {
-                        }
-                    }
-                    if (!initDeferred.isCompleted) initDeferred.complete(arabicAvailable)
+                if (status == TextToSpeech.SUCCESS && engine != null && configureBestArabicVoice(engine)) {
+                    tts = engine
+                    arabicAvailable = true
+                    configureTtsAudioAndListener(engine)
+                    if (!initDeferred.isCompleted) initDeferred.complete(true)
                 } else {
-                    arabicAvailable = false
-                    if (!initDeferred.isCompleted) initDeferred.complete(false)
+                    try {
+                        engine?.shutdown()
+                    } catch (_: Throwable) {
+                    }
+                    if (allowGoogleFallback && preferredEnginePackage == null) {
+                        // Xiaomi/Redmi ইত্যাদি ডিভাইসে ডিফল্ট ইঞ্জিনে আরবি না থাকলে Google Speech Services চেষ্টা করি
+                        initializeEngine(
+                            preferredEnginePackage = GOOGLE_TTS_PACKAGE,
+                            allowGoogleFallback = false
+                        )
+                    } else {
+                        arabicAvailable = false
+                        if (!initDeferred.isCompleted) initDeferred.complete(false)
+                    }
                 }
+            }
+            created = if (preferredEnginePackage != null) {
+                TextToSpeech(appContext, listener, preferredEnginePackage)
+            } else {
+                TextToSpeech(appContext, listener)
             }
             tts = created
         } catch (_: Throwable) {
-            arabicAvailable = false
-            if (!initDeferred.isCompleted) initDeferred.complete(false)
+            if (allowGoogleFallback && preferredEnginePackage == null) {
+                initializeEngine(
+                    preferredEnginePackage = GOOGLE_TTS_PACKAGE,
+                    allowGoogleFallback = false
+                )
+            } else {
+                arabicAvailable = false
+                if (!initDeferred.isCompleted) initDeferred.complete(false)
+            }
         }
+    }
+
+    private fun configureTtsAudioAndListener(engine: TextToSpeech) {
+        try {
+            engine.setSpeechRate(0.72f)
+            engine.setPitch(1.0f)
+            engine.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {
+                    if (utteranceId == activeUtteranceId) {
+                        mainHandler.post { onStartCallback?.invoke() }
+                    }
+                }
+
+                override fun onDone(utteranceId: String?) {
+                    if (utteranceId == activeUtteranceId) {
+                        mainHandler.post { onDoneCallback?.invoke() }
+                    }
+                }
+
+                @Deprecated("Deprecated in Java")
+                override fun onError(utteranceId: String?) {
+                    if (utteranceId == activeUtteranceId) {
+                        mainHandler.post {
+                            onErrorCallback?.invoke("আরবি ভয়েস প্লেব্যাক সম্পন্ন হয়নি।")
+                        }
+                    }
+                }
+
+                override fun onError(utteranceId: String?, errorCode: Int) {
+                    if (utteranceId == activeUtteranceId) {
+                        mainHandler.post {
+                            onErrorCallback?.invoke("আরবি ভয়েস ত্রুটি (কোড: $errorCode)।")
+                        }
+                    }
+                }
+            })
+        } catch (_: Throwable) {
+        }
+    }
+
+    companion object {
+        private const val GOOGLE_TTS_PACKAGE = "com.google.android.tts"
     }
 
     private fun configureBestArabicVoice(engine: TextToSpeech): Boolean {
@@ -585,8 +624,14 @@ class AndroidQuranAudioDownloader(
                 connectTimeout = 10_000
                 readTimeout = 15_000
                 instanceFollowRedirects = true
-                setRequestProperty("User-Agent", "QawmiKormosongsthanAndroid/1.0")
+                setRequestProperty(
+                    "User-Agent",
+                    "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+                )
                 setRequestProperty("Accept", "audio/mpeg, audio/*;q=0.9, */*;q=0.5")
+                if (url.contains("translate.google")) {
+                    setRequestProperty("Referer", "https://translate.google.com/")
+                }
             }
 
             val statusCode = connection.responseCode
@@ -649,7 +694,7 @@ class AndroidQuranAudioDownloader(
         key.replace(Regex("[^a-zA-Z0-9_-]"), "_")
 
     companion object {
-        private const val MIN_VALID_MP3_BYTES = 1024L
+        private const val MIN_VALID_MP3_BYTES = 400L
     }
 }
 
@@ -793,7 +838,7 @@ class QuranLearningAudioController(
         updateVolumeHint()
         _playbackState.value = QuranAudioPlaybackState.Loading(
             activeKey = source.audioKey,
-            statusBangla = if (source.hasRemoteMp3) "তিলাওয়াত অডিও লোড হচ্ছে..." else "আরবি উচ্চারণ প্রস্তুত হচ্ছে..."
+            statusBangla = if (source.isVerifiedAyahRecitation) "তিলাওয়াত অডিও লোড হচ্ছে..." else "উচ্চারণ অডিও লোড হচ্ছে..."
         )
 
         activeLoadJob = scope.launch {
