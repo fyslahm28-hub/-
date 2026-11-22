@@ -1,7 +1,10 @@
 package com.example.ui.quranlearning
 
 /**
- * কুরআন শিক্ষা একাডেমির নির্ভরযোগ্য ও স্তরভিত্তিক পাঠ্যক্রম (নূরানী কায়দা ও প্রামাণ্য তাজবীদ নীতিমালা অনুসরণে)।
+ * কুরআন শিক্ষা একাডেমির কেন্দ্রীয় ক্যাটালগ ও কনটেন্ট ম্যানেজমেন্ট (CMS) লেয়ার।
+ * - মোট ৩০টি মডিউল (প্রতি স্তরে ১০টি)
+ * - মোট ৩০৬টি যাচাইকৃত ও প্রকাশিত স্বতন্ত্র পাঠ (প্রতি স্তরে ১০২টি)
+ * - ৩টি অপ্রকাশিত/যাচাই অপেক্ষমাণ খসড়া পাঠ (অ্যাডমিন অনুমোদন ছাড়া শিক্ষার্থীর কাছে অদৃশ্য)
  */
 object QuranLearningCatalog {
 
@@ -9,346 +12,189 @@ object QuranLearningCatalog {
     const val HEADER_BANGLA_TITLE = "কুরআন শিক্ষা"
     const val HEADER_SUBTITLE = "শিখুন ধাপে ধাপে"
 
-    val allLessons: List<QuranLesson> = listOf(
-        // ==================== প্রাথমিক শিক্ষা ====================
-        QuranLesson(
-            id = "primary_01_huruf",
-            level = QuranLearningLevel.PRIMARY,
-            lessonNumberBangla = "পাঠ ১",
-            titleBangla = "আরবি ২৯টি হরফ ও সঠিক পরিচিতি",
-            arabicHeading = "أ ب ت ث ج ح خ",
-            summaryBangla = "কুরআন শিক্ষার প্রথম ধাপ হলো আরবি ২৯টি হরফ চেনা এবং নুকতা ও আকৃতির পার্থক্য বোঝা।",
-            explanationBangla = "আরবি ভাষায় মোট ২৯টি হরফ রয়েছে। প্রতিটি হরফের স্বতন্ত্র আকৃতি, নুকতার অবস্থান এবং উচ্চারণ রয়েছে। সঠিকভাবে হরফ চিনতে পারলেই কুরআন মাজীদ শুদ্ধভাবে পড়ার ভিত্তি মজবুত হয়।",
-            examples = listOf(
-                QuranLessonExample("ا  ب  ت  ث", "আলিফ, বা, তা, ছা", "বিন্দু (নুকতা)-এর পার্থক্য: বা-এর নিচে ১, তা-এর উপরে ২, ছা-এর উপরে ৩ নুকতা।"),
-                QuranLessonExample("ج  ح  خ", "জীম, হা, খ", "হা (ح) নুকতা ছাড়া কণ্ঠনালীর মধ্যভাগ থেকে স্পষ্ট উচ্চারিত হয়।"),
-                QuranLessonExample("د  ذ  ر  ز", "দাল, যাল, র, যা", "যাল (ذ) জিহ্বার আগা উপরের দাঁতের আগা থেকে নরমভাবে উচ্চারিত হয়।"),
-                QuranLessonExample("س  ش  ص  ض", "সীন, শীন, সাদ, দাদ", "সাদ ও দাদ মোটা (পুর) হরফ; শ্বাস ধরে স্পষ্ট উচ্চারণ করতে হয়।"),
-                QuranLessonExample("ط  ظ  ع  غ", "ত্ব, যোয়া, আইন, গাইন", "আইন (ع) কণ্ঠনালীর মধ্যভাগ থেকে এবং গাইন (غ) কণ্ঠনালীর উপরিভাগ থেকে উচ্চারিত হয়।"),
-                QuranLessonExample("ف  ق  ك  ل", "ফা, ক্বাফ, কাফ, লাম", "ক্বাফ (ق) জিহ্বার গোড়া থেকে মোটা হয়ে এবং কাফ (ك) পাতলা হয়ে উচ্চারিত হয়।"),
-                QuranLessonExample("م  ن  و  ه  ء  ي", "মীম, নূন, ওয়াও, হা, হামযাহ, ইয়া", "শেষ ৬টি হরফ; হামযাহ ও আলিফের পার্থক্য হলো হরকতযুক্ত আলিফই হামযাহ।")
-            ),
-            keyRuleBangla = "নুকতাযুক্ত ও নুকতাবিহীন কাছাকাছি দেখতে হরফগুলো (যেমন: ب ت ث এবং ح خ ج) বারবার মিলিয়ে চিনে নেওয়া জরুরি।",
-            practiceTipBangla = "প্রতিদিন ৫ মিনিট ডান দিক থেকে বাম দিকে ধীরে ধীরে প্রতিটি হরফ দেখে ও শুদ্ধ উচ্চারণে অনুশীলন করুন।"
-        ),
-        QuranLesson(
-            id = "primary_02_harakat",
-            level = QuranLearningLevel.PRIMARY,
-            lessonNumberBangla = "পাঠ ২",
-            titleBangla = "হরকত — যবর, যের ও পেশ",
-            arabicHeading = "بَ  بِ  بُ",
-            summaryBangla = "যবর (ـَ), যের (ـِ) এবং পেশ (ـُ)-কে হরকত বলা হয়। হরকতের উচ্চারণ দ্রুত ও টান ছাড়া করতে হয়।",
-            explanationBangla = "এক যবর, এক যের এবং এক পেশকে হরকত বলে। হরকতযুক্ত হরফ তাড়াতাড়ি পড়তে হয়—কোনো টান (মাদ) দেওয়া যাবে না। যবর আ-কার, যের ই-কার এবং পেশ উ-কারের ধ্বনি দেয়।",
-            examples = listOf(
-                QuranLessonExample("أَ  إِ  أُ", "আ, ই, উ", "হামযার সাথে যবর, যের ও পেশের তাৎক্ষণিক উচ্চারণ।"),
-                QuranLessonExample("كَتَبَ", "কা-তা-বা", "তিনটি হরফেই যবর; কোনো অক্ষরে টান হবে না।"),
-                QuranLessonExample("عَلِمَ", "আ-লি-মা", "আইন যবর আ, লাম যের লি, মীম যবর মা।"),
-                QuranLessonExample("كُتِبَ", "কু-তি-বা", "কাফ পেশ কু, তা যের তি, বা যবর বা।")
-            ),
-            keyRuleBangla = "হরকতের উচ্চারণ কখনো টেনে পড়া যাবে না; টেনে পড়লে অনেক সময় কুরআনের অর্থ পরিবর্তিত হয়ে যায়।",
-            practiceTipBangla = "‘كَتَبَ’ (কাতাবা)-কে ‘কা-তাবা’ না বলে সমান তালে দ্রুত উচ্চারণ করুন।"
-        ),
-        QuranLesson(
-            id = "primary_03_tanween_jazm",
-            level = QuranLearningLevel.PRIMARY,
-            lessonNumberBangla = "পাঠ ৩",
-            titleBangla = "তানবীন, জযম (সুকূন) ও তাশদীদ",
-            arabicHeading = "بً  بٍ  بٌ  •  أَبْ  •  أَبَّ",
-            summaryBangla = "দুই যবর, দুই যের ও দুই পেশকে তানবীন বলে; জযম হরফকে স্থির করে এবং তাশদীদ দুইবার উচ্চারণ করায়।",
-            explanationBangla = "তানবীনের শেষে একটি সাকিন নূনের ধ্বনি থাকে (যেমন: আন, ইন, উন)। জযম (ـْ) যুক্ত হরফ তার পূর্বের হরকতযুক্ত হরফের সাথে মিলিয়ে একবার পড়া হয়। আর তাশদীদ (ـّ) যুক্ত হরফ দুইবার—প্রথমবার পূর্বের হরফের সাথে যুক্ত হয়ে এবং দ্বিতীয়বার নিজের হরকত অনুযায়ী পড়া হয়।",
-            examples = listOf(
-                QuranLessonExample("عَلِيمًا  •  حَكِيمٌ", "আলীমান • হাকীমুন", "তানবীনের শেষে স্পষ্ট নূন সাকিনের আওয়াজ হয়।"),
-                QuranLessonExample("مِنْ  •  عَنْ  •  قَدْ", "মিন • আন • ক্বাদ", "জযমযুক্ত হরফ পূর্বের হরফের সাথে মিলিয়ে পড়া হয়।"),
-                QuranLessonExample("إِنَّ  •  رَبِّ  •  حَقٌّ", "ইন্না • রব্বি • হাক্কুন", "তাশদীদযুক্ত হরফে চাপ দিয়ে দুইবার উচ্চারণ হয়।")
-            ),
-            keyRuleBangla = "নূন (نّ) ও মীম (مّ)-এ তাশদীদ থাকলে এক আলিফ পরিমাণ নাকের বাঁশি থেকে গুন্নাহ করা ওয়াজিব।",
-            practiceTipBangla = "‘رَبِّ’ বলার সময় ‘রব-বি’ এভাবে দুই ‘বা’-এর স্পষ্ট উচ্চারণ অনুশীলন করুন।"
-        ),
-        QuranLesson(
-            id = "primary_04_murakkab",
-            level = QuranLearningLevel.PRIMARY,
-            lessonNumberBangla = "পাঠ ৪",
-            titleBangla = "মুরাক্কাব (যুক্তাক্ষর) ও হরফের রূপ",
-            arabicHeading = "بِسْمِ اللَّهِ",
-            summaryBangla = "শব্দের শুরু, মাঝখানে ও শেষে আরবি হরফের সংযুক্ত রূপ (মুরাক্কাব) চিনে নেওয়া।",
-            explanationBangla = "আরবি ২৯টি হরফের মধ্যে ৬টি হরফ (ا د ذ ر ز و) তাদের পরের হরফের সাথে যুক্ত হয় না; বাকি হরফগুলো শব্দের শুরু, মধ্য ও শেষে একে অপরের সাথে মিলে সংক্ষিপ্ত আকার ধারণ করে।",
-            examples = listOf(
-                QuranLessonExample("سَ + مِ + عَ  =  سَمِعَ", "সামিআ", "সীন, মীম ও আইন যুক্ত হয়ে পূর্ণ শব্দ গঠন।"),
-                QuranLessonExample("حَ + مْ + دُ  =  حَمْدُ", "হামদু", "হা, মীম (সাকিন) ও দাল যুক্ত হয়ে ‘হামদু’।"),
-                QuranLessonExample("الْحَمْدُ لِلَّهِ", "আল-হামদু লিল্লাহি", "কুরআনের সূরা ফাতিহার প্রথম পরিচিত বাক্য।")
-            ),
-            keyRuleBangla = "যুক্তাক্ষরের মাথা ও নুকতার সংখ্যা দেখে মূল হরফটি চিহ্নিত করতে হয়।",
-            practiceTipBangla = "সূরা ইখলাস ও সূরা ফাতিহার প্রতিটি শব্দ ভেঙে ভেঙে হরফগুলো চেনার অভ্যাস করুন।"
-        ),
+    const val SCHOLARLY_VERIFICATION_NOTE =
+        "অডিও ও ডিজিটাল অনুশীলন কেবল সহায়ক মাধ্যম; কুরআন তিলাওয়াতের চূড়ান্ত বিশুদ্ধতা একজন যোগ্য ক্বারী বা শিক্ষকের নিকট শোনানোর মাধ্যমে যাচাই করা উত্তম।"
 
-        // ==================== মধ্যবর্তী শিক্ষা ====================
-        QuranLesson(
-            id = "inter_01_makhraj",
-            level = QuranLearningLevel.INTERMEDIATE,
-            lessonNumberBangla = "পাঠ ১",
-            titleBangla = "মাখরাজ — হরফের ১৭টি উচ্চারণস্থান",
-            arabicHeading = "مَخَارِجُ الْحُرُوفِ",
-            summaryBangla = "ইমাম ইবনুল জাযারী (রহ.)-এর মতে আরবি ২৯টি হরফের প্রধান ৫টি অঞ্চল ও ১৭টি মাখরাজ রয়েছে।",
-            explanationBangla = "যে স্থান থেকে আরবি হরফ উচ্চারিত হয় তাকে মাখরাজ বলে। হরফের মাখরাজ ভুল হলে শব্দের অর্থ পাল্টে যায় (যেমন: قَلْب অর্থ অন্তর, আর كَلْب অর্থ কুকুর)। ৫টি প্রধান অঞ্চল হলো: ১. আল-জাওফ (মুখের খালি জায়গা), ২. আল-হালক (কণ্ঠনালী), ৩. আল-লিসান (জিহ্বা), ৪. আশ-শাফাতান (দুই ঠোঁট), ৫. আল-খাইশূম (নাকের বাঁশি)।",
-            examples = listOf(
-                QuranLessonExample("ء  ه  •  ع  ح  •  غ  خ", "হলকের ৬টি হরফ", "কণ্ঠনালীর শুরু (ء ه), মধ্যভাগ (ع ح) ও শেষভাগ (غ خ) থেকে উচ্চারিত।"),
-                QuranLessonExample("ق  ك", "জিহ্বার গোড়ার হরফ", "ক্বাফ (ق) জিহ্বার একেবারে গোড়া থেকে, কাফ (ك) তার একটু সামনে থেকে।"),
-                QuranLessonExample("ب  م  و  ف", "ঠোঁটের ৪টি হরফ", "ফা উপরের দাঁতের আগা ও নিচের ঠোঁটের পেট থেকে; বা, মীম, ওয়াও দুই ঠোঁট থেকে।"),
-                QuranLessonExample("نّ  مّ  (غُنَّة)", "খাইশূম (নাকের বাঁশি)", "গুন্নাহর আওয়াজ নাকের বাঁশি থেকে এক আলিফ পরিমাণ বের হয়।")
-            ),
-            keyRuleBangla = "কোনো হরফের মাখরাজ যাচাই করতে হলে সেটির আগে একটি যবরযুক্ত হামযাহ বসিয়ে হরফটিতে জযম দিন (যেমন: أَبْ، أَعْ، أَقْ); যেখানে আওয়াজ থামবে সেটিই তার মাখরাজ।",
-            practiceTipBangla = "ح (হা) ও ه (হা), এবং ق (ক্বাফ) ও ك (কাফ)-এর মাখরাজ আলাদা করে বারবার অনুশীলন করুন।"
-        ),
-        QuranLesson(
-            id = "inter_02_sifat",
-            level = QuranLearningLevel.INTERMEDIATE,
-            lessonNumberBangla = "পাঠ ২",
-            titleBangla = "সিফাতুল হুরূফ ও ক্বলক্বলাহর নিয়ম",
-            arabicHeading = "صِفَاتُ الْحُرُوفِ وَالْقَلْقَلَة",
-            summaryBangla = "একই মাখরাজের হরফগুলোকে পৃথক করার জন্য সিফাত (গুণাবলি) এবং ক্বলক্বলাহ জানা আবশ্যক।",
-            explanationBangla = "হরফ উচ্চারণের সময় বাতাস চলা বা বন্ধ হওয়া, আওয়াজ মোটা (ইসতি’লা) বা পাতলা (ইসতিফাল) হওয়া এবং প্রতিধ্বনি (ক্বলক্বলাহ) হওয়াকে সিফাত বলে। ‘قُطْبُ جَدٍّ’ (ক্বাফ, ত্বা, বা, জীম, দাল)—এই ৫টি হরফে জযম থাকলে প্রতিধ্বনি করে পড়াকে ক্বলক্বলাহ বলে।",
-            examples = listOf(
-                QuranLessonExample("ق  ط  ب  ج  د", "ক্বলক্বলাহর ৫ হরফ (قُطْبُ جَدٍّ)", "যেমন: أَحَدْ، يَلِدْ، خَلَقْ — জযম অবস্থায় হালকা প্রতিধ্বনি হবে।"),
-                QuranLessonExample("خ  ص  ض  غ  ط  ق  ظ", "মোটা (ইসতি’লা) ৭ হরফ", "সর্বদা জিহ্বার পেছনের অংশ উঁচু করে মোটা (পুর) আওয়াজে পড়তে হয়।"),
-                QuranLessonExample("فَحَثَّهُ شَخْصٌ سَكَتَ", "হামস (বাতাস প্রবাহিত) ১০ হরফ", "এগুলোতে উচ্চারণের সময় হালকা বাতাস বের হয়।")
-            ),
-            keyRuleBangla = "ক্বলক্বলাহর সময় কোনো হরকত (যবর বা পেশ)-এর আওয়াজ যেন যুক্ত না হয়, কেবল মূল হরফের মাখরাজ থেকে প্রতিধ্বনি হবে।",
-            practiceTipBangla = "সূরা আল-ইখলাস (قُلْ هُوَ اللَّهُ أَحَدٌ) ও সূরা ফালাক (بِرَبِّ الْفَلَقِ) দিয়ে ক্বলক্বলাহ অনুশীলন করুন।"
-        ),
-        QuranLesson(
-            id = "inter_03_noon_sakin",
-            level = QuranLearningLevel.INTERMEDIATE,
-            lessonNumberBangla = "পাঠ ৩",
-            titleBangla = "নূন সাকিন ও তানবীনের ৪টি নিয়ম",
-            arabicHeading = "أَحْكَامُ النُّونِ السَّاكِنَةِ",
-            summaryBangla = "ইযহার, ইদগাম, ইকলাব ও ইখফা — তাজবীদের সবচেয়ে বেশি ব্যবহৃত চারটি মূল বিধান।",
-            explanationBangla = "নূন সাকিন (نْ) বা তানবীনের পর কোন হরফ আসছে তার ওপর ভিত্তি করে চারটি নিয়ম প্রযোজ্য হয়:\n১. ইযহার (স্পষ্ট পড়া): হলকের ৬ হরফ (ء ه ع ح غ خ) এলে গুন্নাহ ছাড়া স্পষ্ট পড়তে হবে।\n২. ইদগাম (মিলিয়ে পড়া): ي ر م ل و ن (ইয়ারমালূন) এলে মিলিয়ে পড়তে হবে; ي ن م و-এ গুন্নাহসহ এবং ل ر-এ গুন্নাহ ছাড়া।\n৩. ইকলাব (পরিবর্তন করা): ب (বা) এলে নূনকে মীম-এ পরিবর্তন করে গুন্নাহসহ পড়তে হবে।\n৪. ইখফা (গোপন করা): বাকি ১৫ হরফে নাকের বাঁশিতে গোপন গুন্নাহসহ পড়তে হবে।",
-            examples = listOf(
-                QuranLessonExample("مِنْ خَوْفٍ  •  أَنْعَمْتَ", "ইযহার (স্পষ্ট পড়া)", "নূন সাকিনের পর خ ও ع আসায় কোনো গুন্নাহ ছাড়া স্পষ্ট পড়া হবে।"),
-                QuranLessonExample("مَن يَقُولُ  •  مِن رَّبِّهِمْ", "ইদগাম", "ي-এ গুন্নাহসহ (মাইঁ ইয়াকূলু) এবং ر-এ গুন্নাহ ছাড়া (মির রব্বিহিম)।"),
-                QuranLessonExample("مِن بَعْدِ  •  سَمِيعٌ بَصِيرٌ", "ইকলাব", "نْ-এর পর ب আসায় মীমের মতো গুন্নাহ করে (মিম বা’দি) পড়তে হয়।"),
-                QuranLessonExample("مِن قَبْلُ  •  أَنتُمْ", "ইখফা", "نْ-এর পর ق ও ت আসায় নূনের আওয়াজ নাকে গোপন করে এক আলিফ গুন্নাহ।")
-            ),
-            keyRuleBangla = "ইযহারে গুন্নাহ করা যাবে না, আর ইখফা ও ইকলাবে এক আলিফ পরিমাণ গুন্নাহ বজায় রাখা আবশ্যক।",
-            practiceTipBangla = "সূরা আল-ফাতিহা ও সূরা আল-কদরের আয়াতগুলোতে নূন সাকিন ও তানবীনের উদাহরণ খুঁজে বের করুন।"
-        ),
-        QuranLesson(
-            id = "inter_04_meem_sakin",
-            level = QuranLearningLevel.INTERMEDIATE,
-            lessonNumberBangla = "পাঠ ৪",
-            titleBangla = "মীম সাকিন ও ওয়াজিব গুন্নাহ",
-            arabicHeading = "أَحْكَامُ الْمِيمِ السَّاكِنَةِ",
-            summaryBangla = "মীম সাকিন (مْ)-এর ৩টি বিধান: ইখফায়ে শাফাবী, ইদগামে শাফাবী এবং ইযহারে শাফাবী।",
-            explanationBangla = "মীম সাকিনের পর তিনটি অবস্থা হয়:\n১. ইখফায়ে শাফাবী: মীম সাকিনের পর ب (বা) এলে ঠোঁট হালকা মিলিয়ে এক আলিফ গুন্নাহসহ পড়তে হয়।\n২. ইদগামে শাফাবী: মীম সাকিনের পর আরেকটি م (মীম) এলে উভয় মীমকে মিলিয়ে গুন্নাহসহ পড়তে হয়।\n৩. ইযহারে শাফাবী: ب ও م ছাড়া অন্য যেকোনো হরফ এলে গুন্নাহ ছাড়া স্পষ্ট পড়তে হয়।",
-            examples = listOf(
-                QuranLessonExample("تَرْمِيهِم بِحِجَارَةٍ", "ইখফায়ে শাফাবী", "م-এর পর ب আসায় গুন্নাহসহ (তারমীহিম বিহিজারাতিন)।"),
-                QuranLessonExample("لَهُم مَّغْفِرَةٌ", "ইদগামে শাফাবী", "م-এর পর م আসায় গুন্নাহসহ (লাহুম মাগফিরাতুন)।"),
-                QuranLessonExample("عَلَيْهِمْ غَيْرِ", "ইযহারে শাফাবী", "م-এর পর غ আসায় কোনো গুন্নাহ ছাড়া স্পষ্ট পড়া।")
-            ),
-            keyRuleBangla = "মীম সাকিনের পর و (ওয়াও) বা ف (ফা) এলে ইযহারে শাফাবীতে বিশেষ সতর্ক থাকতে হয় যাতে গুন্নাহ বা লুকিয়ে না পড়ে।",
-            practiceTipBangla = "সূরা ফীল ও সূরা কুরাইশ পাঠ করার সময় মীম সাকিনের জায়গাগুলোতে খেয়াল রাখুন।"
-        ),
+    val allModules: List<QuranLearningModule> by lazy {
+        QuranPrimaryCurriculum.modules +
+            QuranIntermediateCurriculum.modules +
+            QuranAdvancedCurriculum.modules
+    }
 
-        // ==================== উচ্চ শিক্ষা ====================
-        QuranLesson(
-            id = "adv_01_madd",
-            level = QuranLearningLevel.ADVANCED,
-            lessonNumberBangla = "পাঠ ১",
-            titleBangla = "মাদ্দের বিস্তারিত নিয়ম ও প্রকারভেদ",
-            arabicHeading = "أَحْكَامُ الْمَدِّ وَالْقَصْرِ",
-            summaryBangla = "মাদ্দে তাবীঈ (২ হারাকাত), মাদ্দে মুত্তাসিল, মাদ্দে মুনফাসিল ও মাদ্দে লাযিমের (৬ হারাকাত) সঠিক পরিমাণ।",
-            explanationBangla = "মাদ্দের হরফ ৩টি: যবরের বামে খালি আলিফ (ا), পেশের বামে জযমযুক্ত ওয়াও (وْ) এবং যেরের বামে জযমযুক্ত ইয়া (يْ)।\n• মাদ্দে আসলী / তাবীঈ: ১ আলিফ (২ হারাকাত) টানতে হয়।\n• মাদ্দে মুত্তাসিল (একই শব্দে হামযাহ এলে): ৪–৫ হারাকাত টানা ওয়াজিব।\n• মাদ্দে মুনফাসিল (পরের শব্দে হামযাহ এলে): ৪–৫ হারাকাত (বা ২ হারাকাত) টানা জায়িয।\n• মাদ্দে লাযিম (মাদ্দের পর আসলী সাকিন বা তাশদীদ এলে): ৬ হারাকাত (৩–৪ আলিফ) টানা ফরয/লাযিম।",
-            examples = listOf(
-                QuranLessonExample("قَالَ  •  يَقُولُ  •  قِيلَ", "মাদ্দে তাবীঈ (২ হারাকাত)", "স্বাভাবিক এক আলিফ পরিমাণ সমান টান।"),
-                QuranLessonExample("جَاءَ  •  السَّمَاءُ", "মাদ্দে ওয়াজিব মুত্তাসিল", "একই শব্দের ভেতর মাদ্দের পর হামযাহ; ৪–৫ হারাকাত টানতে হয়।"),
-                QuranLessonExample("إِنَّا أَعْطَيْنَاكَ", "মাদ্দে জায়িয মুনফাসিল", "আলাদা শব্দের শুরুতে হামযাহ; রেওয়ায়েতে হাফসে সাধারণত ৪ হারাকাত।"),
-                QuranLessonExample("وَلَا الضَّالِّينَ  •  الْحَاقَّةُ", "মাদ্দে লাযিম (৬ হারাকাত)", "মাদ্দের হরফের পর তাশদীদ থাকায় পূর্ণ ৬ হারাকাত টানা আবশ্যক।")
+    val allVerifiedLessons: List<QuranLesson> by lazy {
+        QuranPrimaryCurriculum.lessons +
+            QuranIntermediateCurriculum.lessons +
+            QuranAdvancedCurriculum.lessons
+    }
+
+    /**
+     * অ্যাডমিন যাচাইয়ের জন্য অপেক্ষমাণ (PENDING_REVIEW / UNPUBLISHED) CMS পাঠসমূহ।
+     * শিক্ষার্থীরা কোনোভাবেই এগুলো দেখতে পাবে না যতক্ষণ না অনুমোদিত অ্যাডমিন যাচাই ও প্রকাশ করেন।
+     */
+    val pendingCmsLessons: List<QuranLesson> by lazy {
+        val rawSpecs = listOf(
+            Triple(
+                QuranLearningLevel.PRIMARY,
+                "m10",
+                LessonSpec(
+                    title = "অতিরিক্ত অনুশীলন: সূরা মাঊন শব্দ বিশ্লেষণ",
+                    arabic = "أَرَأَيْتَ الَّذِي يُكَذِّبُ بِالدِّينِ",
+                    pronunciation = "আরাআইতাল্লাযী ইউকাযযিবু বিদ্দীন",
+                    objective = "সূরা মাঊনের প্রথম আয়াতের হরফ ও যুক্তাক্ষর অনুশীলন।",
+                    explanation = "أَرَأَيْتَ শব্দে দুটি হামযা স্পষ্ট এবং ي সাকিন লীন। يُكَذِّبُ-এ নরম যাল তাশদিদযুক্ত।",
+                    keyRule = "ধাপে ধাপে প্রতিটি হরকত ও তাশদিদ ভেঙে পড়ুন।",
+                    wrongStatement = "يُكَذِّبُ-এ যালকে শিসযুক্ত যা (ز) পড়া",
+                    rightStatement = "يُكَذِّبُ-এ জিহ্বার আগা দাঁতের কিনারায় রেখে নরম যাল পড়া",
+                    mcqQuestion = "يُكَذِّبُ শব্দে কোন হরফটির উপর তাশদিদ রয়েছে?",
+                    mcqOptions = listOf("ذ (যাল)", "ك (কাফ)", "ب (বা)", "ي (ইয়া)"),
+                    mcqCorrectIndex = 0,
+                    pairs = listOf("أَرَأَيْتَ" to "তুমি কি দেখেছ", "يُكَذِّبُ" to "মিথ্যা প্রতিপন্ন করে", "بِالدِّينِ" to "প্রতিদান দিবসকে"),
+                    fillSentence = "بِالدِّينِ শব্দে দাল শামসী হওয়ায় ___ বিলুপ্ত হয়েছে।",
+                    fillChoices = listOf("লাম (ل)", "বা (ب)", "নূন (ن)"),
+                    fillCorrectIndex = 0,
+                    sourceRef = "নূরানী কায়দা — খসড়া সংযোজন (অ্যাডমিন যাচাই অপেক্ষমাণ)",
+                    hasVerifiedAudio = false
+                )
             ),
-            keyRuleBangla = "তিলাওয়াতের গতি অনুযায়ী প্রতিটি মাদ্দের আনুপাতিক ভারসাম্য (২, ৪, ৬ হারাকাত) বজায় রাখা শুদ্ধ তিলাওয়াতের সৌন্দর্য।",
-            practiceTipBangla = "সূরা ফাতিহার ‘وَلَا الضَّالِّينَ’-এ ৬ হারাকাত টেনে তারপর লাম-এর তাশদীদ স্পষ্টভাবে উচ্চারণ করুন।"
-        ),
-        QuranLesson(
-            id = "adv_02_waqf",
-            level = QuranLearningLevel.ADVANCED,
-            lessonNumberBangla = "পাঠ ২",
-            titleBangla = "ওয়াক্‌ফ (বিরতি) ও ইবতিদার নিয়মাবলি",
-            arabicHeading = "عَلَامَاتُ الْوَقْفِ وَالِابْتِدَاءِ",
-            summaryBangla = "কোথায় থামতে হবে, কোথায় থামা যাবে না এবং থামার সময় শেষ হরফের কী পরিবর্তন হয়।",
-            explanationBangla = "কুরআন তিলাওয়াতের সময় অর্থ অক্ষুণ্ণ রাখার জন্য সঠিক স্থানে দম ছাড়া (ওয়াক্‌ফ) ও পুনরায় শুরু করা (ইবতিদা) অত্যন্ত গুরুত্বপূর্ণ। ওয়াক্‌ফের সময় শেষ হরফে এক যবর, যের, পেশ বা দুই যের/পেশ থাকলে তা সাকিন হয়ে যায়; দুই যবর থাকলে এক আলিফ মাদ (মাদ্দে ইওয়াদ) হয়; আর গোল তা (ة) হলে ‘হা সাকিন’ (هْ) হয়ে যায়।",
-            examples = listOf(
-                QuranLessonExample("مـ (ওয়াকফে লাযিম)", "অবশ্যই থামতে হবে", "এখানে না থামলে আয়াতের অর্থ বিকৃত হওয়ার আশঙ্কা থাকে।"),
-                QuranLessonExample("ط (ওয়াকফে মুতলাক) • ج (জায়িয)", "থামা উত্তম / থামা বা মিলে পড়া উভয়ই বৈধ", "পূর্ণ অর্থ সমাপ্ত হওয়ার নির্দেশক চিহ্ন।"),
-                QuranLessonExample("لا (লা তাক্বিফ)", "থামবেন না", "আয়াতের মাঝখানে ‘لا’ থাকলে সেখানে না থেমে মিলিয়ে পড়া উত্তম।"),
-                QuranLessonExample("رَحْمَةً  →  رَحْمَهْ", "গোল তা-এ ওয়াক্‌ফের নিয়ম", "ওয়াক্‌ফের সময় গোল তা (ة) সাকিন ‘হা’ (هْ) হিসেবে উচ্চারিত হয়।")
+            Triple(
+                QuranLearningLevel.INTERMEDIATE,
+                "m10",
+                LessonSpec(
+                    title = "অতিরিক্ত অনুশীলন: সূরা আসর তাজবীদ ছক",
+                    arabic = "وَالْعَصْرِ ۝ إِنَّ الْإِنْسَانَ لَفِي خُسْرٍ",
+                    pronunciation = "ওয়াল আসর — ইন্নাল ইনসানা লাফী খুসর",
+                    objective = "সূরা আসরের সম্পূর্ণ তাজবীদ বিশ্লেষণ।",
+                    explanation = "وَالْعَصْرِ (মোটা র ওয়াকফে), إِنَّ (ওয়াজিব গুন্নাহ), الْإِنْسَانَ (পাতলা ইখফা), خُسْرٍ (মোটা র ওয়াকফে)।",
+                    keyRule = "দুই সাকিনের মাঝে ওয়াকফে র-এর তাফখীম পূর্বের পূর্ববর্তী হরকত দেখে নির্ধারিত হয়।",
+                    wrongStatement = "خُسْرٍ-এ ওয়াকফ করলে র পাতলা পড়া",
+                    rightStatement = "خ-এ পেশ থাকায় ওয়াকফে خُسْرٍ-এর র মোটা পড়া",
+                    mcqQuestion = "إِنَّ الْإِنْسَانَ অংশে কোন দুটি তাজবীদ নিয়ম পরপর আছে?",
+                    mcqOptions = listOf("ওয়াজিব গুন্নাহ ও ইখফায়ে হাকীকী", "ইকলাব ও সাকতাহ", "ইমালাহ ও তাসহীল", "দুটিই ইযহার"),
+                    mcqCorrectIndex = 0,
+                    pairs = listOf("إِنَّ" to "ওয়াজিব গুন্নাহ", "الْإِنْسَانَ" to "পাতলা ইখফা", "خُسْرٍ" to "ওয়াকফে মোটা র"),
+                    fillSentence = "الْإِنْسَانَ শব্দে নূন সাকিনের পর ___ আসায় পাতলা ইখফা হয়েছে।",
+                    fillChoices = listOf("সীন (س)", "সাদ (ص)", "কফ (ق)"),
+                    fillCorrectIndex = 0,
+                    sourceRef = "জামালুল কুরআন — খসড়া সংযোজন (অ্যাডমিন যাচাই অপেক্ষমাণ)",
+                    hasVerifiedAudio = false
+                )
             ),
-            keyRuleBangla = "দম ফুরিয়ে যাওয়ার কারণে অসমাপ্ত স্থানে থামতে হলে এক-দুই শব্দ পেছন থেকে পুনরায় মিলিয়ে পড়া (ইআদাহ) সুন্নাতসম্মত আদব।",
-            practiceTipBangla = "তিলাওয়াতের সময় প্রতিটি রুমুযে আওকাফ (مـ ط ج لا)-এর অর্থ খেয়াল রেখে দম নিয়ন্ত্রণ করুন।"
-        ),
-        QuranLesson(
-            id = "adv_03_ra_laam",
-            level = QuranLearningLevel.ADVANCED,
-            lessonNumberBangla = "পাঠ ৩",
-            titleBangla = "র (ر) ও লাম (ل)-এর পুর ও বারীক বিধান",
-            arabicHeading = "تَفْخِيمُ الرَّاءِ وَلَفْظِ الْجَلَالَةِ",
-            summaryBangla = "কখন ‘র’ এবং আল্লাহ শব্দের ‘লাম’ মোটা (তাফখীম) হবে আর কখন পাতলা (তারকীক) হবে।",
-            explanationBangla = "১. লফযে জালালাহ (اللَّهُ)-এর লাম: এর পূর্বে যবর বা পেশ থাকলে লাম মোটা (পুর) হবে (যেমন: هُوَ اللَّهُ، نَصْرُ اللَّهِ)। আর পূর্বে যের থাকলে লাম পাতলা (বারীক) হবে (যেমন: بِسْمِ اللَّهِ، لِلَّهِ)।\n২. ‘র’ (ر)-এর বিধান: র-এ যবর বা পেশ থাকলে মোটা; যের থাকলে পাতলা। র সাকিন হলে তার পূর্বের হরকত দেখা হয়—যবর বা পেশ থাকলে মোটা, আর আসলী যের থাকলে পাতলা (যদি না পরে মোটা হরফ থাকে)।",
-            examples = listOf(
-                QuranLessonExample("هُوَ اللَّهُ  •  رَسُولُ اللَّهِ", "লফযে জালালাহ পুর (মোটা)", "পূর্বে যবর বা পেশ থাকায় ‘আল্লা-হু’ মোটা করে পড়তে হয়।"),
-                QuranLessonExample("بِسْمِ اللَّهِ  •  دِينِ اللَّهِ", "লফযে জালালাহ বারীক (পাতলা)", "পূর্বে যের থাকায় ‘বিসমিল্লা-হি’ পাতলা করে পড়তে হয়।"),
-                QuranLessonExample("رَبَّنَا  •  رُزِقْنَا", "র মোটা (তাফখীম)", "র-এ যবর ও পেশ থাকায় মুখ ভরে মোটা উচ্চারণ।"),
-                QuranLessonExample("رِزْقًا  •  فِرْعَوْنَ", "র পাতলা (তারকীক)", "র-এ যের অথবা পূর্বের আসলী যেরের কারণে পাতলা উচ্চারণ।")
-            ),
-            keyRuleBangla = "‘بِسْمِ اللَّهِ’ বলার সময় অনেকেই ভুল করে লাম মোটা করে ফেলেন; মীমের নিচে যের থাকায় এখানে লাম সর্বদা পাতলা (বারীক) হবে।",
-            practiceTipBangla = "‘قُلْ هُوَ اللَّهُ’ (মোটা লাম) এবং ‘بِسْمِ اللَّهِ’ (পাতলা লাম) পাশাপাশি ১০ বার অনুশীলন করুন।"
-        ),
-        QuranLesson(
-            id = "adv_04_tilawat_fatiha",
-            level = QuranLearningLevel.ADVANCED,
-            lessonNumberBangla = "পাঠ ৪",
-            titleBangla = "শুদ্ধ তিলাওয়াত অনুশীলন — সূরা আল-ফাতিহা",
-            arabicHeading = "سُورَةُ الْفَاتِحَةِ بِالتَّجْوِيدِ",
-            summaryBangla = "নামাজের প্রতিটি রাকাআতে পঠিত সূরা আল-ফাতিহার প্রতিটি আয়াতের সূক্ষ্ম তাজবীদ প্রয়োগ।",
-            explanationBangla = "সূরা আল-ফাতিহা বিশুদ্ধ তাজবীদে পড়া প্রতিটি মুসলিমের জন্য অপরিহার্য। এতে লফযে জালালাহর তারকীক, ح ও ع-এর মাখরাজ, নূন সাকিনের ইযহার, মীম সাকিনের ইযহারে শাফাবী, ض-এর ইস্তিতালাহ এবং ৬ হারাকাত মাদ্দে লাযিমের বাস্তব প্রয়োগ রয়েছে।",
-            examples = listOf(
-                QuranLessonExample("بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ", "বিসমিল্লা-হির রাহ্‌মা-নির রাহীম", "লফযে জালালাহ পাতলা, র দুটি মোটা, ح কণ্ঠনালীর মধ্যভাগ থেকে স্পষ্ট।"),
-                QuranLessonExample("الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ", "আল-হামদু লিল্লা-হি রব্বিল আ-লামীন", "ع স্পষ্ট মাখরাজে; শেষে মাদ্দে আরিদ ২–৪ হারাকাত।"),
-                QuranLessonExample("إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ", "ইয়্যা-কা না’বুদু ওয়া ইয়্যা-কা নাসতাঈন", "إِيَّاكَ-এ ইয়া-এর তাশদীদ স্পষ্ট রাখা ফরয, নতুবা অর্থ বিকৃত হয়।"),
-                QuranLessonExample("صِرَاطَ الَّذِينَ أَنْعَمْتَ عَلَيْهِمْ غَيْرِ الْمَغْضُوبِ عَلَيْهِمْ وَلَا الضَّالِّينَ", "সিরাত্বাল্লাযীনা আন’আমতা আলাইহিম...", "أَنْعَمْتَ-এ ইযহার, ض মোটা, এবং الضَّالِّينَ-এ ৬ হারাকাত মাদ্দে লাযিম।")
-            ),
-            keyRuleBangla = "তাজবীদসহ ধীরে ধীরে ও মনোযোগ দিয়ে (তারতীল) তিলাওয়াত করাই কুরআনের নির্দেশ (সূরা আল-মুযযাম্মিল: ৪)।",
-            practiceTipBangla = "প্রতিটি আয়াত শ্বাস নিয়ে আলাদাভাবে থেমে (আয়াতে ওয়াক্‌ফ করে) পড়া রাসূল ﷺ-এর সুন্নাত (সহীহ বুখারী ও তিরমিযী)।"
+            Triple(
+                QuranLearningLevel.ADVANCED,
+                "m10",
+                LessonSpec(
+                    title = "অতিরিক্ত অনুশীলন: সূরা তীনের ওয়াকফ ও কলকলা",
+                    arabic = "لَقَدْ خَلَقْنَا الْإِنْسَانَ فِي أَحْسَنِ تَقْوِيمٍ",
+                    pronunciation = "লাক্বাদ খালাক্বনাল ইনসানা ফী আহসানি তাক্বভীম",
+                    objective = "একাধিক কলকলায়ে সুগরা, ইখফা ও মুনফাসিলের সমন্বিত চর্চা।",
+                    explanation = "لَقَدْ (সুগরা দ), خَلَقْنَا (সুগরা কফ), الْإِنْسَانَ (পাতলা ইখফা), فِي أَحْسَنِ (মুনফাসিল ৪-৫), تَقْوِيمٍ (সুগরা কফ + মাদ্দে আরিয)।",
+                    keyRule = "একই আয়াতে তিনটি কলকলায়ে সুগরাকে সুষম ও পরিমিত মাত্রায় আদায় করুন।",
+                    wrongStatement = "فِي أَحْسَنِ-এ ১ আলিফ টেনে দ্রুত পড়া",
+                    rightStatement = "দুই শব্দে হামযা আসায় فِي أَحْسَنِ-এ ৪-৫ হরকত মাদ্দে মুনফাসিল পড়া",
+                    mcqQuestion = "لَقَدْ خَلَقْنَا الْإِنْسَانَ فِي أَحْسَنِ تَقْوِيمٍ আয়াতে মোট কয়টি কলকলায়ে সুগরা রয়েছে?",
+                    mcqOptions = listOf("১টি", "২টি", "৩টি (د، ق، ق)", "৪টি"),
+                    mcqCorrectIndex = 2,
+                    pairs = listOf("لَقَدْ" to "দাল কলকলায়ে সুগরা", "خَلَقْنَا" to "কফ মোটা সুগরা", "فِي أَحْسَنِ" to "মাদ্দে মুনফাসিল"),
+                    fillSentence = "خَلَقْنَا এবং تَقْوِيمٍ শব্দে কফ সাকিন হওয়ায় ___ কলকলায়ে সুগরা হবে।",
+                    fillChoices = listOf("মোটা", "পাতলা", "গুন্নাহযুক্ত"),
+                    fillCorrectIndex = 0,
+                    sourceRef = "ফাওয়ায়েদে মাক্কিয়্যাহ — খসড়া সংযোজন (অ্যাডমিন যাচাই অপেক্ষমাণ)",
+                    hasVerifiedAudio = false
+                )
+            )
         )
-    )
 
-    val listeningExercises: List<QuranListeningItem> = listOf(
-        QuranListeningItem(
-            id = "listen_01",
-            categoryBangla = "প্রাথমিক হরফ",
-            arabicText = "أَ  بَ  تَ  ثَ",
-            phoneticBangla = "আ — বা — তা — ছা",
-            makhrajRuleBangla = "ث (ছা) জিহ্বার আগা উপরের দুই দাঁতের আগায় লাগিয়ে নরমভাবে উচ্চারণ করুন।",
-            level = QuranLearningLevel.PRIMARY
-        ),
-        QuranListeningItem(
-            id = "listen_02",
-            categoryBangla = "কণ্ঠনালীর হরফ",
-            arabicText = "عَ  حَ  غَ  خَ",
-            phoneticBangla = "আ (গভীর আইন) — হা (স্পষ্ট) — গ — খ",
-            makhrajRuleBangla = "ع ও ح কণ্ঠনালীর মধ্যভাগ থেকে চেপে এবং غ ও خ কণ্ঠনালীর উপরিভাগ থেকে উচ্চারিত হয়।",
-            level = QuranLearningLevel.INTERMEDIATE
-        ),
-        QuranListeningItem(
-            id = "listen_03",
-            categoryBangla = "ক্বলক্বলাহ অনুশীলন",
-            arabicText = "قُلْ هُوَ اللَّهُ أَحَدٌ",
-            phoneticBangla = "কুল হুওয়াল্লাহু আহাদ্",
-            makhrajRuleBangla = "ওয়াক্‌ফের সময় শেষে ‘دْ’-এ হালকা প্রতিধ্বনি (ক্বলক্বলাহ) করুন।",
-            level = QuranLearningLevel.INTERMEDIATE
-        ),
-        QuranListeningItem(
-            id = "listen_04",
-            categoryBangla = "গুন্নাহ ও ইদগাম",
-            arabicText = "إِنَّ اللَّهَ غَفُورٌ رَّحِيمٌ",
-            phoneticBangla = "ইন্নাল্লাহা গাফূরুর রাহীম",
-            makhrajRuleBangla = "إِنَّ-এ এক আলিফ গুন্নাহ এবং غَفُورٌ رَّحِيمٌ-এ গুন্নাহ ছাড়া ইদগাম।",
-            level = QuranLearningLevel.INTERMEDIATE
-        ),
-        QuranListeningItem(
-            id = "listen_05",
-            categoryBangla = "মাদ্দে লাযিম",
-            arabicText = "وَلَا الضَّالِّينَ",
-            phoneticBangla = "ওয়ালাদ দা---ল্লীন",
-            makhrajRuleBangla = "ض-এর পর আলিফে ৬ হারাকাত টেনে তাশদীদযুক্ত লাম স্পষ্টভাবে উচ্চারণ করুন।",
-            level = QuranLearningLevel.ADVANCED
-        ),
-        QuranListeningItem(
-            id = "listen_06",
-            categoryBangla = "লফযে জালালাহ",
-            arabicText = "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ",
-            phoneticBangla = "বিসমিল্লাহির রাহমানির রাহীম",
-            makhrajRuleBangla = "بِسْمِ-এ যের থাকায় اللَّهِ-এর লাম পাতলা (বারীক) এবং الرَّحْمَٰنِ-এর র মোটা হবে।",
-            level = QuranLearningLevel.ADVANCED
-        )
-    )
+        rawSpecs.mapIndexed { index, (level, modId, spec) ->
+            val built = buildLessonsFromSpecs(
+                level = level,
+                moduleId = modId,
+                startGlobalOrder = 103,
+                specs = listOf(spec)
+            ).first()
+            built.copy(
+                id = "${level.id}_cms_pending_${index + 1}",
+                lessonOrderInModule = 13,
+                lessonNumberBangla = "খসড়া ${toAcademyBanglaDigits(index + 1)}",
+                verificationStatus = VerificationStatus.PENDING_REVIEW,
+                publicationStatus = PublicationStatus.UNPUBLISHED
+            )
+        }
+    }
 
-    val quizQuestions: List<QuranQuizQuestion> = listOf(
-        QuranQuizQuestion(
-            id = "quiz_01",
-            level = QuranLearningLevel.PRIMARY,
-            questionBangla = "এক যবর, এক যের এবং এক পেশকে আরবি তাজবীদের ভাষায় কী বলা হয়?",
-            arabicPrompt = "بَ  بِ  بُ",
-            options = listOf("তানবীন", "হরকত", "মাদ", "ক্বলক্বলাহ"),
-            correctOptionIndex = 1,
-            explanationBangla = "এক যবর (ـَ), এক যের (ـِ) এবং এক পেশ (ـُ)-কে হরকত বলা হয় এবং এগুলো টান ছাড়া তাড়াতাড়ি পড়তে হয়।"
-        ),
-        QuranQuizQuestion(
-            id = "quiz_02",
-            level = QuranLearningLevel.PRIMARY,
-            questionBangla = "তাশদীদযুক্ত হরফ কয়বার উচ্চারিত হয়?",
-            arabicPrompt = "رَبِّ",
-            options = listOf("একবার", "দুইবার", "তিনবার", "উচ্চারিত হয় না"),
-            correctOptionIndex = 1,
-            explanationBangla = "তাশদীদযুক্ত হরফ দুইবার উচ্চারিত হয়—প্রথমবার পূর্বের হরফের সাথে যুক্ত হয়ে এবং দ্বিতীয়বার নিজের হরকতসহ।"
-        ),
-        QuranQuizQuestion(
-            id = "quiz_03",
-            level = QuranLearningLevel.INTERMEDIATE,
-            questionBangla = "ক্বলক্বলাহর হরফ মোট কয়টি?",
-            arabicPrompt = "قُطْبُ جَدٍّ",
-            options = listOf("৪টি", "৫টি", "৬টি", "৭টি"),
-            correctOptionIndex = 1,
-            explanationBangla = "ক্বলক্বলাহর হরফ ৫টি: ق ط ب ج د (সংক্ষেপে ‘কুতবু জাদ্দিন’)। জযম অবস্থায় এগুলোতে প্রতিধ্বনি হয়।"
-        ),
-        QuranQuizQuestion(
-            id = "quiz_04",
-            level = QuranLearningLevel.INTERMEDIATE,
-            questionBangla = "নূন সাকিন বা তানবীনের পর ب (বা) এলে কোন নিয়ম প্রযোজ্য হয়?",
-            arabicPrompt = "مِن بَعْدِ",
-            options = listOf("ইযহার", "ইদগাম", "ইকলাব", "মাদ্দে লাযিম"),
-            correctOptionIndex = 2,
-            explanationBangla = "নূন সাকিন বা তানবীনের পর ب এলে নূনকে মীম-এ পরিবর্তন করে এক আলিফ গুন্নাহসহ পড়াকে ইকলাব বলে।"
-        ),
-        QuranQuizQuestion(
-            id = "quiz_05",
-            level = QuranLearningLevel.INTERMEDIATE,
-            questionBangla = "ইমাম ইবনুল জাযারী (রহ.)-এর মতে আরবি ২৯টি হরফের মাখরাজ মোট কয়টি?",
-            arabicPrompt = "مَخَارِجُ الْحُرُوفِ",
-            options = listOf("১৪টি", "১৭টি", "২১টি", "২৯টি"),
-            correctOptionIndex = 1,
-            explanationBangla = "সর্বাধিক প্রসিদ্ধ ও গ্রহণযোগ্য মত অনুযায়ী ৫টি প্রধান অঞ্চলে আরবি হরফের মোট ১৭টি মাখরাজ রয়েছে।"
-        ),
-        QuranQuizQuestion(
-            id = "quiz_06",
-            level = QuranLearningLevel.ADVANCED,
-            questionBangla = "‘بِسْمِ اللَّهِ’ পাঠ করার সময় আল্লাহ শব্দের ‘লাম’ কীভাবে উচ্চারিত হবে?",
-            arabicPrompt = "بِسْمِ اللَّهِ",
-            options = listOf("মোটা (পুর) হবে", "পাতলা (বারীক) হবে", "ক্বলক্বলাহ হবে", "৬ হারাকাত টান হবে"),
-            correctOptionIndex = 1,
-            explanationBangla = "লফযে জালালাহ (আল্লাহ) শব্দের পূর্বে যের থাকলে লাম পাতলা (বারীক) এবং যবর বা পেশ থাকলে মোটা (পুর) হয়।"
-        ),
-        QuranQuizQuestion(
-            id = "quiz_07",
-            level = QuranLearningLevel.ADVANCED,
-            questionBangla = "‘وَلَا الضَّالِّينَ’ শব্দে মাদ্দে লাযিম কত হারাকাত টেনে পড়তে হয়?",
-            arabicPrompt = "وَلَا الضَّالِّينَ",
-            options = listOf("২ হারাকাত", "৩ হারাকাত", "৪ হারাকাত", "৬ হারাকাত"),
-            correctOptionIndex = 3,
-            explanationBangla = "মাদ্দের হরফের পর আসলী সাকিন বা তাশদীদ থাকলে তা মাদ্দে লাযিম হয় এবং তা পূর্ণ ৬ হারাকাত টেনে পড়া আবশ্যক।"
-        ),
-        QuranQuizQuestion(
-            id = "quiz_08",
-            level = QuranLearningLevel.ADVANCED,
-            questionBangla = "আয়াতের শেষে গোল তা (ة)-এর ওপর ওয়াক্‌ফ (বিরতি) করলে তা কী রূপে উচ্চারিত হয়?",
-            arabicPrompt = "رَحْمَةً  ←  رَحْمَهْ",
-            options = listOf("তা সাকিন", "হা সাকিন (هْ)", "দুই আলিফ মাদ", "নূন সাকিন"),
-            correctOptionIndex = 1,
-            explanationBangla = "গোল তা (ة)-এর ওপর ওয়াক্‌ফ করলে তার নুকতা উঠে গিয়ে সাকিন হা (هْ) হিসেবে উচ্চারিত হয়।"
-        )
-    )
+    /**
+     * শিক্ষার্থীর জন্য দৃশ্যমান পাঠসমূহ।
+     * কেবল VERIFIED + PUBLISHED পাঠই এখানে থাকবে (অ্যাডমিন কোনো খসড়া অনুমোদন করলে তবেই যুক্ত হবে)।
+     */
+    fun getStudentVisibleLessons(adminApprovedIds: Set<String> = emptySet()): List<QuranLesson> {
+        val approvedPending = pendingCmsLessons
+            .filter { adminApprovedIds.contains(it.id) }
+            .map {
+                it.copy(
+                    verificationStatus = VerificationStatus.VERIFIED,
+                    publicationStatus = PublicationStatus.PUBLISHED
+                )
+            }
+        return (allVerifiedLessons + approvedPending).filter { it.isStudentVisible }
+    }
 
-    fun getLessonsForLevel(level: QuranLearningLevel): List<QuranLesson> =
-        allLessons.filter { it.level == level }
+    /**
+     * অ্যাডমিন যাচাই প্যানেলের জন্য প্রকাশিত ও অপ্রকাশিত সকল CMS পাঠের সমন্বিত তালিকা।
+     */
+    fun getAllCmsManagedLessons(adminApprovedIds: Set<String> = emptySet()): List<QuranLesson> {
+        val pendingWithOverride = pendingCmsLessons.map { lesson ->
+            if (adminApprovedIds.contains(lesson.id)) {
+                lesson.copy(
+                    verificationStatus = VerificationStatus.VERIFIED,
+                    publicationStatus = PublicationStatus.PUBLISHED
+                )
+            } else {
+                lesson
+            }
+        }
+        return pendingWithOverride + allVerifiedLessons
+    }
 
-    fun getLessonById(id: String): QuranLesson? =
-        allLessons.firstOrNull { it.id == id }
+    fun getModulesForLevel(level: QuranLearningLevel): List<QuranLearningModule> =
+        allModules.filter { it.level == level }.sortedBy { it.moduleNumber }
+
+    fun getModuleById(level: QuranLearningLevel, moduleId: String): QuranLearningModule? =
+        allModules.firstOrNull { it.level == level && it.moduleId == moduleId }
+
+    fun getLessonsForLevel(
+        level: QuranLearningLevel,
+        adminApprovedIds: Set<String> = emptySet()
+    ): List<QuranLesson> =
+        getStudentVisibleLessons(adminApprovedIds)
+            .filter { it.level == level }
+            .sortedBy { it.globalOrderInLevel }
+
+    fun getLessonsForModule(
+        level: QuranLearningLevel,
+        moduleId: String,
+        adminApprovedIds: Set<String> = emptySet()
+    ): List<QuranLesson> =
+        getLessonsForLevel(level, adminApprovedIds)
+            .filter { it.moduleId == moduleId }
+            .sortedBy { it.lessonOrderInModule }
+
+    fun getLessonById(
+        lessonId: String,
+        adminApprovedIds: Set<String> = emptySet()
+    ): QuranLesson? =
+        getStudentVisibleLessons(adminApprovedIds).firstOrNull { it.id == lessonId }
+
+    fun getNextLessonInLevel(
+        currentLesson: QuranLesson,
+        adminApprovedIds: Set<String> = emptySet()
+    ): QuranLesson? {
+        val levelLessons = getLessonsForLevel(currentLesson.level, adminApprovedIds)
+        val idx = levelLessons.indexOfFirst { it.id == currentLesson.id }
+        return if (idx in 0 until levelLessons.lastIndex) levelLessons[idx + 1] else null
+    }
+
+    fun getAllRevisionAndAssessmentLessons(
+        adminApprovedIds: Set<String> = emptySet()
+    ): List<QuranLesson> =
+        getStudentVisibleLessons(adminApprovedIds)
+            .filter { it.isRevisionLesson || it.isFinalLevelAssessment }
 }

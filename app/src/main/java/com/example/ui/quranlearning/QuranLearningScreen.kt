@@ -11,6 +11,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,18 +29,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.BookmarkAdded
+import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.HistoryEdu
-import androidx.compose.material.icons.filled.Quiz
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
@@ -55,6 +59,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -66,10 +71,11 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.theme.HindSiliguriFontFamily
 
 /**
- * কুরআন শিক্ষা (تَعْلِيمُ الْقُرْآنِ) — Ultra-Premium Islamic Learning Academy Interface
+ * কুরআন শিক্ষা (تَعْلِيمُ الْقُرْآنِ) — Premium Interactive & Gamified Quran Learning Platform
  */
 @Composable
 fun QuranLearningAcademyScreen(
+    isAdmin: Boolean = false,
     registerBackInterceptor: ((() -> Boolean) -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -77,36 +83,46 @@ fun QuranLearningAcademyScreen(
     val palette = rememberQuranAcademyPalette()
 
     val completedLessonIds by storage.completedLessonIds.collectAsState()
+    val totalXp by storage.totalXpPoints.collectAsState()
+    val dailyGoal by storage.dailyGoalLessons.collectAsState()
+    val todayCompletedCount by storage.todayCompletedCount.collectAsState()
+    val currentStreak by storage.currentStreakDays.collectAsState()
+    val longestStreak by storage.longestStreakDays.collectAsState()
     val lastReadLessonId by storage.lastReadLessonId.collectAsState()
-    val bestQuizScore by storage.bestQuizScore.collectAsState()
-    val totalQuizAttempts by storage.totalQuizAttempts.collectAsState()
+    val mistakeLessonIds by storage.mistakeLessonIds.collectAsState()
+    val mistakeStepsMap by storage.mistakeStepsByLesson.collectAsState()
+    val revisionHistory by storage.revisionHistory.collectAsState()
+    val adminApprovedIds by storage.adminApprovedLessonIds.collectAsState()
 
     var destination by remember {
         mutableStateOf<QuranLearningDestination>(QuranLearningDestination.AcademyHome)
     }
-    var previousLevelForLesson by remember { mutableStateOf<QuranLearningLevel?>(null) }
+    var parentLevelForLesson by remember { mutableStateOf<QuranLearningLevel?>(null) }
 
-    val lastReadLesson = remember(lastReadLessonId) {
+    val lastReadLesson = remember(lastReadLessonId, adminApprovedIds) {
         storage.getLastReadLessonOrDefault()
+    }
+    val totalVisibleLessonsCount = remember(adminApprovedIds) {
+        QuranLearningCatalog.getStudentVisibleLessons(adminApprovedIds).size
     }
 
     fun navigateUpInsideAcademy(): Boolean {
-        return when (val current = destination) {
+        return when (destination) {
             QuranLearningDestination.AcademyHome -> false
-            is QuranLearningDestination.LessonReader -> {
-                val parentLevel = previousLevelForLesson
+            is QuranLearningDestination.InteractiveLesson -> {
+                val parentLevel = parentLevelForLesson
                 destination = if (parentLevel != null) {
-                    QuranLearningDestination.LevelLessons(parentLevel)
+                    QuranLearningDestination.LevelLessonMap(parentLevel)
                 } else {
                     QuranLearningDestination.AcademyHome
                 }
                 true
             }
-            is QuranLearningDestination.LevelLessons,
-            QuranLearningDestination.ListenAndLearn,
-            QuranLearningDestination.PracticeAndQuiz,
-            QuranLearningDestination.LearningProgress -> {
-                previousLevelForLesson = null
+            is QuranLearningDestination.LevelLessonMap,
+            QuranLearningDestination.MistakesAndRevision,
+            QuranLearningDestination.ProgressAndAchievements,
+            QuranLearningDestination.AdminContentVerification -> {
+                parentLevelForLesson = null
                 destination = QuranLearningDestination.AcademyHome
                 true
             }
@@ -142,87 +158,134 @@ fun QuranLearningAcademyScreen(
             QuranLearningDestination.AcademyHome -> {
                 QuranAcademyHomeContent(
                     palette = palette,
+                    isAdmin = isAdmin,
                     completedCount = completedLessonIds.size,
-                    totalLessonsCount = QuranLearningCatalog.allLessons.size,
+                    totalLessonsCount = totalVisibleLessonsCount,
+                    todayCompletedCount = todayCompletedCount,
+                    dailyGoal = dailyGoal,
+                    currentStreak = currentStreak,
+                    totalXp = totalXp,
+                    mistakesCount = mistakeLessonIds.size,
                     lastReadLesson = lastReadLesson,
                     onOpenLevel = { level ->
-                        previousLevelForLesson = level
-                        destination = QuranLearningDestination.LevelLessons(level)
+                        parentLevelForLesson = level
+                        destination = QuranLearningDestination.LevelLessonMap(level)
                     },
-                    onOpenListenAndLearn = {
-                        destination = QuranLearningDestination.ListenAndLearn
+                    onOpenMistakesAndRevision = {
+                        destination = QuranLearningDestination.MistakesAndRevision
                     },
-                    onOpenPracticeAndQuiz = {
-                        destination = QuranLearningDestination.PracticeAndQuiz
-                    },
-                    onOpenLearningProgress = {
-                        destination = QuranLearningDestination.LearningProgress
+                    onOpenProgressAndAchievements = {
+                        destination = QuranLearningDestination.ProgressAndAchievements
                     },
                     onOpenLastReadLesson = {
-                        previousLevelForLesson = null
+                        parentLevelForLesson = lastReadLesson.level
                         storage.recordLastReadLesson(lastReadLesson.id)
-                        destination = QuranLearningDestination.LessonReader(lastReadLesson.id)
+                        destination = QuranLearningDestination.InteractiveLesson(lastReadLesson.id)
+                    },
+                    onOpenAdminVerification = {
+                        destination = QuranLearningDestination.AdminContentVerification
                     }
                 )
             }
 
-            is QuranLearningDestination.LevelLessons -> {
-                QuranLevelLessonsScreen(
+            is QuranLearningDestination.LevelLessonMap -> {
+                QuranLevelLearningPathScreen(
                     level = currentDest.level,
                     completedLessonIds = completedLessonIds,
+                    adminApprovedIds = adminApprovedIds,
+                    storage = storage,
                     palette = palette,
                     onOpenLesson = { lesson ->
-                        previousLevelForLesson = currentDest.level
+                        parentLevelForLesson = currentDest.level
                         storage.recordLastReadLesson(lesson.id)
-                        destination = QuranLearningDestination.LessonReader(lesson.id)
+                        destination = QuranLearningDestination.InteractiveLesson(lesson.id)
                     }
                 )
             }
 
-            is QuranLearningDestination.LessonReader -> {
-                val activeLesson = remember(currentDest.lessonId) {
-                    QuranLearningCatalog.getLessonById(currentDest.lessonId)
-                        ?: QuranLearningCatalog.allLessons.first()
+            is QuranLearningDestination.InteractiveLesson -> {
+                val activeLesson = remember(currentDest.lessonId, adminApprovedIds) {
+                    QuranLearningCatalog.getLessonById(currentDest.lessonId, adminApprovedIds)
+                        ?: QuranLearningCatalog.getStudentVisibleLessons(adminApprovedIds).first()
                 }
-                QuranLessonReaderScreen(
+                val retryIndices = remember(currentDest.lessonId, currentDest.retryOnlyMistakes, mistakeStepsMap) {
+                    if (currentDest.retryOnlyMistakes) {
+                        mistakeStepsMap[currentDest.lessonId].orEmpty()
+                    } else {
+                        emptySet()
+                    }
+                }
+                QuranInteractiveLessonScreen(
                     lesson = activeLesson,
-                    isCompleted = completedLessonIds.contains(activeLesson.id),
+                    retryStepIndices = retryIndices,
                     palette = palette,
-                    onToggleCompleted = { storage.toggleLessonCompleted(activeLesson.id) },
-                    onNavigateToLesson = { targetLesson ->
-                        storage.recordLastReadLesson(targetLesson.id)
-                        destination = QuranLearningDestination.LessonReader(targetLesson.id)
+                    storage = storage,
+                    onNavigateToNextLesson = { nextId ->
+                        storage.recordLastReadLesson(nextId)
+                        destination = QuranLearningDestination.InteractiveLesson(nextId, retryOnlyMistakes = false)
+                    },
+                    onRetryMistakes = { targetLesson, _ ->
+                        destination = QuranLearningDestination.InteractiveLesson(
+                            lessonId = targetLesson.id,
+                            retryOnlyMistakes = true
+                        )
+                    },
+                    onExitToPath = { navigateUpInsideAcademy() }
+                )
+            }
+
+            QuranLearningDestination.MistakesAndRevision -> {
+                QuranMistakesAndRevisionScreen(
+                    completedLessonIds = completedLessonIds,
+                    mistakeLessonIds = mistakeLessonIds,
+                    adminApprovedIds = adminApprovedIds,
+                    storage = storage,
+                    palette = palette,
+                    onPracticeMistakeLesson = { lesson ->
+                        parentLevelForLesson = lesson.level
+                        storage.recordLastReadLesson(lesson.id)
+                        destination = QuranLearningDestination.InteractiveLesson(
+                            lessonId = lesson.id,
+                            retryOnlyMistakes = true
+                        )
+                    },
+                    onOpenRevisionLesson = { lesson ->
+                        parentLevelForLesson = lesson.level
+                        storage.recordLastReadLesson(lesson.id)
+                        destination = QuranLearningDestination.InteractiveLesson(
+                            lessonId = lesson.id,
+                            retryOnlyMistakes = false
+                        )
                     }
                 )
             }
 
-            QuranLearningDestination.ListenAndLearn -> {
-                QuranListenAndLearnScreen(palette = palette)
-            }
-
-            QuranLearningDestination.PracticeAndQuiz -> {
-                QuranPracticeAndQuizScreen(
-                    bestScore = bestQuizScore,
+            QuranLearningDestination.ProgressAndAchievements -> {
+                QuranProgressAndAchievementsScreen(
+                    completedLessonIds = completedLessonIds,
+                    totalXp = totalXp,
+                    dailyGoal = dailyGoal,
+                    todayCompletedCount = todayCompletedCount,
+                    currentStreak = currentStreak,
+                    longestStreak = longestStreak,
+                    revisionHistory = revisionHistory,
+                    adminApprovedIds = adminApprovedIds,
+                    storage = storage,
                     palette = palette,
-                    onQuizCompleted = { score -> storage.recordQuizScore(score) }
+                    onChangeDailyGoal = { newGoal -> storage.setDailyGoal(newGoal) },
+                    onOpenLevel = { level ->
+                        parentLevelForLesson = level
+                        destination = QuranLearningDestination.LevelLessonMap(level)
+                    }
                 )
             }
 
-            QuranLearningDestination.LearningProgress -> {
-                QuranLearningProgressScreen(
-                    completedLessonIds = completedLessonIds,
-                    bestQuizScore = bestQuizScore,
-                    totalQuizAttempts = totalQuizAttempts,
-                    lastReadLesson = lastReadLesson,
+            QuranLearningDestination.AdminContentVerification -> {
+                QuranAdminVerificationScreen(
+                    adminApprovedIds = adminApprovedIds,
                     palette = palette,
-                    onOpenLevel = { level ->
-                        previousLevelForLesson = level
-                        destination = QuranLearningDestination.LevelLessons(level)
-                    },
-                    onOpenLastLesson = {
-                        previousLevelForLesson = null
-                        storage.recordLastReadLesson(lastReadLesson.id)
-                        destination = QuranLearningDestination.LessonReader(lastReadLesson.id)
+                    onToggleVerifyAndPublish = { lessonId ->
+                        storage.toggleAdminVerifyAndPublish(lessonId)
                     }
                 )
             }
@@ -233,14 +296,20 @@ fun QuranLearningAcademyScreen(
 @Composable
 private fun QuranAcademyHomeContent(
     palette: QuranAcademyPalette,
+    isAdmin: Boolean,
     completedCount: Int,
     totalLessonsCount: Int,
+    todayCompletedCount: Int,
+    dailyGoal: Int,
+    currentStreak: Int,
+    totalXp: Int,
+    mistakesCount: Int,
     lastReadLesson: QuranLesson,
     onOpenLevel: (QuranLearningLevel) -> Unit,
-    onOpenListenAndLearn: () -> Unit,
-    onOpenPracticeAndQuiz: () -> Unit,
-    onOpenLearningProgress: () -> Unit,
-    onOpenLastReadLesson: () -> Unit
+    onOpenMistakesAndRevision: () -> Unit,
+    onOpenProgressAndAchievements: () -> Unit,
+    onOpenLastReadLesson: () -> Unit,
+    onOpenAdminVerification: () -> Unit
 ) {
     BoxWithConstraints(
         modifier = Modifier
@@ -248,8 +317,8 @@ private fun QuranAcademyHomeContent(
             .background(palette.pageBackground)
             .testTag("quran_learning_academy_home")
     ) {
-        // স্ক্রিন উচ্চতার ১৮–২০% (মাঝারি, ভারসাম্যপূর্ণ উচ্চতা)
-        val calculatedHeaderHeight: Dp = (maxHeight * 0.19f).coerceIn(138.dp, 176.dp)
+        // স্ক্রিন উচ্চতার ~১৭-১৯% (মাঝারি, ভারসাম্যপূর্ণ Royal Header — বড় ব্যানার নয়)
+        val calculatedHeaderHeight: Dp = (maxHeight * 0.18f).coerceIn(132.dp, 168.dp)
 
         Column(
             modifier = Modifier
@@ -257,23 +326,33 @@ private fun QuranAcademyHomeContent(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // ২. Royal Emerald Geometric Header
+            // ১. মাঝারি আকারের Royal Emerald Header
             QuranAcademyRoyalHeader(headerHeight = calculatedHeaderHeight)
 
-            // মূল কনটেন্ট (Adaptive width for phones, foldables & tablets)
+            // মূল কনটেন্ট (Adaptive width)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 620.dp)
-                    .padding(horizontal = 16.dp, vertical = 18.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(13.dp)
             ) {
-                // ৩. তিনটি প্রধান শিক্ষার স্তর (মূল আকর্ষণ — অপরিবর্তিত নাম, ক্রম ও কাঠামো)
+                // ২. Daily Progress, Streak ও XP ইন্ডিকেটর স্ট্রিপ
+                DailyStreakAndProgressStrip(
+                    todayCompletedCount = todayCompletedCount,
+                    dailyGoal = dailyGoal,
+                    currentStreak = currentStreak,
+                    totalXp = totalXp,
+                    palette = palette,
+                    onClick = onOpenProgressAndAchievements
+                )
+
+                // ৩. প্রথম স্ক্রিনেই স্পষ্ট ৩টি প্রধান শিক্ষার স্তর (অপরিবর্তিত নাম, ক্রম ও আরবি নমুনা)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("quran_primary_levels_section"),
-                    verticalArrangement = Arrangement.spacedBy(13.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     QuranLearningLevel.entries.forEach { level ->
                         QuranPrimaryLevelGlassCard(
@@ -288,7 +367,7 @@ private fun QuranAcademyHomeContent(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 6.dp, bottom = 2.dp),
+                        .padding(top = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -303,7 +382,7 @@ private fun QuranAcademyHomeContent(
                             )
                     )
                     Text(
-                        text = "অন্যান্য শিক্ষামূলক সুবিধা",
+                        text = "অনুশীলন ও অগ্রগতি",
                         fontFamily = HindSiliguriFontFamily,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 12.5.sp,
@@ -321,7 +400,7 @@ private fun QuranAcademyHomeContent(
                     )
                 }
 
-                // ৪. অন্যান্য শিক্ষামূলক সুবিধা (ছোট ও পরিপাটি ২x২ সেকশন — প্রধান তিনটি স্তরের গুরুত্ব না কমিয়ে)
+                // ৪. সেকেন্ডারি শিক্ষামূলক সুবিধাসমূহ
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -333,24 +412,28 @@ private fun QuranAcademyHomeContent(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         SecondaryAcademyToolTile(
-                            title = "শুনে শিখুন",
-                            caption = "মাখরাজ ও উচ্চারণ",
-                            icon = Icons.AutoMirrored.Filled.VolumeUp,
+                            title = "ভুল সংশোধন ও রিভিশন",
+                            caption = if (mistakesCount > 0) {
+                                "${toAcademyBanglaDigits(mistakesCount)}টি ভুল অনুশীলন"
+                            } else {
+                                "মডিউল ও স্তর মূল্যায়ন"
+                            },
+                            icon = Icons.Default.Refresh,
                             palette = palette,
-                            onClick = onOpenListenAndLearn,
+                            onClick = onOpenMistakesAndRevision,
                             modifier = Modifier
                                 .weight(1f)
-                                .testTag("quran_tool_listen_learn")
+                                .testTag("quran_tool_mistakes_revision")
                         )
                         SecondaryAcademyToolTile(
-                            title = "অনুশীলন ও পরীক্ষা",
-                            caption = "তাজবীদ যাচাই কুইজ",
-                            icon = Icons.Default.Quiz,
+                            title = "অগ্রগতি ও ব্যাজ",
+                            caption = "${toAcademyBanglaDigits(completedCount)}/${toAcademyBanglaDigits(totalLessonsCount)} পাঠ সম্পন্ন",
+                            icon = Icons.Default.EmojiEvents,
                             palette = palette,
-                            onClick = onOpenPracticeAndQuiz,
+                            onClick = onOpenProgressAndAchievements,
                             modifier = Modifier
                                 .weight(1f)
-                                .testTag("quran_tool_practice_quiz")
+                                .testTag("quran_tool_learning_progress")
                         )
                     }
 
@@ -358,16 +441,6 @@ private fun QuranAcademyHomeContent(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        SecondaryAcademyToolTile(
-                            title = "আমার শেখার অগ্রগতি",
-                            caption = "${toAcademyBanglaDigits(completedCount)} / ${toAcademyBanglaDigits(totalLessonsCount)} পাঠ সম্পন্ন",
-                            icon = Icons.Default.BookmarkAdded,
-                            palette = palette,
-                            onClick = onOpenLearningProgress,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("quran_tool_learning_progress")
-                        )
                         SecondaryAcademyToolTile(
                             title = "সর্বশেষ পড়া পাঠ",
                             caption = lastReadLesson.titleBangla,
@@ -378,11 +451,117 @@ private fun QuranAcademyHomeContent(
                                 .weight(1f)
                                 .testTag("quran_tool_last_read")
                         )
+                        if (isAdmin) {
+                            SecondaryAcademyToolTile(
+                                title = "পাঠ যাচাই (CMS)",
+                                caption = "অ্যাডমিন প্রকাশনা প্যানেল",
+                                icon = Icons.Default.AdminPanelSettings,
+                                palette = palette,
+                                onClick = onOpenAdminVerification,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("quran_tool_admin_verify")
+                            )
+                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
             }
+        }
+    }
+}
+
+@Composable
+private fun DailyStreakAndProgressStrip(
+    todayCompletedCount: Int,
+    dailyGoal: Int,
+    currentStreak: Int,
+    totalXp: Int,
+    palette: QuranAcademyPalette,
+    onClick: () -> Unit
+) {
+    val goalProgress = (todayCompletedCount.toFloat() / dailyGoal.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
+    val stripShape = RoundedCornerShape(14.dp)
+
+    Surface(
+        shape = stripShape,
+        color = palette.secondarySurfaceTop,
+        border = BorderStroke(1.dp, palette.glassCardBorderGold.copy(alpha = 0.55f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .testTag("quran_daily_progress_streak_strip")
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.LocalFireDepartment,
+                        contentDescription = "দৈনিক স্ট্রিক",
+                        tint = AcademyGold,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "${toAcademyBanglaDigits(currentStreak)} দিন স্ট্রিক",
+                        fontFamily = HindSiliguriFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.5.sp,
+                        color = palette.titleColor,
+                        modifier = Modifier.testTag("home_streak_text")
+                    )
+                }
+
+                Text(
+                    text = "আজ: ${toAcademyBanglaDigits(todayCompletedCount)}/${toAcademyBanglaDigits(dailyGoal)} পাঠ",
+                    fontFamily = HindSiliguriFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp,
+                    color = palette.accentGreen,
+                    modifier = Modifier.testTag("home_daily_goal_text")
+                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = "পয়েন্ট",
+                        tint = AcademyGold,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "${toAcademyBanglaDigits(totalXp)} XP",
+                        fontFamily = HindSiliguriFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.5.sp,
+                        color = palette.titleColor,
+                        modifier = Modifier.testTag("home_xp_text")
+                    )
+                }
+            }
+
+            LinearProgressIndicator(
+                progress = { goalProgress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(4.dp)),
+                color = AcademyGold,
+                trackColor = palette.dividerColor,
+                strokeCap = StrokeCap.Round
+            )
         }
     }
 }

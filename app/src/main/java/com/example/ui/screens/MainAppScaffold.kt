@@ -1506,6 +1506,7 @@ fun MainAppScaffold(
 
                         MainDestination.QURAN_LEARNING -> {
                             com.example.ui.quranlearning.QuranLearningAcademyScreen(
+                                isAdmin = isAdminState,
                                 registerBackInterceptor = { interceptor -> quranLearningBackInterceptor = interceptor }
                             )
                         }
