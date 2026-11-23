@@ -1441,6 +1441,75 @@ test("Islamic Article & Knowledge Cultivation System: Author profile isolation, 
   );
 });
 
+test("Admin moderation: app admin can delete any user's feed post (top-level email, provider identity email, /admins registry, and legacy docs), while non-admins cannot", async () => {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    const basePost = {
+      authorId: "Wm9HEWzjzeZGDFCONMC32R",
+      authorName: "Sumaya Aktar",
+      postType: "SEEKER_APPLICATION",
+      title: "hvvv",
+      district: "vvh",
+      upazilaOrLocation: "vb, vvh",
+      designation: "bjj, নূরানী",
+      qualification: "hbb",
+      salaryOrExperience: "bb",
+      deadlineOrPreferredDistricts: "bbb",
+      description: "vhjj",
+      contactNumber: "01700000000",
+      madrasaId: "",
+      isVerifiedMadrasa: false,
+      isBoosted: false,
+      visibility: "PUBLIC",
+      approvalStatus: "APPROVED",
+      createdAt: nowDate(),
+      updatedAt: nowDate(),
+    };
+    await db.collection("feed_posts").doc("seeker_post_1").set(basePost);
+    await db.collection("feed_posts").doc("seeker_post_2").set(basePost);
+    await db.collection("feed_posts").doc("seeker_post_3").set(basePost);
+    await db.collection("feed_posts").doc("legacy_no_author_post").set({
+      postType: "GENERAL_POST",
+      title: "Legacy Post Without AuthorId",
+      visibility: "PUBLIC",
+    });
+    await db.collection("admins").doc("registered_admin_uid").set({
+      adminId: "registered_admin_uid",
+      email: "fyslahm28@gmail.com",
+      adminPhone: "01300448147",
+      role: "SUPER_ADMIN",
+      isActive: true,
+      verifiedByAuthToken: true,
+      updatedAt: nowDate(),
+    });
+  });
+
+  const unauthDb = testEnv.unauthenticatedContext().firestore();
+  const bobDb = testEnv.authenticatedContext(BOB_UID, { email: "bob@example.com" }).firestore();
+  await assertFails(unauthDb.collection("feed_posts").doc("seeker_post_1").delete());
+  await assertFails(bobDb.collection("feed_posts").doc("seeker_post_1").delete());
+
+  const adminTopEmailDb = testEnv.authenticatedContext(ADMIN_UID_3, {
+    email: "fyslahm28@gmail.com",
+    email_verified: true,
+  }).firestore();
+  await assertSucceeds(adminTopEmailDb.collection("feed_posts").doc("seeker_post_1").delete());
+
+  const adminProviderEmailDb = testEnv.authenticatedContext("provider_admin_uid", {
+    firebase: {
+      identities: {
+        email: ["fyslahm28@gmail.com"],
+      },
+      sign_in_provider: "google.com",
+    },
+  }).firestore();
+  await assertSucceeds(adminProviderEmailDb.collection("feed_posts").doc("seeker_post_2").delete());
+
+  const adminRegistryDb = testEnv.authenticatedContext("registered_admin_uid", {}).firestore();
+  await assertSucceeds(adminRegistryDb.collection("feed_posts").doc("seeker_post_3").delete());
+  await assertSucceeds(adminRegistryDb.collection("feed_posts").doc("legacy_no_author_post").delete());
+});
+
 
 
 

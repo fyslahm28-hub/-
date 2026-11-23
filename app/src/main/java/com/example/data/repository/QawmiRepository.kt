@@ -3029,8 +3029,25 @@ class QawmiRepository(
     ): Result<Unit> {
         requireUserId()
         val commentRef = db.collection("post_comments").document(commentId)
+        val currentUser = runCatching { auth.currentUser }.getOrNull()
         return try {
-            commentRef.delete().awaitWithTimeout(12_000L)
+            try {
+                commentRef.delete().awaitWithTimeout(12_000L)
+            } catch (firstError: FirebaseFirestoreException) {
+                if (firstError.code == FirebaseFirestoreException.Code.PERMISSION_DENIED &&
+                    currentUser != null &&
+                    AdminSecurityHelper.verifyServerTokenAdminClaims(currentUser)
+                ) {
+                    runCatching {
+                        kotlinx.coroutines.withTimeoutOrNull(4_000L) {
+                            currentUser.getIdToken(true).await()
+                        }
+                    }
+                    commentRef.delete().awaitWithTimeout(12_000L)
+                } else {
+                    throw firstError
+                }
+            }
             if (postId.isNotBlank()) {
                 runCatching {
                     val postRef = db.collection("feed_posts").document(postId)
@@ -3049,7 +3066,7 @@ class QawmiRepository(
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.DELETE, commentRef.path)
-            Result.failure(e)
+            Result.failure(translateFirestoreExceptionToBangla(e))
         }
     }
 
@@ -3141,24 +3158,47 @@ class QawmiRepository(
     suspend fun deleteFeedPost(postId: String): Result<Unit> {
         requireUserId()
         val docRef = db.collection("feed_posts").document(postId)
+        val currentUser = runCatching { auth.currentUser }.getOrNull()
         return try {
-            docRef.delete().awaitWithTimeout(8_000L)
-            val currentUser = auth.currentUser
+            try {
+                docRef.delete().awaitWithTimeout(8_000L)
+            } catch (firstError: FirebaseFirestoreException) {
+                if (firstError.code == FirebaseFirestoreException.Code.PERMISSION_DENIED &&
+                    currentUser != null &&
+                    AdminSecurityHelper.verifyServerTokenAdminClaims(currentUser)
+                ) {
+                    // Refresh Firebase Auth ID token once so updated email/claims are sent to Firestore
+                    runCatching {
+                        kotlinx.coroutines.withTimeoutOrNull(4_000L) {
+                            currentUser.getIdToken(true).await()
+                        }
+                    }
+                    docRef.delete().awaitWithTimeout(8_000L)
+                } else {
+                    throw firstError
+                }
+            }
+
             if (currentUser != null && AdminSecurityHelper.verifyServerTokenAdminClaims(currentUser)) {
-                enqueueAndDispatchTelegramNotification(
-                    eventType = "CONTENT_MODERATION",
-                    title = "ফিড পোস্ট অপসারণ (মডারেশন)",
-                    message = "পোস্ট আইডি ($postId) ফিড থেকে অপসারণ করা হয়েছে।",
-                    actorName = currentUser.email ?: "নাজিমে আলা (অ্যাডমিন)",
-                    referenceId = postId
-                )
+                kotlinx.coroutines.withTimeoutOrNull(2_000L) {
+                    runCatching {
+                        enqueueAndDispatchTelegramNotification(
+                            eventType = "CONTENT_MODERATION",
+                            title = "ফিড পোস্ট অপসারণ (মডারেশন)",
+                            message = "পোস্ট আইডি ($postId) ফিড থেকে অপসারণ করা হয়েছে।",
+                            actorName = AdminSecurityHelper.resolveEffectiveUserEmail(currentUser)
+                                .ifBlank { "নাজিমে আলা (অ্যাডমিন)" },
+                            referenceId = postId
+                        )
+                    }
+                }
             }
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.DELETE, docRef.path)
-            Result.failure(e)
+            Result.failure(translateFirestoreExceptionToBangla(e))
         }
     }
 

@@ -46,6 +46,10 @@ service cloud.firestore {
       let rawEmail = isSignedIn() ? request.auth.token.get('email', '') : '';
       let email = rawEmail is string ? rawEmail.lower() : '';
       let roleClaim = isSignedIn() ? request.auth.token.get('role', '') : '';
+      let firebaseBlock = isSignedIn() ? request.auth.token.get('firebase', {}) : {};
+      let identities = firebaseBlock is map ? firebaseBlock.get('identities', {}) : {};
+      let identityEmails = identities is map ? identities.get('email', []) : [];
+      let identityPhones = identities is map ? identities.get('phone', []) : [];
       return isSignedIn() && (
         request.auth.token.get('admin', false) == true ||
         roleClaim in ['admin', 'SUPER_ADMIN', 'ADMIN', 'MODERATOR'] ||
@@ -54,15 +58,32 @@ service cloud.firestore {
           'foysalahamad204@gmail.com',
           'fyslahm28@gmail.com'
         ] ||
+        (identityEmails is list && identityEmails.hasAny([
+          'foysalahamad102@gmail.com',
+          'foysalahamad204@gmail.com',
+          'fyslahm28@gmail.com'
+        ])) ||
         request.auth.token.get('phone_number', '') in [
           '+8801300448147',
           '01300448147'
-        ]
+        ] ||
+        (identityPhones is list && identityPhones.hasAny([
+          '+8801300448147',
+          '01300448147'
+        ]))
       );
     }
 
+    function isRegisteredActiveAdmin() {
+      let adminPath = /databases/$(database)/documents/admins/$(request.auth.uid);
+      return isSignedIn() &&
+             exists(adminPath) &&
+             get(adminPath).data.get('isActive', true) == true &&
+             get(adminPath).data.get('verifiedByAuthToken', false) == true;
+    }
+
     function isAdmin() {
-      return isTokenVerifiedAdmin();
+      return isTokenVerifiedAdmin() || isRegisteredActiveAdmin();
     }
 
     // 3. Entity Validation Blueprints
@@ -943,7 +964,10 @@ service cloud.firestore {
                        isValidId(postId) &&
                        canUpdateFeedPost(incoming(), existing());
 
-      allow delete: if isSignedIn() && isValidId(postId) && (existing().authorId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && (
+        isAdmin() ||
+        (isValidId(postId) && resource != null && existing().get('authorId', '') == request.auth.uid)
+      );
     }
 
     // Separate Extended Attachments & Long Text for Feed Posts (বড় টেক্সট ও অ্যাটাচমেন্ট আলাদা ডকুমেন্টে সংরক্ষণ)
@@ -987,7 +1011,10 @@ service cloud.firestore {
                           ]))
                        );
 
-      allow delete: if isSignedIn() && isValidId(attachmentId) && (existing().authorId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && (
+        isAdmin() ||
+        (isValidId(attachmentId) && resource != null && existing().get('authorId', '') == request.auth.uid)
+      );
     }
 
     // Feed Post Comments & Replies (কমেন্ট ও রিপ্লাই)
@@ -1026,7 +1053,10 @@ service cloud.firestore {
                           ]))
                        );
 
-      allow delete: if isSignedIn() && isValidId(commentId) && (existing().authorId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && (
+        isAdmin() ||
+        (isValidId(commentId) && resource != null && existing().get('authorId', '') == request.auth.uid)
+      );
     }
 
     // Madrasas Directory (মাদরাসা ও যাচাইকৃত মাদরাসা)
@@ -1072,7 +1102,10 @@ service cloud.firestore {
                           ]))
                        );
 
-      allow delete: if isSignedIn() && isValidId(madrasaId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && (
+        isAdmin() ||
+        (isValidId(madrasaId) && resource != null && existing().get('ownerId', '') == request.auth.uid)
+      );
     }
 
     // Khedmot Submissions (আবেদনসমূহ)
@@ -1126,8 +1159,9 @@ service cloud.firestore {
                           isValidKhedmotSubmission(incoming()))
                        );
 
-      allow delete: if isSignedIn() && isValidId(submissionId) && (
-        existing().applicantId == request.auth.uid || isAdmin()
+      allow delete: if isSignedIn() && (
+        isAdmin() ||
+        (isValidId(submissionId) && resource != null && existing().get('applicantId', '') == request.auth.uid)
       );
     }
 
