@@ -219,6 +219,7 @@ fun IslamicAndEssentialServicesSection(
             "articles" -> onNavigate(MainDestination.ISLAMIC_ARTICLE_PUBLICATION)
             "asmaul_husna" -> onNavigate(MainDestination.ASMAUL_HUSNA)
             "quran_learning" -> onNavigate(MainDestination.QURAN_LEARNING)
+            "dua" -> onNavigate(MainDestination.DUA_AZKAR)
             "prayer_times", "islamic_calendar" -> onOpenPrayerTimes()
             "bookmarks" -> onNavigate(MainDestination.BOOKMARKS)
             "support" -> onNavigate(MainDestination.HELP_AND_SUPPORT)

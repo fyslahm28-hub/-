@@ -577,6 +577,7 @@ fun MainAppScaffold(
             MainDestination.ISLAMIC_ARTICLE_PUBLICATION -> "ইসলামিক প্রবন্ধ ও জ্ঞানচর্চা"
             MainDestination.ASMAUL_HUSNA -> "আসমাউল হুসনা"
             MainDestination.QURAN_LEARNING -> "কুরআন শিক্ষা"
+            MainDestination.DUA_AZKAR -> "দোয়া ও যিকির"
             MainDestination.AJKER_SMORON -> "আজকের স্মরণ"
             MainDestination.APP_SETTINGS -> "অ্যাপ সেটিংস"
             MainDestination.ABOUT_APP -> "অ্যাপ সম্পর্কে"
@@ -613,6 +614,9 @@ fun MainAppScaffold(
         var quranLearningBackInterceptor by remember {
             mutableStateOf<(() -> Boolean)?>(null)
         }
+        var duaAzkarBackInterceptor by remember {
+            mutableStateOf<(() -> Boolean)?>(null)
+        }
         LaunchedEffect(currentDestination) {
             if (currentDestination != MainDestination.ISLAMIC_BOOK_LIBRARY) {
                 islamicBookSubView = com.example.ui.islamicbooks.LibrarySubView.CATALOG_HOME
@@ -626,6 +630,9 @@ fun MainAppScaffold(
             }
             if (currentDestination != MainDestination.QURAN_LEARNING) {
                 quranLearningBackInterceptor = null
+            }
+            if (currentDestination != MainDestination.DUA_AZKAR) {
+                duaAzkarBackInterceptor = null
             }
         }
         val isIslamicBookFullScreenReader =
@@ -661,6 +668,10 @@ fun MainAppScaffold(
                                 quranLearningBackInterceptor?.invoke() == true
                             ) {
                                 // Sub-screen back navigation handled inside QuranLearningAcademyScreen
+                            } else if (currentDestination == MainDestination.DUA_AZKAR &&
+                                duaAzkarBackInterceptor?.invoke() == true
+                            ) {
+                                // Sub-screen back navigation handled inside DuaSystemScreen
                             } else {
                                 viewModel.navigateBack()
                             }
@@ -1508,6 +1519,12 @@ fun MainAppScaffold(
                             com.example.ui.quranlearning.QuranLearningAcademyScreen(
                                 isAdmin = isAdminState,
                                 registerBackInterceptor = { interceptor -> quranLearningBackInterceptor = interceptor }
+                            )
+                        }
+
+                        MainDestination.DUA_AZKAR -> {
+                            com.example.ui.duas.DuaSystemScreen(
+                                registerBackInterceptor = { interceptor -> duaAzkarBackInterceptor = interceptor }
                             )
                         }
 
